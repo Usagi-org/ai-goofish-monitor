@@ -45,6 +45,7 @@ RUNNING_IN_DOCKER = os.getenv("RUNNING_IN_DOCKER", "false").lower() == "true"
 AI_DEBUG_MODE = os.getenv("AI_DEBUG_MODE", "false").lower() == "true"
 SKIP_AI_ANALYSIS = os.getenv("SKIP_AI_ANALYSIS", "false").lower() == "true"
 ENABLE_THINKING = os.getenv("ENABLE_THINKING", "false").lower() == "true"
+ENABLE_JSON_MODE = os.getenv("ENABLE_JSON_MODE", "true").lower() == "true"
 
 # --- Headers ---
 IMAGE_DOWNLOAD_HEADERS = {
@@ -91,4 +92,9 @@ def get_ai_request_params(**kwargs):
     """
     if ENABLE_THINKING:
         kwargs["extra_body"] = {"enable_thinking": False}
+    
+    # 如果禁用JSON模式，移除response_format参数
+    if not ENABLE_JSON_MODE and "response_format" in kwargs:
+        del kwargs["response_format"]
+    
     return kwargs
