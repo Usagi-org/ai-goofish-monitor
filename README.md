@@ -37,7 +37,7 @@
 克隆本项目到本地:
 
 ```bash
-git clone https://github.com/dingyufei615/ai-goofish-monitor
+git clone https://github.com/Usagi-org/ai-goofish-monitor
 cd ai-goofish-monitor
 ```
 
@@ -149,7 +149,7 @@ python web_server.py
 2. **克隆项目并配置**:
 
     ```bash
-    git clone https://github.com/dingyufei615/ai-goofish-monitor
+    git clone https://github.com/Usagi-org/ai-goofish-monitor
     cd ai-goofish-monitor
     ```
 
