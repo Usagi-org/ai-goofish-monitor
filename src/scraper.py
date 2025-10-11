@@ -25,6 +25,7 @@ from src.config import (
     RUN_HEADLESS,
     RUNNING_IN_DOCKER,
     STATE_FILE,
+    get_random_user_agent,
 )
 from src.parsers import (
     _parse_search_results_json,
@@ -183,7 +184,10 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 browser = await p.chromium.launch(headless=RUN_HEADLESS)
             else:
                 browser = await p.chromium.launch(headless=RUN_HEADLESS, channel="chrome")
-        context = await browser.new_context(storage_state=STATE_FILE, user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
+        # 使用随机User-Agent增强反检测能力
+        random_ua = get_random_user_agent()
+        print(f"   [反检测] 使用随机User-Agent: {random_ua}")
+        context = await browser.new_context(storage_state=STATE_FILE, user_agent=random_ua)
         page = await context.new_page()
 
         try:
@@ -343,7 +347,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             if "FAIL_SYS_USER_VALIDATE" in ret_string:
                                 print("\n==================== CRITICAL BLOCK DETECTED ====================")
                                 print("检测到闲鱼反爬虫验证 (FAIL_SYS_USER_VALIDATE)，程序将终止。")
-                                long_sleep_duration = random.randint(3, 60)
+                                long_sleep_duration = random.randint(60, 180) # 增加到1-3分钟
                                 print(f"为避免账户风险，将执行一次长时间休眠 ({long_sleep_duration} 秒) 后再退出...")
                                 await asyncio.sleep(long_sleep_duration)
                                 print("长时间休眠结束，现在将安全退出。")
@@ -468,7 +472,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                             # --- 修改: 增加单个商品处理后的主要延迟 ---
                             log_time("[反爬] 执行一次主要的随机延迟以模拟用户浏览间隔...")
-                            await random_sleep(15, 30) # 原来是 (8, 15)，这是最重要的修改之一
+                            await random_sleep(25, 45) # 增加页面间延迟
                         else:
                             print(f"   错误: 获取商品详情API响应失败，状态码: {detail_response.status}")
                             if AI_DEBUG_MODE:
@@ -491,7 +495,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 # --- 新增: 在处理完一页所有商品后，翻页前，增加一个更长的“休息”时间 ---
                 if not stop_scraping and page_num < max_pages:
                     print(f"--- 第 {page_num} 页处理完毕，准备翻页。执行一次页面间的长时休息... ---")
-                    await random_sleep(25, 50)
+                    await random_sleep(35, 60) # 增加页面处理完毕后的长延迟
 
         except PlaywrightTimeoutError as e:
             print(f"\n操作超时错误: 页面元素或网络响应未在规定时间内出现。\n{e}")

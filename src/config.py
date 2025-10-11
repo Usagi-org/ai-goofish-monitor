@@ -55,6 +55,16 @@ IMAGE_DOWNLOAD_HEADERS = {
     'Upgrade-Insecure-Requests': '1',
 }
 
+# --- Random User Agents for Anti-Detection ---
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+]
+
 # --- Client Initialization ---
 # 检查配置是否齐全
 if not all([BASE_URL, MODEL_NAME]):
@@ -92,3 +102,11 @@ def get_ai_request_params(**kwargs):
     if ENABLE_THINKING:
         kwargs["extra_body"] = {"enable_thinking": False}
     return kwargs
+
+
+def get_random_user_agent():
+    """
+    获取随机User-Agent用于反检测
+    """
+    import random
+    return random.choice(USER_AGENTS)
