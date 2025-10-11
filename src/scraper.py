@@ -292,19 +292,63 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 log_time(f"开始处理第 {page_num}/{max_pages} 页 ...")
 
                 if page_num > 1:
-                    # 查找未被禁用的“下一页”按钮。闲鱼通过添加 'disabled' 类名来禁用按钮，而不是使用 disabled 属性。
-                    next_btn = page.locator("[class*='search-pagination-arrow-right']:not([class*='disabled'])")
-                    if not await next_btn.count():
-                        log_time("已到达最后一页，未找到可用的‘下一页’按钮，停止翻页。")
-                        break
-                    try:
-                        async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
-                            await next_btn.click()
-                            # --- 修改: 增加翻页后的等待时间 ---
-                            await random_sleep(5, 8) # 原来是 (1.5, 3.5)
-                        current_response = await response_info.value
-                    except PlaywrightTimeoutError:
-                        log_time(f"翻页到第 {page_num} 页超时，停止翻页。")
+                    max_retries = 5
+                    retry_count = 0
+                    
+                    while retry_count < max_retries:
+                        try:
+                            # 查找"下一页"按钮，不排除disabled状态以便调试
+                            next_btn = page.locator("[class*='search-pagination-arrow-right']")
+                            
+                            if not await next_btn.count():
+                                log_time("已到达最后一页，未找到'下一页'按钮，停止翻页。")
+                                stop_scraping = True
+                                break
+                            
+                            # 检查按钮状态
+                            is_disabled = await next_btn.evaluate("el => el.classList.contains('disabled') || el.disabled")
+                            if is_disabled:
+                                log_time(f"[翻页调试] 第 {retry_count + 1} 次重试: 翻页按钮仍处于禁用状态")
+                                retry_count += 1
+                                if retry_count < max_retries:
+                                    wait_time = min(2 ** retry_count, 10)  # 指数退避，最大10秒
+                                    log_time(f"[延迟] 等待 {wait_time} 秒后重试...")
+                                    await asyncio.sleep(wait_time)
+                                continue
+                            
+                            # 尝试点击翻页按钮
+                            log_time(f"[翻页调试] 尝试点击翻页按钮到第 {page_num} 页")
+                            async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=15000) as response_info:
+                                await next_btn.click()
+                                await random_sleep(5, 8)
+                            current_response = await response_info.value
+                            log_time(f"[翻页调试] 成功翻页到第 {page_num} 页")
+                            break
+                            
+                        except Exception as e:
+                            retry_count += 1
+                            log_time(f"[翻页调试] 翻页到第 {page_num} 页超时错误: {e}")
+                            
+                            if retry_count >= max_retries:
+                                log_time(f"翻页到第 {page_num} 页超时，已重试 {max_retries} 次，停止翻页。")
+                                log_time("[重要提示] 翻页失败可能的原因：")
+                                log_time("1. 闲鱼的反爬虫机制阻止了自动化翻页")
+                                log_time("2. 网络连接不稳定或代理设置有问题") 
+                                log_time("3. 页面结构可能已更改，需要更新选择器")
+                                log_time("4. API_URL_PATTERN可能不再匹配实际的API端点")
+                                log_time("建议解决方案：")
+                                log_time("- 设置RUN_HEADLESS=false，以非无头模式运行")
+                                log_time("- 更新登录状态文件，确保登录状态有效")
+                                log_time("- 降低任务执行频率，避免被识别为机器人")
+                                stop_scraping = True
+                                break
+                            
+                            # 指数退避等待
+                            wait_time = min(2 ** retry_count, 10)
+                            log_time(f"[延迟] 等待 {wait_time} 秒... (范围: 10-20s)")
+                            await random_sleep(max(wait_time, 10), max(wait_time * 2, 20))
+                    
+                    if stop_scraping:
                         break
 
                 if not (current_response and current_response.ok):
