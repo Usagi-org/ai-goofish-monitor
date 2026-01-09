@@ -1,41 +1,17 @@
 [
   {
-    "task_name": "MacBook Air M1",
+    "task_name": "苹果watch S10",
     "enabled": true,
-    "keyword": "macbook air m1",
-    "max_pages": 5,
+    "keyword": "苹果watch S10",
+    "description": "九成新，充电线包装盒齐全，无明显磕碰，卖家信用优秀",
+    "max_pages": 10,
     "personal_only": true,
-    "min_price": "3000",
-    "max_price": "5000",
-    "cron": "3 12 * * *",
+    "min_price": "8000",
+    "max_price": "2000",
+    "cron": null,
     "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/macbook_criteria.txt",
-    "is_running": false
-  },
-  {
-    "task_name": "DJI Mini 3 Pro",
-    "enabled": true,
-    "keyword": "mini 3 pro",
-    "max_pages": 3,
-    "personal_only": true,
-    "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/dji_mini3_criteria.txt",
-    "min_price": "3500",
-    "max_price": "4500",
-    "cron": "",
-    "is_running": false
-  },
-  {
-    "task_name": "婴儿车",
-    "enabled": false,
-    "keyword": "babycare 婴儿车",
-    "max_pages": 3,
-    "personal_only": true,
-    "min_price": "500",
-    "max_price": "1000",
-    "cron": "",
-    "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/babycare_婴儿车_criteria.txt",
+    "ai_prompt_criteria_file": "prompts/苹果watch_s10_criteria.txt",
+    "account_state_file": "state/acc1.json",
     "is_running": false
   }
 ]
