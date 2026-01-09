@@ -67,7 +67,7 @@ start.sh 会自动完成以下步骤：
 - 启动后端服务（`python -m src.app`）
 - 
 
-4**访问Web UI**
+4. **访问Web UI**
 访问 `http://127.0.0.1:8000`，
 **登录默认密码(admin/admin123)** → **右上角-手动更新登录状态**，按提示使用 [Chrome 扩展](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) 提取闲鱼Cookie。
 然后创建监控任务即可开始使用。
