@@ -4,6 +4,7 @@ import math
 import os
 import random
 import re
+import glob
 from datetime import datetime
 from functools import wraps
 from urllib.parse import quote
@@ -69,6 +70,34 @@ def log_time(message: str, prefix: str = "") -> None:
     except Exception:
         ts = "--:--:--"
     print(f"[{ts}] {prefix}{message}")
+
+
+def sanitize_filename(value: str) -> str:
+    """生成安全的文件名片段。"""
+    if not value:
+        return "task"
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value.strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned or "task"
+
+
+def build_task_log_path(task_id: int, task_name: str) -> str:
+    """生成任务日志路径（包含任务名）。"""
+    safe_name = sanitize_filename(task_name)
+    filename = f"{safe_name}_{task_id}.log"
+    return os.path.join("logs", filename)
+
+
+def resolve_task_log_path(task_id: int, task_name: str) -> str:
+    """优先使用任务名生成日志路径，不存在时回退为按 ID 匹配。"""
+    primary_path = build_task_log_path(task_id, task_name)
+    if os.path.exists(primary_path):
+        return primary_path
+    pattern = os.path.join("logs", f"*_{task_id}.log")
+    matches = glob.glob(pattern)
+    if matches:
+        return matches[0]
+    return primary_path
 
 
 def convert_goofish_link(url: str) -> str:

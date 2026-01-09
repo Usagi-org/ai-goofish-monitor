@@ -5,7 +5,7 @@ import os
 import re
 import sys
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 import requests
@@ -123,6 +123,22 @@ def cleanup_task_images(task_name):
             safe_print(f"   [清理] 删除任务 '{task_name}' 的临时图片目录时出错: {e}")
     else:
         safe_print(f"   [清理] 任务 '{task_name}' 的临时图片目录不存在: {task_image_dir}")
+
+
+def cleanup_ai_logs(logs_dir: str, keep_days: int = 1) -> None:
+    try:
+        cutoff = datetime.now() - timedelta(days=keep_days)
+        for filename in os.listdir(logs_dir):
+            if not filename.endswith(".log"):
+                continue
+            try:
+                timestamp = datetime.strptime(filename[:15], "%Y%m%d_%H%M%S")
+            except ValueError:
+                continue
+            if timestamp < cutoff:
+                os.remove(os.path.join(logs_dir, filename))
+    except Exception as e:
+        safe_print(f"   [日志] 清理AI日志时出错: {e}")
 
 
 def encode_image_to_base64(image_path):
@@ -547,16 +563,24 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     # 保存最终传输内容到日志文件
     try:
         # 创建logs文件夹
-        logs_dir = "logs"
+        logs_dir = os.path.join("logs", "ai")
         os.makedirs(logs_dir, exist_ok=True)
+        cleanup_ai_logs(logs_dir, keep_days=1)
 
         # 生成日志文件名（当前时间）
         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_filename = f"{current_time}.log"
         log_filepath = os.path.join(logs_dir, log_filename)
 
-        # 准备日志内容 - 直接保存原始传输内容
-        log_content = json.dumps(messages, ensure_ascii=False)
+        task_name = product_data.get("任务名称") or product_data.get("任务名") or "unknown"
+        log_payload = {
+            "timestamp": current_time,
+            "task_name": task_name,
+            "product_id": product_id,
+            "title": item_info.get("商品标题", "无"),
+            "image_count": len(image_paths or []),
+        }
+        log_content = json.dumps(log_payload, ensure_ascii=False)
 
         # 写入日志文件
         with open(log_filepath, 'w', encoding='utf-8') as f:

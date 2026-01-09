@@ -11,6 +11,7 @@ from src.services.process_service import ProcessService
 from src.domain.models.task import Task, TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.api.routes.websocket import broadcast_message
 from src.prompt_utils import generate_criteria
+from src.utils import resolve_task_log_path
 
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -222,6 +223,13 @@ async def delete_task(
                 os.remove(file_path)
     except Exception as e:
         print(f"删除任务结果文件时出错: {e}")
+
+    try:
+        log_file_path = resolve_task_log_path(task_id, task.task_name)
+        if os.path.exists(log_file_path):
+            os.remove(log_file_path)
+    except Exception as e:
+        print(f"删除任务日志文件时出错: {e}")
 
     return {"message": "任务删除成功"}
 
