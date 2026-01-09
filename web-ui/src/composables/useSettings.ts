@@ -65,7 +65,17 @@ export function useSettings() {
   async function saveAiSettings() {
     isSaving.value = true
     try {
-      await settingsApi.updateAiSettings(aiSettings.value)
+      const payload = { ...aiSettings.value }
+      const apiKey = (payload.OPENAI_API_KEY || '').trim()
+      if (apiKey) {
+        payload.OPENAI_API_KEY = apiKey
+      } else {
+        delete payload.OPENAI_API_KEY
+      }
+      await settingsApi.updateAiSettings(payload)
+      if (aiSettings.value.OPENAI_API_KEY) {
+        aiSettings.value.OPENAI_API_KEY = ''
+      }
       // Refresh status
       systemStatus.value = await settingsApi.getSystemStatus()
     } catch (e) {
@@ -91,7 +101,14 @@ export function useSettings() {
   async function testAiConnection() {
     isSaving.value = true
     try {
-      const res = await settingsApi.testAiSettings(aiSettings.value)
+      const payload = { ...aiSettings.value }
+      const apiKey = (payload.OPENAI_API_KEY || '').trim()
+      if (apiKey) {
+        payload.OPENAI_API_KEY = apiKey
+      } else {
+        delete payload.OPENAI_API_KEY
+      }
+      const res = await settingsApi.testAiSettings(payload)
       return res
     } catch (e) {
       if (e instanceof Error) error.value = e

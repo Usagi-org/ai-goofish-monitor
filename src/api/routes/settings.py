@@ -156,7 +156,6 @@ class AISettingsModel(BaseModel):
 async def get_ai_settings(username: str = Depends(get_current_user)):
     """获取AI设置"""
     return {
-        "OPENAI_API_KEY": env_manager.get_value("OPENAI_API_KEY", ""),
         "OPENAI_BASE_URL": env_manager.get_value("OPENAI_BASE_URL", ""),
         "OPENAI_MODEL_NAME": env_manager.get_value("OPENAI_MODEL_NAME", ""),
         "SKIP_AI_ANALYSIS": env_manager.get_value("SKIP_AI_ANALYSIS", "false").lower() == "true"
@@ -195,9 +194,13 @@ async def test_ai_settings(
         from openai import OpenAI
         import httpx
 
+        stored_api_key = env_manager.get_value("OPENAI_API_KEY", "")
+        submitted_api_key = settings.get("OPENAI_API_KEY", "")
+        api_key = submitted_api_key or stored_api_key
+
         # 创建OpenAI客户端
         client_params = {
-            "api_key": settings.get("OPENAI_API_KEY", ""),
+            "api_key": api_key,
             "base_url": settings.get("OPENAI_BASE_URL", ""),
             "timeout": httpx.Timeout(30.0),
         }
