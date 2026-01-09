@@ -2,14 +2,23 @@
 设置管理路由
 """
 import os
+from dotenv import load_dotenv
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 from src.infrastructure.config.env_manager import env_manager
-from src.infrastructure.config.settings import ai_settings, notification_settings, scraper_settings
+import importlib
+from src.infrastructure.config.settings import AISettings, notification_settings, scraper_settings
 
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+def _reload_env() -> None:
+    load_dotenv(dotenv_path=env_manager.env_file, override=True)
+    settings_module = importlib.import_module("src.infrastructure.config.settings")
+    settings_module.ai_settings = settings_module.AISettings()
+    settings_module.notification_settings = settings_module.NotificationSettings()
+    settings_module.scraper_settings = settings_module.ScraperSettings()
 
 def _env_bool(key: str, default: bool = False) -> bool:
     value = env_manager.get_value(key)
@@ -76,6 +85,7 @@ async def update_notification_settings(
     updates = settings.dict(exclude_none=True)
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "通知设置已成功更新"}
     return {"message": "更新通知设置失败"}
 
@@ -103,6 +113,7 @@ async def update_rotation_settings(
             updates[key] = str(value)
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "轮换设置已成功更新"}
     return {"message": "更新轮换设置失败"}
 
@@ -122,6 +133,7 @@ async def get_system_status():
     openai_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
     ntfy_topic_url = env_manager.get_value("NTFY_TOPIC_URL", "")
 
+    ai_settings = AISettings()
     return {
         "ai_configured": ai_settings.is_configured(),
         "notification_configured": notification_settings.has_any_notification_enabled(),
@@ -176,6 +188,7 @@ async def update_ai_settings(
 
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "AI设置已成功更新"}
     return {"message": "更新AI设置失败"}
 
