@@ -1,0 +1,41 @@
+{
+  "data": {
+    "resultList": [
+      {
+        "data": {
+          "item": {
+            "main": {
+              "exContent": {
+                "title": "Sony A7M4 Body",
+                "price": [
+                  {"text": "\u00a5"},
+                  {"text": "13999"}
+                ],
+                "area": "Shanghai",
+                "userNickName": "seller_01",
+                "picUrl": "https://img.example.com/a7m4.jpg",
+                "itemId": "123456",
+                "oriPrice": "\u00a516999",
+                "fishTags": {
+                  "r1": {
+                    "tagList": [
+                      {"data": {"content": "\u9a8c\u8d27\u5b9d"}}
+                    ]
+                  }
+                }
+              },
+              "clickParam": {
+                "args": {
+                  "publishTime": "1710000000000",
+                  "wantNum": 12,
+                  "tag": "freeship"
+                }
+              },
+              "targetUrl": "fleamarket://item?id=123456"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

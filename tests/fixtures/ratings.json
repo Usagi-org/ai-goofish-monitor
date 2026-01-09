@@ -1,0 +1,35 @@
+[
+  {
+    "cardData": {
+      "rateId": "r1",
+      "feedback": "Great seller",
+      "rate": 1,
+      "rateTagList": [{"text": "\u5356\u5bb6"}],
+      "raterUserNick": "buyer_01",
+      "gmtCreate": "2024-01-01",
+      "pictCdnUrlList": []
+    }
+  },
+  {
+    "cardData": {
+      "rateId": "r2",
+      "feedback": "Nice buyer",
+      "rate": 1,
+      "rateTagList": [{"text": "\u4e70\u5bb6"}],
+      "raterUserNick": "seller_02",
+      "gmtCreate": "2024-02-01",
+      "pictCdnUrlList": ["https://img.example.com/pic.jpg"]
+    }
+  },
+  {
+    "cardData": {
+      "rateId": "r3",
+      "feedback": "Average",
+      "rate": 0,
+      "rateTagList": [{"text": "\u5356\u5bb6"}],
+      "raterUserNick": "buyer_02",
+      "gmtCreate": "2024-03-01",
+      "pictCdnUrlList": []
+    }
+  }
+]

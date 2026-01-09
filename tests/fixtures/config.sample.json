@@ -1,0 +1,28 @@
+[
+  {
+    "task_name": "Sony A7M4",
+    "enabled": true,
+    "keyword": "sony a7m4",
+    "description": "body only",
+    "max_pages": 2,
+    "personal_only": true,
+    "min_price": "8000",
+    "max_price": "16000",
+    "cron": "*/15 * * * *",
+    "ai_prompt_base_file": "prompts/base_prompt.txt",
+    "ai_prompt_criteria_file": "prompts/sony_a7m4_criteria.txt"
+  },
+  {
+    "task_name": "Canon R6",
+    "enabled": false,
+    "keyword": "canon r6",
+    "description": "body only",
+    "max_pages": 1,
+    "personal_only": true,
+    "min_price": "5000",
+    "max_price": "12000",
+    "cron": "*/30 * * * *",
+    "ai_prompt_base_file": "prompts/base_prompt.txt",
+    "ai_prompt_criteria_file": "prompts/canon_r6_criteria.txt"
+  }
+]
