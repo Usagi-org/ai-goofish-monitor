@@ -2,10 +2,9 @@
 设置管理路由
 """
 import os
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
-from src.api.dependencies import get_current_user
 from src.infrastructure.config.env_manager import env_manager
 from src.infrastructure.config.settings import ai_settings, notification_settings, scraper_settings
 
@@ -59,7 +58,7 @@ class RotationSettingsModel(BaseModel):
 
 
 @router.get("/notifications")
-async def get_notification_settings(username: str = Depends(get_current_user)):
+async def get_notification_settings():
     """获取通知设置"""
     return {
         "NTFY_TOPIC_URL": env_manager.get_value("NTFY_TOPIC_URL", ""),
@@ -72,7 +71,6 @@ async def get_notification_settings(username: str = Depends(get_current_user)):
 @router.put("/notifications")
 async def update_notification_settings(
     settings: NotificationSettingsModel,
-    username: str = Depends(get_current_user)
 ):
     """更新通知设置"""
     updates = settings.dict(exclude_none=True)
@@ -82,7 +80,7 @@ async def update_notification_settings(
     return {"message": "更新通知设置失败"}
 
 @router.get("/rotation")
-async def get_rotation_settings(username: str = Depends(get_current_user)):
+async def get_rotation_settings():
     return {
         "PROXY_ROTATION_ENABLED": _env_bool("PROXY_ROTATION_ENABLED", False),
         "PROXY_ROTATION_MODE": env_manager.get_value("PROXY_ROTATION_MODE", "per_task"),
@@ -95,7 +93,6 @@ async def get_rotation_settings(username: str = Depends(get_current_user)):
 @router.put("/rotation")
 async def update_rotation_settings(
     settings: RotationSettingsModel,
-    username: str = Depends(get_current_user)
 ):
     updates = {}
     payload = settings.dict(exclude_none=True)
@@ -111,7 +108,7 @@ async def update_rotation_settings(
 
 
 @router.get("/status")
-async def get_system_status(username: str = Depends(get_current_user)):
+async def get_system_status():
     """获取系统状态"""
     state_file = "xianyu_state.json"
     login_state_exists = os.path.exists(state_file)
@@ -153,7 +150,7 @@ class AISettingsModel(BaseModel):
 
 
 @router.get("/ai")
-async def get_ai_settings(username: str = Depends(get_current_user)):
+async def get_ai_settings():
     """获取AI设置"""
     return {
         "OPENAI_BASE_URL": env_manager.get_value("OPENAI_BASE_URL", ""),
@@ -165,7 +162,6 @@ async def get_ai_settings(username: str = Depends(get_current_user)):
 @router.put("/ai")
 async def update_ai_settings(
     settings: AISettingsModel,
-    username: str = Depends(get_current_user)
 ):
     """更新AI设置"""
     updates = {}
@@ -187,7 +183,6 @@ async def update_ai_settings(
 @router.post("/ai/test")
 async def test_ai_settings(
     settings: dict,
-    username: str = Depends(get_current_user)
 ):
     """测试AI模型设置是否有效"""
     try:

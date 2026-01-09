@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import os
 import aiofiles
-from src.api.dependencies import get_current_user, get_task_service, get_process_service
+from src.api.dependencies import get_task_service, get_process_service
 from src.services.task_service import TaskService
 from src.services.process_service import ProcessService
 from src.domain.models.task import Task, TaskCreate, TaskUpdate, TaskGenerateRequest
@@ -20,7 +20,6 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 @router.get("", response_model=List[dict])
 async def get_tasks(
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """获取所有任务"""
     tasks = await service.get_all_tasks()
@@ -31,7 +30,6 @@ async def get_tasks(
 async def get_task(
     task_id: int,
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """获取单个任务"""
     task = await service.get_task(task_id)
@@ -44,7 +42,6 @@ async def get_task(
 async def create_task(
     task_create: TaskCreate,
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """创建新任务"""
     task = await service.create_task(task_create)
@@ -55,7 +52,6 @@ async def create_task(
 async def generate_task(
     req: TaskGenerateRequest,
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """使用 AI 生成分析标准并创建新任务"""
     print(f"收到 AI 任务生成请求: {req.task_name}")
@@ -140,7 +136,6 @@ async def update_task(
     task_id: int,
     task_update: TaskUpdate,
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """更新任务"""
     try:
@@ -203,7 +198,6 @@ async def update_task(
 async def delete_task(
     task_id: int,
     service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """删除任务"""
     task = await service.get_task(task_id)
@@ -239,7 +233,6 @@ async def start_task(
     task_id: int,
     task_service: TaskService = Depends(get_task_service),
     process_service: ProcessService = Depends(get_process_service),
-    username: str = Depends(get_current_user)
 ):
     """启动单个任务"""
     # 获取任务信息
@@ -274,7 +267,6 @@ async def stop_task(
     task_id: int,
     task_service: TaskService = Depends(get_task_service),
     process_service: ProcessService = Depends(get_process_service),
-    username: str = Depends(get_current_user)
 ):
     """停止单个任务"""
     # 获取任务信息

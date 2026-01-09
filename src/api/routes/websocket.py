@@ -2,10 +2,8 @@
 WebSocket 路由
 提供实时通信功能
 """
-import base64
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Set
-from src.infrastructure.config.settings import settings
 
 
 router = APIRouter()
@@ -17,28 +15,8 @@ active_connections: Set[WebSocket] = set()
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    token: str = Query(None)
 ):
     """WebSocket 端点"""
-    # 验证认证 token (Base64 编码的 username:password)
-    authenticated = False
-
-    if token:
-        try:
-            # 解码 token
-            credentials = base64.b64decode(token).decode()
-            username, password = credentials.split(":", 1)
-
-            # 验证凭据
-            if username == settings.web_username and password == settings.web_password:
-                authenticated = True
-        except Exception:
-            pass
-
-    if not authenticated:
-        await websocket.close(code=1008, reason="Unauthorized")
-        return
-
     # 接受连接
     await websocket.accept()
     active_connections.add(websocket)

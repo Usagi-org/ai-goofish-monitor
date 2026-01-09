@@ -4,20 +4,19 @@ import { wsService } from '@/services/websocket'
 
 // Global State
 const username = ref<string | null>(localStorage.getItem('auth_username'))
-const credentials = ref<string | null>(localStorage.getItem('auth_credentials')) // Base64 encoded 'user:pass'
+const isLoggedIn = ref(localStorage.getItem('auth_logged_in') === 'true')
 
 export function useAuth() {
   const router = useRouter()
 
-  const isAuthenticated = computed(() => !!credentials.value)
+  const isAuthenticated = computed(() => isLoggedIn.value)
 
-  function setCredentials(user: string, pass: string) {
-    const encoded = btoa(`${user}:${pass}`)
+  function setAuthenticated(user: string) {
     username.value = user
-    credentials.value = encoded
+    isLoggedIn.value = true
 
     localStorage.setItem('auth_username', user)
-    localStorage.setItem('auth_credentials', encoded)
+    localStorage.setItem('auth_logged_in', 'true')
 
     // 启动 WebSocket 连接
     wsService.start()
@@ -25,9 +24,9 @@ export function useAuth() {
 
   function logout() {
     username.value = null
-    credentials.value = null
+    isLoggedIn.value = false
     localStorage.removeItem('auth_username')
-    localStorage.removeItem('auth_credentials')
+    localStorage.removeItem('auth_logged_in')
 
     // 停止 WebSocket 连接
     wsService.stop()
@@ -41,17 +40,17 @@ export function useAuth() {
   }
 
   async function login(user: string, pass: string): Promise<boolean> {
-    const encoded = btoa(`${user}:${pass}`)
-    
     try {
       const response = await fetch('/auth/status', {
+        method: 'POST',
         headers: {
-          'Authorization': `Basic ${encoded}`
-        }
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: user, password: pass }),
       })
 
       if (response.ok) {
-        setCredentials(user, pass)
+        setAuthenticated(user)
         return true
       } else {
         return false
@@ -64,7 +63,6 @@ export function useAuth() {
 
   return {
     username,
-    credentials,
     isAuthenticated,
     login,
     logout

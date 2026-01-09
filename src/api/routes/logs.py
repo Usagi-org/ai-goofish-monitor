@@ -6,7 +6,7 @@ from typing import Optional, Tuple, List
 import aiofiles
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from src.api.dependencies import get_current_user, get_task_service
+from src.api.dependencies import get_task_service
 from src.services.task_service import TaskService
 from src.utils import resolve_task_log_path
 
@@ -57,7 +57,6 @@ async def get_logs(
     from_pos: int = 0,
     task_id: Optional[int] = Query(default=None, ge=0),
     task_service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """获取日志内容（增量读取）"""
     if task_id is None:
@@ -108,7 +107,6 @@ async def get_logs_tail(
     offset_lines: int = Query(default=0, ge=0),
     limit_lines: int = Query(default=50, ge=1, le=1000),
     task_service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """获取日志尾部内容（按行分页）"""
     if task_id is None:
@@ -167,7 +165,6 @@ async def get_logs_tail(
 async def clear_logs(
     task_id: Optional[int] = Query(default=None, ge=0),
     task_service: TaskService = Depends(get_task_service),
-    username: str = Depends(get_current_user)
 ):
     """清空日志文件"""
     if task_id is None:

@@ -90,21 +90,29 @@ async def health_check():
 
 
 # 认证状态检查端点
-from fastapi import Request, Depends
+from fastapi import Request, HTTPException
 from fastapi.responses import FileResponse
-from src.api.dependencies import get_current_user
+from pydantic import BaseModel
+from src.infrastructure.config.settings import settings
 
-@app.get("/auth/status")
-async def auth_status(username: str = Depends(get_current_user)):
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/auth/status")
+async def auth_status(payload: LoginRequest):
     """检查认证状态"""
-    return {"authenticated": True, "username": username}
+    if payload.username == settings.web_username and payload.password == settings.web_password:
+        return {"authenticated": True, "username": payload.username}
+    raise HTTPException(status_code=401, detail="认证失败")
 
 
 # 主页路由 - 服务 Vue 3 SPA
 from fastapi.responses import JSONResponse
 
 @app.get("/")
-async def read_root(request: Request, username: str = Depends(get_current_user)):
+async def read_root(request: Request):
     """提供 Vue 3 SPA 的主页面"""
     if os.path.exists("dist/index.html"):
         return FileResponse("dist/index.html")
@@ -117,7 +125,7 @@ async def read_root(request: Request, username: str = Depends(get_current_user))
 
 # Catch-all 路由 - 处理所有前端路由（必须放在最后）
 @app.get("/{full_path:path}")
-async def serve_spa(request: Request, full_path: str, username: str = Depends(get_current_user)):
+async def serve_spa(request: Request, full_path: str):
     """
     Catch-all 路由，将所有非 API 请求重定向到 index.html
     这样可以支持 Vue Router 的 HTML5 History 模式

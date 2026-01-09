@@ -2,8 +2,7 @@
 FastAPI 依赖注入
 提供服务实例的创建和管理
 """
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import Depends
 from src.services.task_service import TaskService
 from src.services.notification_service import NotificationService
 from src.services.ai_service import AIAnalysisService
@@ -13,11 +12,8 @@ from src.infrastructure.external.ai_client import AIClient
 from src.infrastructure.external.notification_clients.ntfy_client import NtfyClient
 from src.infrastructure.external.notification_clients.bark_client import BarkClient
 from src.infrastructure.external.notification_clients.telegram_client import TelegramClient
-from src.infrastructure.config.settings import settings, notification_settings
+from src.infrastructure.config.settings import notification_settings
 
-
-# HTTP Basic 认证
-security = HTTPBasic()
 
 # 全局 ProcessService 实例（将在 app.py 中设置）
 _process_service_instance = None
@@ -27,19 +23,6 @@ def set_process_service(service: ProcessService):
     """设置全局 ProcessService 实例"""
     global _process_service_instance
     _process_service_instance = service
-
-
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)) -> str:
-    """验证用户身份"""
-    if (credentials.username == settings.web_username and
-        credentials.password == settings.web_password):
-        return credentials.username
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="认证失败",
-        headers={"WWW-Authenticate": "Basic"},
-    )
 
 
 # 服务依赖注入
