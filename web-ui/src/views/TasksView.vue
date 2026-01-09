@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useTasks } from '@/composables/useTasks'
 import type { Task, TaskGenerateRequest, TaskUpdate } from '@/types/task.d.ts'
 import TasksTable from '@/components/tasks/TasksTable.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
+import { listAccounts, type AccountItem } from '@/api/accounts'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
@@ -30,6 +32,9 @@ const criteriaDescription = ref('')
 const isCriteriaSubmitting = ref(false)
 const isDeleteDialogOpen = ref(false)
 const taskToDeleteId = ref<number | null>(null)
+const accountOptions = ref<AccountItem[]>([])
+const defaultAccountPath = ref<string>('')
+const route = useRoute()
 
 const taskToDelete = computed(() => {
   if (taskToDeleteId.value === null) return null
@@ -174,6 +179,41 @@ async function handleToggleEnabled(task: Task, enabled: boolean) {
     })
   }
 }
+
+async function fetchAccountOptions() {
+  try {
+    accountOptions.value = await listAccounts()
+  } catch (e) {
+    toast({
+      title: '加载账号列表失败',
+      description: (e as Error).message,
+      variant: 'destructive',
+    })
+  }
+}
+
+onMounted(fetchAccountOptions)
+
+function resolveAccountPath(accountName: string) {
+  const match = accountOptions.value.find((account) => account.name === accountName)
+  return match ? match.path : ''
+}
+
+watch(
+  () => [route.query.account, route.query.create, accountOptions.value],
+  () => {
+    const accountName = typeof route.query.account === 'string' ? route.query.account : ''
+    if (accountName) {
+      defaultAccountPath.value = resolveAccountPath(accountName)
+    } else {
+      defaultAccountPath.value = ''
+    }
+    if (route.query.create === '1') {
+      isCreateDialogOpen.value = true
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -195,7 +235,12 @@ async function handleToggleEnabled(task: Task, enabled: boolean) {
               请填写任务详情。AI将根据你的“详细需求”自动生成分析标准。
             </DialogDescription>
           </DialogHeader>
-          <TaskForm mode="create" @submit="(data) => handleCreateTask(data as TaskGenerateRequest)" />
+          <TaskForm
+            mode="create"
+            :account-options="accountOptions"
+            :default-account="defaultAccountPath"
+            @submit="(data) => handleCreateTask(data as TaskGenerateRequest)"
+          />
           <DialogFooter>
             <Button type="submit" form="task-form" :disabled="isSubmitting">
               {{ isSubmitting ? '创建中...' : '创建任务' }}
@@ -211,7 +256,13 @@ async function handleToggleEnabled(task: Task, enabled: boolean) {
         <DialogHeader>
           <DialogTitle>编辑任务: {{ selectedTask?.task_name }}</DialogTitle>
         </DialogHeader>
-        <TaskForm v-if="selectedTask" mode="edit" :initial-data="selectedTask" @submit="(data) => handleUpdateTask(data as TaskUpdate)" />
+        <TaskForm
+          v-if="selectedTask"
+          mode="edit"
+          :initial-data="selectedTask"
+          :account-options="accountOptions"
+          @submit="(data) => handleUpdateTask(data as TaskUpdate)"
+        />
         <DialogFooter>
           <Button type="submit" form="task-form" :disabled="isSubmitting">
             {{ isSubmitting ? '保存中...' : '保存更改' }}

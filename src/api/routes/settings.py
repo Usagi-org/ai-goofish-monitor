@@ -12,6 +12,26 @@ from src.infrastructure.config.settings import ai_settings, notification_setting
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+def _env_bool(key: str, default: bool = False) -> bool:
+    value = env_manager.get_value(key)
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _env_int(key: str, default: int) -> int:
+    value = env_manager.get_value(key)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _normalize_bool_value(value: bool) -> str:
+    return "true" if value else "false"
+
 
 class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
@@ -28,6 +48,14 @@ class AISettingsModel(BaseModel):
     OPENAI_MODEL_NAME: Optional[str] = None
     SKIP_AI_ANALYSIS: Optional[bool] = None
     PROXY_URL: Optional[str] = None
+
+
+class RotationSettingsModel(BaseModel):
+    PROXY_ROTATION_ENABLED: Optional[bool] = None
+    PROXY_ROTATION_MODE: Optional[str] = None
+    PROXY_POOL: Optional[str] = None
+    PROXY_ROTATION_RETRY_LIMIT: Optional[int] = None
+    PROXY_BLACKLIST_TTL: Optional[int] = None
 
 
 @router.get("/notifications")
@@ -52,6 +80,34 @@ async def update_notification_settings(
     if success:
         return {"message": "通知设置已成功更新"}
     return {"message": "更新通知设置失败"}
+
+@router.get("/rotation")
+async def get_rotation_settings(username: str = Depends(get_current_user)):
+    return {
+        "PROXY_ROTATION_ENABLED": _env_bool("PROXY_ROTATION_ENABLED", False),
+        "PROXY_ROTATION_MODE": env_manager.get_value("PROXY_ROTATION_MODE", "per_task"),
+        "PROXY_POOL": env_manager.get_value("PROXY_POOL", ""),
+        "PROXY_ROTATION_RETRY_LIMIT": _env_int("PROXY_ROTATION_RETRY_LIMIT", 2),
+        "PROXY_BLACKLIST_TTL": _env_int("PROXY_BLACKLIST_TTL", 300),
+    }
+
+
+@router.put("/rotation")
+async def update_rotation_settings(
+    settings: RotationSettingsModel,
+    username: str = Depends(get_current_user)
+):
+    updates = {}
+    payload = settings.dict(exclude_none=True)
+    for key, value in payload.items():
+        if isinstance(value, bool):
+            updates[key] = _normalize_bool_value(value)
+        else:
+            updates[key] = str(value)
+    success = env_manager.update_values(updates)
+    if success:
+        return {"message": "轮换设置已成功更新"}
+    return {"message": "更新轮换设置失败"}
 
 
 @router.get("/status")

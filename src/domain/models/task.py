@@ -28,6 +28,7 @@ class Task(BaseModel):
     cron: Optional[str] = None
     ai_prompt_base_file: str
     ai_prompt_criteria_file: str
+    account_state_file: Optional[str] = None
     is_running: bool = False
 
     class Config:
@@ -60,6 +61,7 @@ class TaskCreate(BaseModel):
     cron: Optional[str] = None
     ai_prompt_base_file: str = "prompts/base_prompt.txt"
     ai_prompt_criteria_file: str
+    account_state_file: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -75,6 +77,7 @@ class TaskUpdate(BaseModel):
     cron: Optional[str] = None
     ai_prompt_base_file: Optional[str] = None
     ai_prompt_criteria_file: Optional[str] = None
+    account_state_file: Optional[str] = None
     is_running: Optional[bool] = None
 
 
@@ -88,6 +91,7 @@ class TaskGenerateRequest(BaseModel):
     max_price: Optional[str] = None
     max_pages: int = 3
     cron: Optional[str] = None
+    account_state_file: Optional[str] = None
 
     @validator('min_price', 'max_price', pre=True)
     def convert_price_to_str(cls, v):
@@ -102,6 +106,12 @@ class TaskGenerateRequest(BaseModel):
     @validator('cron', pre=True)
     def empty_str_to_none(cls, v):
         """将空字符串转换为 None"""
+        if v == "" or v == "null" or v == "undefined":
+            return None
+        return v
+
+    @validator('account_state_file', pre=True)
+    def empty_account_to_none(cls, v):
         if v == "" or v == "null" or v == "undefined":
             return None
         return v

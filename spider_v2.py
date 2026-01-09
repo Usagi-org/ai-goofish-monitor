@@ -29,9 +29,6 @@ async def main():
     parser.add_argument("--task-name", type=str, help="只运行指定名称的单个任务 (用于定时任务调度)")
     args = parser.parse_args()
 
-    if not os.path.exists(STATE_FILE):
-        sys.exit(f"错误: 登录状态文件 '{STATE_FILE}' 不存在。请先运行 login.py 生成。")
-
     if not os.path.exists(args.config):
         sys.exit(f"错误: 配置文件 '{args.config}' 不存在。")
 
@@ -40,6 +37,26 @@ async def main():
             tasks_config = json.load(f)
     except (json.JSONDecodeError, IOError) as e:
         sys.exit(f"错误: 读取或解析配置文件 '{args.config}' 失败: {e}")
+
+    def has_bound_account(tasks: list) -> bool:
+        for task in tasks:
+            account = task.get("account_state_file")
+            if isinstance(account, str) and account.strip():
+                return True
+        return False
+
+    def has_any_state_file() -> bool:
+        state_dir = os.getenv("ACCOUNT_STATE_DIR", "state").strip().strip('"').strip("'")
+        if os.path.isdir(state_dir):
+            for name in os.listdir(state_dir):
+                if name.endswith(".json"):
+                    return True
+        return False
+
+    if not os.path.exists(STATE_FILE) and not has_bound_account(tasks_config) and not has_any_state_file():
+        sys.exit(
+            f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
+        )
 
     # 读取所有prompt文件内容
     for task in tasks_config:

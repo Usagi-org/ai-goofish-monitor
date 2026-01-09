@@ -13,6 +13,7 @@ export interface Task {
   cron: string | null;
   ai_prompt_base_file: string;
   ai_prompt_criteria_file: string;
+  account_state_file?: string | null;
   is_running: boolean;
 }
 
@@ -29,4 +30,5 @@ export interface TaskGenerateRequest {
   max_price?: string | null;
   max_pages?: number;
   cron?: string | null;
+  account_state_file?: string | null;
 }

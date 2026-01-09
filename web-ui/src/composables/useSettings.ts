@@ -1,10 +1,11 @@
 import { ref, onMounted } from 'vue'
 import * as settingsApi from '@/api/settings'
-import type { NotificationSettings, AiSettings, SystemStatus } from '@/api/settings'
+import type { NotificationSettings, AiSettings, RotationSettings, SystemStatus } from '@/api/settings'
 
 export function useSettings() {
   const notificationSettings = ref<NotificationSettings>({})
   const aiSettings = ref<AiSettings>({})
+  const rotationSettings = ref<RotationSettings>({})
   const systemStatus = ref<SystemStatus | null>(null)
   const isReady = ref(false)
   
@@ -16,13 +17,15 @@ export function useSettings() {
     isLoading.value = true
     error.value = null
     try {
-      const [notif, ai, status] = await Promise.all([
+      const [notif, ai, rotation, status] = await Promise.all([
         settingsApi.getNotificationSettings(),
         settingsApi.getAiSettings(),
+        settingsApi.getRotationSettings(),
         settingsApi.getSystemStatus()
       ])
       notificationSettings.value = notif
       aiSettings.value = ai
+      rotationSettings.value = rotation
       systemStatus.value = status
     } catch (e) {
       if (e instanceof Error) error.value = e
@@ -73,6 +76,18 @@ export function useSettings() {
     }
   }
 
+  async function saveRotationSettings() {
+    isSaving.value = true
+    try {
+      await settingsApi.updateRotationSettings(rotationSettings.value)
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isSaving.value = false
+    }
+  }
+
   async function testAiConnection() {
     isSaving.value = true
     try {
@@ -91,6 +106,7 @@ export function useSettings() {
   return {
     notificationSettings,
     aiSettings,
+    rotationSettings,
     systemStatus,
     isLoading,
     isSaving,
@@ -99,6 +115,7 @@ export function useSettings() {
     fetchAll,
     saveNotificationSettings,
     saveAiSettings,
+    saveRotationSettings,
     testAiConnection,
     refreshStatus,
   }

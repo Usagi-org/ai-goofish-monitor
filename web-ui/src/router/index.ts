@@ -21,6 +21,12 @@ const routes = [
         meta: { title: '任务管理', requiresAuth: true },
       },
       {
+        path: 'accounts',
+        name: 'Accounts',
+        component: () => import('@/views/AccountsView.vue'),
+        meta: { title: '账号管理', requiresAuth: true },
+      },
+      {
         path: 'results',
         name: 'Results',
         component: () => import('@/views/ResultsView.vue'),

@@ -104,7 +104,8 @@ async def generate_task(
             max_price=req.max_price,
             cron=req.cron,
             ai_prompt_base_file="prompts/base_prompt.txt",
-            ai_prompt_criteria_file=output_filename
+            ai_prompt_criteria_file=output_filename,
+            account_state_file=req.account_state_file,
         )
 
         # 5. 使用 TaskService 创建任务
@@ -204,9 +205,24 @@ async def delete_task(
     username: str = Depends(get_current_user)
 ):
     """删除任务"""
+    task = await service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务未找到")
+
     success = await service.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail="任务未找到")
+
+    try:
+        keyword = (task.keyword or "").strip()
+        if keyword:
+            filename = f"{keyword.replace(' ', '_')}_full_data.jsonl"
+            file_path = os.path.join("jsonl", filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+    except Exception as e:
+        print(f"删除任务结果文件时出错: {e}")
+
     return {"message": "任务删除成功"}
 
 
