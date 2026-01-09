@@ -122,9 +122,43 @@ onMounted(fetchAccounts)
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold text-gray-800">闲鱼账号管理</h1>
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">闲鱼账号管理</h1>
+        <p class="text-sm text-gray-500 mt-1">使用 Chrome 扩展提取登录状态 JSON，并在此添加账号。</p>
+      </div>
       <Button @click="openCreateDialog">+ 添加账号</Button>
     </div>
+
+    <Card class="mb-6">
+      <CardHeader>
+        <CardTitle>获取闲鱼Cookie</CardTitle>
+      </CardHeader>
+      <CardContent class="text-sm text-gray-600">
+        <ol class="list-decimal list-inside space-y-1">
+          <li>
+            安装
+            <a
+              class="text-blue-600 hover:underline"
+              href="https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa"
+              target="_blank"
+              rel="noopener noreferrer"
+            >闲鱼登录状态提取扩展</a>
+          </li>
+          <li>
+            打开并登录
+            <a
+              class="text-blue-600 hover:underline"
+              href="https://www.goofish.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >闲鱼官网</a>
+          </li>
+          <li>点击扩展图标，选择“提取登录状态”，再点击“复制到剪贴板”</li>
+          <li>回到本页，点击“添加账号”，粘贴 JSON 内容并保存</li>
+          <li>如果配置多账号，不要在当前窗口退出闲鱼账号，可以新开无痕窗口登录提取其他账号Cookie</li>
+        </ol>
+      </CardContent>
+    </Card>
 
     <Card>
       <CardHeader>
