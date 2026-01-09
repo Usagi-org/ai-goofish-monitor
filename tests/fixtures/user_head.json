@@ -1,0 +1,19 @@
+{
+  "data": {
+    "module": {
+      "base": {
+        "displayName": "seller_01",
+        "avatar": {"avatar": "https://img.example.com/avatar.jpg"},
+        "introduction": "Trusted seller",
+        "ylzTags": [
+          {"attributes": {"role": "seller", "level": "3"}, "text": "S3"},
+          {"attributes": {"role": "buyer", "level": "2"}, "text": "B2"}
+        ]
+      },
+      "tabs": {
+        "item": {"number": 12},
+        "rate": {"number": 88}
+      }
+    }
+  }
+}

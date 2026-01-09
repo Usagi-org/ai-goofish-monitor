@@ -1,0 +1,20 @@
+[
+  {
+    "cardData": {
+      "itemStatus": 0,
+      "id": "10001",
+      "title": "Lens 24-70",
+      "priceInfo": {"price": "3500"},
+      "picInfo": {"picUrl": "https://img.example.com/lens.jpg"}
+    }
+  },
+  {
+    "cardData": {
+      "itemStatus": 1,
+      "id": "10002",
+      "title": "Battery Grip",
+      "priceInfo": {"price": "600"},
+      "picInfo": {"picUrl": "https://img.example.com/grip.jpg"}
+    }
+  }
+]

@@ -21,13 +21,14 @@
 
 ### 环境准备
 
-**要求**: Python 3.10+ Vue3
+**要求**:
+- Python 3.10+
+- Node.js + npm（用于前端构建）
+- Playwright 浏览器依赖（未安装时执行 `playwright install chromium`）
 
 ```bash
 git clone https://github.com/Usagi-org/ai-goofish-monitor
 cd ai-goofish-monitor
-pip install -r requirements.txt
-playwright install chromium
 ```
 
 ### 配置
@@ -52,19 +53,26 @@ cp .env.example .env
 
 完整配置项参考 `.env.example`
 
-3. **获取登录状态**
-
-启动服务后，访问 Web UI → **登录页面** → **右上角-手动更新登录状态**，按提示使用 [Chrome 扩展](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) 提取闲鱼Cookie。
-
-### 启动服务
+3. **启动服务（推荐 start.sh）**
 
 ```bash
 chmod +x start.sh && ./start.sh
 ```
 
-访问 `http://127.0.0.1:8000`，创建监控任务即可开始使用。
+start.sh 会自动完成以下步骤：
+- 清理旧的 `dist/`
+- 安装 Python 依赖（`pip install -r requirements.txt`）
+- 安装前端依赖（首次运行会执行 `npm install`）
+- 构建前端并复制 `dist/` 到根目录
+- 启动后端服务（`python -m src.app`）
+- 
 
-## 🐳 Docker 部署 (推荐)
+4**访问Web UI**
+访问 `http://127.0.0.1:8000`，
+**登录默认密码(admin/admin123)** → **右上角-手动更新登录状态**，按提示使用 [Chrome 扩展](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) 提取闲鱼Cookie。
+然后创建监控任务即可开始使用。
+
+## 🐳 Docker 部署
 
 使用 Docker 可以将应用及其所有依赖项打包到一个标准化的单元中，实现快速、可靠和一致的部署。
 
