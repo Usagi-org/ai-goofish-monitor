@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type FormMode = 'create' | 'edit'
 type EmittedData = TaskGenerateRequest | Partial<Task>
@@ -13,6 +14,8 @@ type EmittedData = TaskGenerateRequest | Partial<Task>
 const props = defineProps<{
   mode: FormMode
   initialData?: Task | null
+  accountOptions?: { name: string; path: string }[]
+  defaultAccount?: string
 }>()
 
 const emit = defineEmits<{
@@ -24,7 +27,10 @@ const form = ref<EmittedData>({})
 // Initialize form based on mode and initialData
 watchEffect(() => {
   if (props.mode === 'edit' && props.initialData) {
-    form.value = { ...props.initialData }
+    form.value = {
+      ...props.initialData,
+      account_state_file: props.initialData.account_state_file || '',
+    }
   } else {
     form.value = {
       task_name: '',
@@ -35,6 +41,7 @@ watchEffect(() => {
       min_price: undefined,
       max_price: undefined,
       cron: '',
+      account_state_file: props.defaultAccount || '',
     }
   }
 })
@@ -52,6 +59,9 @@ function handleSubmit() {
 
   // Filter out fields that shouldn't be sent in update requests
   const { id, is_running, ...submitData } = form.value as any
+  if (submitData.account_state_file === '') {
+    submitData.account_state_file = null
+  }
   emit('submit', submitData)
 }
 </script>
@@ -92,6 +102,22 @@ function handleSubmit() {
       <div class="grid grid-cols-4 items-center gap-4">
         <Label for="cron" class="text-right">定时规则</Label>
         <Input id="cron" v-model="form.cron as any" class="col-span-3" placeholder="分 时 日 月 周 (例如: 0 8 * * *)" />
+      </div>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">绑定账号</Label>
+        <div class="col-span-3">
+          <Select v-model="form.account_state_file">
+            <SelectTrigger>
+              <SelectValue placeholder="未绑定（自动选择）" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">未绑定（自动选择）</SelectItem>
+              <SelectItem v-for="account in accountOptions || []" :key="account.path" :value="account.path">
+                {{ account.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
         <Label for="personal-only" class="text-right">仅个人卖家</Label>

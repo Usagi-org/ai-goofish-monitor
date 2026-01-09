@@ -52,7 +52,23 @@
     "max_price": "2000",
     "cron": null,
     "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/macbook_pro_m2_criteria.txt",
+    "ai_prompt_criteria_file": "prompts/苹果watch_s10_criteria.txt",
+    "account_state_file": "state/acc1.json",
+    "is_running": false
+  },
+  {
+    "task_name": "DJI Mini 3 Pro",
+    "enabled": true,
+    "keyword": "DJI Mini 3 Pro",
+    "description": "九成新，充电器说明书齐全",
+    "max_pages": 3,
+    "personal_only": true,
+    "min_price": "1000",
+    "max_price": "3000",
+    "cron": null,
+    "ai_prompt_base_file": "prompts/base_prompt.txt",
+    "ai_prompt_criteria_file": "prompts/dji_mini_3_pro_criteria.txt",
+    "account_state_file": "state/acc2.json",
     "is_running": false
   }
 ]

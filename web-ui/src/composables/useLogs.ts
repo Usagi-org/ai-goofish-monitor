@@ -4,6 +4,10 @@ import * as logsApi from '@/api/logs'
 export function useLogs() {
   const logs = ref('')
   const currentPos = ref(0)
+  const currentTaskId = ref<number | null>(null)
+  const historyOffset = ref(0)
+  const hasMoreHistory = ref(false)
+  const isFetchingHistory = ref(false)
   const isAutoRefresh = ref(true)
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
@@ -25,9 +29,10 @@ export function useLogs() {
 
   async function fetchLogs() {
     if (isLoading.value) return
+    if (currentTaskId.value === null) return
     isLoading.value = true
     try {
-      const data = await logsApi.getLogs(currentPos.value)
+      const data = await logsApi.getLogs(currentPos.value, currentTaskId.value)
       if (data.new_pos < currentPos.value) {
         // Log file rotated or cleared.
         logs.value = ''
@@ -43,11 +48,51 @@ export function useLogs() {
     }
   }
 
+  async function loadLatest(limitLines: number = 50) {
+    if (isFetchingHistory.value) return
+    if (currentTaskId.value === null) return
+    isFetchingHistory.value = true
+    try {
+      const data = await logsApi.getLogTail(currentTaskId.value, 0, limitLines)
+      logs.value = data.content || ''
+      historyOffset.value = data.next_offset
+      hasMoreHistory.value = data.has_more
+      currentPos.value = data.new_pos
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+    } finally {
+      isFetchingHistory.value = false
+    }
+  }
+
+  async function loadPrevious(limitLines: number = 50) {
+    if (isFetchingHistory.value) return
+    if (!hasMoreHistory.value) return
+    if (currentTaskId.value === null) return
+    isFetchingHistory.value = true
+    try {
+      const data = await logsApi.getLogTail(currentTaskId.value, historyOffset.value, limitLines)
+      if (data.content) {
+        logs.value = logs.value ? `${data.content}\n${logs.value}` : data.content
+      }
+      historyOffset.value = data.next_offset
+      hasMoreHistory.value = data.has_more
+      currentPos.value = data.new_pos
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+    } finally {
+      isFetchingHistory.value = false
+    }
+  }
+
   async function clearLogs() {
     try {
-      await logsApi.clearLogs()
+      if (currentTaskId.value === null) return
+      await logsApi.clearLogs(currentTaskId.value)
       logs.value = ''
       currentPos.value = 0
+      historyOffset.value = 0
+      hasMoreHistory.value = false
     } catch (e) {
       if (e instanceof Error) error.value = e
       throw e
@@ -77,6 +122,15 @@ export function useLogs() {
     }
   }
 
+  function setTaskId(taskId: number | null) {
+    if (currentTaskId.value === taskId) return
+    currentTaskId.value = taskId
+    logs.value = ''
+    currentPos.value = 0
+    historyOffset.value = 0
+    hasMoreHistory.value = false
+  }
+
   onMounted(() => {
     startAutoRefresh()
   })
@@ -89,9 +143,14 @@ export function useLogs() {
     logs,
     isAutoRefresh,
     isLoading, // Not strictly used for polling to avoid flickering
+    isFetchingHistory,
+    hasMoreHistory,
     error,
     fetchLogs,
     clearLogs,
-    toggleAutoRefresh
+    toggleAutoRefresh,
+    setTaskId,
+    loadLatest,
+    loadPrevious
   }
 }

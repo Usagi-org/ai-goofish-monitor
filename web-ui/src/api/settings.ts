@@ -24,6 +24,14 @@ export interface AiSettings {
   PROXY_URL?: string
 }
 
+export interface RotationSettings {
+  PROXY_ROTATION_ENABLED?: boolean
+  PROXY_ROTATION_MODE?: string
+  PROXY_POOL?: string
+  PROXY_ROTATION_RETRY_LIMIT?: number
+  PROXY_BLACKLIST_TTL?: number
+}
+
 export interface SystemStatus {
   scraper_running: boolean
   login_state_file: {
@@ -60,6 +68,18 @@ export async function getAiSettings(): Promise<AiSettings> {
 
 export async function updateAiSettings(settings: AiSettings): Promise<void> {
   await http('/api/settings/ai', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings)
+  })
+}
+
+export async function getRotationSettings(): Promise<RotationSettings> {
+  return await http('/api/settings/rotation')
+}
+
+export async function updateRotationSettings(settings: RotationSettings): Promise<void> {
+  await http('/api/settings/rotation', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings)

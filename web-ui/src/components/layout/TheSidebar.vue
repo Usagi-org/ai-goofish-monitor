@@ -17,6 +17,15 @@ import { RouterLink } from 'vue-router'
         </li>
         <li>
           <RouterLink
+            to="/accounts"
+            class="block px-6 py-3 text-gray-700 border-r-4 border-transparent hover:bg-blue-50"
+            active-class="!border-blue-500 !text-blue-600 !font-semibold bg-blue-50"
+          >
+            账号管理
+          </RouterLink>
+        </li>
+        <li>
+          <RouterLink
             to="/results"
             class="block px-6 py-3 text-gray-700 border-r-4 border-transparent hover:bg-blue-50"
             active-class="!border-blue-500 !text-blue-600 !font-semibold bg-blue-50"

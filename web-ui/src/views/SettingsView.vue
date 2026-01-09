@@ -18,6 +18,7 @@ import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 const {
   notificationSettings,
   aiSettings,
+  rotationSettings,
   systemStatus,
   isLoading,
   isSaving,
@@ -26,12 +27,13 @@ const {
   refreshStatus,
   saveNotificationSettings,
   saveAiSettings,
+  saveRotationSettings,
   testAiConnection
 } = useSettings()
 
 const activeTab = ref('ai')
 const route = useRoute()
-const validTabs = new Set(['notifications', 'ai', 'status', 'prompts'])
+const validTabs = new Set(['notifications', 'ai', 'rotation', 'status', 'prompts'])
 const isLoginDialogOpen = ref(false)
 const loginStateContent = ref('')
 const isLoginStateSaving = ref(false)
@@ -69,6 +71,15 @@ async function handleSaveAi() {
     notifySuccess('AI 设置已保存')
   } catch (e) {
     notifyError('AI 设置保存失败', (e as Error).message)
+  }
+}
+
+async function handleSaveRotation() {
+  try {
+    await saveRotationSettings()
+    notifySuccess('轮换设置已保存')
+  } catch (e) {
+    notifyError('轮换设置保存失败', (e as Error).message)
   }
 }
 
@@ -204,6 +215,7 @@ watch(selectedPrompt, async (value) => {
     <Tabs v-model="activeTab" class="w-full">
       <TabsList class="mb-4">
         <TabsTrigger value="ai">AI 模型</TabsTrigger>
+        <TabsTrigger value="rotation">IP 轮换</TabsTrigger>
         <TabsTrigger value="notifications">通知推送</TabsTrigger>
         <TabsTrigger value="status">系统状态</TabsTrigger>
         <TabsTrigger value="prompts">Prompt 管理</TabsTrigger>
@@ -255,6 +267,61 @@ watch(selectedPrompt, async (value) => {
           <CardFooter v-if="isReady" class="flex gap-2">
             <Button variant="outline" @click="handleTestAi" :disabled="isSaving">测试连接</Button>
             <Button @click="handleSaveAi" :disabled="isSaving">保存 AI 设置</Button>
+          </CardFooter>
+        </Card>
+      </TabsContent>
+
+      <!-- Rotation Tab -->
+      <TabsContent value="rotation">
+        <Card>
+          <CardHeader>
+            <CardTitle>IP 代理轮换</CardTitle>
+            <CardDescription>配置代理池与轮换策略。</CardDescription>
+          </CardHeader>
+          <CardContent v-if="isReady" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="font-medium">代理轮换</h3>
+                <p class="text-sm text-gray-500">使用代理池进行 IP 轮换。</p>
+              </div>
+              <Switch v-model:checked="rotationSettings.PROXY_ROTATION_ENABLED" />
+            </div>
+            <div class="grid gap-2">
+              <Label>轮换模式</Label>
+              <Select v-model="rotationSettings.PROXY_ROTATION_MODE">
+                <SelectTrigger>
+                  <SelectValue placeholder="请选择轮换模式" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="per_task">按任务固定</SelectItem>
+                  <SelectItem value="on_failure">失败后轮换</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div class="grid gap-2">
+              <Label>代理池 (逗号分隔)</Label>
+              <Textarea
+                v-model="rotationSettings.PROXY_POOL"
+                class="min-h-[120px]"
+                placeholder="http://127.0.0.1:7890,socks5://127.0.0.1:1080"
+              />
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="grid gap-2">
+                <Label>重试上限</Label>
+                <Input v-model.number="rotationSettings.PROXY_ROTATION_RETRY_LIMIT" type="number" min="1" />
+              </div>
+              <div class="grid gap-2">
+                <Label>黑名单 TTL (秒)</Label>
+                <Input v-model.number="rotationSettings.PROXY_BLACKLIST_TTL" type="number" min="0" />
+              </div>
+            </div>
+          </CardContent>
+          <CardContent v-else class="py-8 text-sm text-gray-500">
+            正在加载轮换配置...
+          </CardContent>
+          <CardFooter v-if="isReady" class="flex gap-2">
+            <Button @click="handleSaveRotation" :disabled="isSaving">保存轮换设置</Button>
           </CardFooter>
         </Card>
       </TabsContent>
