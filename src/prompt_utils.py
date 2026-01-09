@@ -5,7 +5,7 @@ import sys
 
 import aiofiles
 
-from src.config import MODEL_NAME, client
+from src.infrastructure.external.ai_client import AIClient
 
 # The meta-prompt to instruct the AI
 META_PROMPT_TEMPLATE = """
@@ -38,7 +38,10 @@ async def generate_criteria(user_description: str, reference_file_path: str) -> 
     """
     Generates a new criteria file content using AI.
     """
-    if not client:
+    ai_client = AIClient()
+    if not ai_client.is_available():
+        ai_client.refresh()
+    if not ai_client.is_available():
         raise RuntimeError("AI客户端未初始化，无法生成分析标准。请检查.env配置。")
 
     print(f"正在读取参考文件: {reference_file_path}")
@@ -60,9 +63,9 @@ async def generate_criteria(user_description: str, reference_file_path: str) -> 
     try:
         from src.config import get_ai_request_params
         
-        response = await client.chat.completions.create(
+        response = await ai_client.client.chat.completions.create(
             **get_ai_request_params(
-                model=MODEL_NAME,
+                model=ai_client.settings.model_name,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.5 # Lower temperature for more predictable structure
             )

@@ -38,7 +38,6 @@ const isLoginDialogOpen = ref(false)
 const loginStateContent = ref('')
 const isLoginStateSaving = ref(false)
 const isLoginStateDeleting = ref(false)
-const isApiKeyVisible = ref(false)
 const isDeleteLoginDialogOpen = ref(false)
 
 const promptFiles = ref<string[]>([])
@@ -235,22 +234,14 @@ watch(selectedPrompt, async (value) => {
             </div>
             <div class="grid gap-2">
               <Label>API Key</Label>
-              <div class="flex items-center gap-2">
-                <Input
-                  v-model="aiSettings.OPENAI_API_KEY"
-                  :type="isApiKeyVisible ? 'text' : 'password'"
-                  placeholder="sk-..."
-                  class="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  @click="isApiKeyVisible = !isApiKeyVisible"
-                >
-                  {{ isApiKeyVisible ? '隐藏' : '显示' }}
-                </Button>
-              </div>
+              <Input
+                v-model="aiSettings.OPENAI_API_KEY"
+                type="password"
+                placeholder="留空表示不修改"
+              />
+              <p class="text-xs text-gray-500">
+                {{ systemStatus?.env_file.openai_api_key_set ? '已配置' : '未配置' }}，为安全起见不回显。
+              </p>
             </div>
             <div class="grid gap-2">
               <Label>模型名称</Label>

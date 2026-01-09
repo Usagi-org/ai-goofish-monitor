@@ -7,20 +7,30 @@ import json
 import base64
 from typing import Dict, List, Optional
 from datetime import datetime
+from dotenv import load_dotenv
 from openai import AsyncOpenAI
-from src.infrastructure.config.settings import ai_settings
+from src.infrastructure.config.settings import AISettings
 
 
 class AIClient:
     """AI 客户端封装"""
 
     def __init__(self):
-        self.settings = ai_settings
+        self.settings: Optional[AISettings] = None
+        self.client: Optional[AsyncOpenAI] = None
+        self.refresh()
+
+    def _load_settings(self) -> None:
+        load_dotenv(override=True)
+        self.settings = AISettings()
+
+    def refresh(self) -> None:
+        self._load_settings()
         self.client = self._initialize_client()
 
     def _initialize_client(self) -> Optional[AsyncOpenAI]:
         """初始化 OpenAI 客户端"""
-        if not self.settings.is_configured():
+        if not self.settings or not self.settings.is_configured():
             print("警告：AI 配置不完整，AI 功能将不可用")
             return None
 
