@@ -66,7 +66,6 @@ start.sh 会自动完成以下步骤：
 - 安装前端依赖（首次运行会执行 `npm install`）
 - 构建前端并复制 `dist/` 到根目录
 - 启动后端服务（`python -m src.app`）
-- 
 
 4. **访问Web UI**
 访问 `http://127.0.0.1:8000`，
@@ -75,58 +74,34 @@ start.sh 会自动完成以下步骤：
 
 ## 🐳 Docker 部署
 
-使用 Docker 可以将应用及其所有依赖项打包到一个标准化的单元中，实现快速、可靠和一致的部署。
+使用 `docker-compose.yaml` 一键启动，镜像已预置前端构建与运行环境。
 
-### 第 1 步: 环境准备 (与本地部署类似)
-
-1. **安装 Docker**: 请确保你的系统已安装 [Docker Engine](https://docs.docker.com/engine/install/)。
-
-2. **克隆项目并配置**:
-
-    ```bash
-    git clone https://github.com/Usagi-org/ai-goofish-monitor
-    cd ai-goofish-monitor
-    ```
-
-3. **创建 `.env` 文件**: 参考 **[快速开始](#快速开始)** 部分的说明，在项目根目录创建并填写 `.env` 文件。
-
-4. **获取登录状态 (关键步骤!)**: Docker容器内无法进行扫码登录。请在**启动容器后**，通过访问Web UI来添加闲鱼账号：
-    1. （在宿主机上）执行 `docker-compose up -d` 启动服务。
-    2. 在浏览器中打开 `http://127.0.0.1:8000` 访问Web UI。
-    3. 进入 **"闲鱼账号管理"** 页面，点击 **"添加账号"**。
-    4. 按照页面指引操作：
-       - 在您的个人电脑上，使用Chrome浏览器安装[闲鱼登录状态提取扩展](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa)
-       - 打开并登录闲鱼官网
-       - 登录成功后，点击浏览器工具栏中的扩展图标
-       - 点击"提取登录状态"按钮获取登录信息
-       - 点击"复制到剪贴板"按钮
-       - 将复制的内容粘贴到Web UI中保存即可
-
-> ℹ️ **关于Python版本**: 使用Docker部署时，项目使用的是Dockerfile中指定的Python 3.11版本，无需担心本地Python版本兼容性问题。
-
-### 第 2 步: 运行 Docker 容器
-
-项目已包含 `docker-compose.yaml` 文件，我们推荐使用 `docker-compose` 来管理容器，这比使用 `docker run` 更方便。
-
-在项目根目录下，运行以下命令来启动容器：
+### 1) 准备
 
 ```bash
-docker-compose up --build -d
+cp .env.example .env
+cp config.json.example config.json
 ```
 
-这会以后台模式启动服务。`docker-compose` 会自动读取 `.env` 文件和 `docker-compose.yaml` 的配置，并根据其内容来创建和启动容器。
+### 2) 启动
 
-如果容器内遇到网络问题，请自行排查或使用代理。
+```bash
+docker compose up -d
+```
 
-> ⚠️ **OpenWrt 环境部署注意事项**: 如果您在 OpenWrt 路由器上部署此应用，可能会遇到 DNS 解析问题。这是因为 Docker Compose 创建的默认网络可能无法正确继承 OpenWrt 的 DNS 设置。如果遇到 `ERR_CONNECTION_REFUSED` 错误，请检查您的容器网络配置，可能需要手动配置 DNS 或调整网络模式以确保容器可以正常访问外部网络。
+### 3) 访问与管理
 
-### 第 3 步: 访问和管理
+- **访问 Web UI**: `http://127.0.0.1:8000`
+- **查看日志**: `docker compose logs -f app`
+- **停止服务**: `docker compose down`
+账号状态默认保存在容器内 `/app/state`，如需持久化可在 compose 中添加挂载 `./state:/app/state`。
 
-- **访问 Web UI**: 在浏览器中打开 `http://127.0.0.1:8000`。
-- **查看实时日志**: `docker-compose logs -f`
-- **停止容器**: `docker-compose stop`
-- **启动已停止的容器**: `docker-compose start`
-- **停止并移除容器**: `docker-compose down`
+### 4) 更新镜像
+
+```bash
+docker compose pull
+docker compose up -d
+```
 
 ## Web UI 功能一览
 
@@ -242,7 +217,7 @@ WEB_PASSWORD=admin123
 
 以及感谢 [LinuxDo](https://linux.do/) 社区。
 
-以及感谢 ClaudeCode/Gemini 等模型/工具，解放双手 体验Vibe Coding的快乐。
+以及感谢 ClaudeCode/Gemini/Codex 等模型工具，解放双手 体验Vibe Coding的快乐。
 
 </details>
 
