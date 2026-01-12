@@ -347,7 +347,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 log_time("步骤 0 - 模拟真实用户访问首页...")
                 await page.goto("https://www.goofish.com/", wait_until="domcontentloaded", timeout=30000)
                 log_time("[反爬] 在首页停留，模拟浏览...")
-                await random_sleep(3, 6)
+                await random_sleep(1, 2)
 
                 # 模拟随机滚动（移动设备的触摸滚动）
                 await page.evaluate("window.scrollBy(0, Math.random() * 500 + 200)")
@@ -370,7 +370,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                 # 模拟真实用户行为：页面加载后的初始停留和浏览
                 log_time("[反爬] 模拟用户查看页面...")
-                await random_sleep(5, 10)
+                await random_sleep(1, 3)
 
                 # --- 新增：检查是否存在验证弹窗 ---
                 baxia_dialog = page.locator("div.baxia-dialog-mask")
@@ -420,11 +420,11 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 if new_publish_option:
                     try:
                         await page.click('text=新发布')
-                        await random_sleep(2, 4) # 原来是 (1.5, 2.5)
+                        await random_sleep(1, 2) # 原来是 (1.5, 2.5)
                         async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                             await page.click(f"text={new_publish_option}")
                             # --- 修改: 增加排序后的等待时间 ---
-                            await random_sleep(4, 7) # 原来是 (3, 5)
+                            await random_sleep(2, 4) # 原来是 (3, 5)
                         final_response = await response_info.value
                     except PlaywrightTimeoutError:
                         log_time(f"新发布筛选 '{new_publish_option}' 请求超时，继续执行。")
@@ -435,14 +435,14 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                         await page.click('text=个人闲置')
                         # --- 修改: 将固定等待改为随机等待，并加长 ---
-                        await random_sleep(4, 6) # 原来是 asyncio.sleep(5)
+                        await random_sleep(2, 4) # 原来是 asyncio.sleep(5)
                     final_response = await response_info.value
 
                 if free_shipping:
                     try:
                         async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                             await page.click('text=包邮')
-                            await random_sleep(3, 5)
+                            await random_sleep(2, 4)
                         final_response = await response_info.value
                     except PlaywrightTimeoutError:
                         log_time("包邮筛选请求超时，继续执行。")
@@ -454,7 +454,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         area_trigger = page.get_by_text("区域", exact=True)
                         if await area_trigger.count():
                             await area_trigger.first.click()
-                            await random_sleep(1.5, 3)
+                            await random_sleep(1.5, 2)
                             popover_candidates = page.locator("div.ant-popover")
                             popover = popover_candidates.filter(has=page.locator(".areaWrap--FaZHsn8E, [class*='areaWrap']")).last
                             if not await popover.count():
@@ -480,7 +480,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 option = column_locator.locator(".provItem--QAdOx8nD", has_text=text_value).first
                                 if await option.count():
                                     await option.click()
-                                    await random_sleep(1.5, 3)
+                                    await random_sleep(1.5, 2)
                                     try:
                                         await option.wait_for(state="attached", timeout=1500)
                                         await option.wait_for(state="visible", timeout=1500)
@@ -504,7 +504,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 try:
                                     async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                                         await search_btn.click()
-                                        await random_sleep(4, 6)
+                                        await random_sleep(2, 3)
                                     final_response = await response_info.value
                                 except PlaywrightTimeoutError:
                                     log_time("区域筛选提交超时，继续执行。")
@@ -532,7 +532,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                             await page.keyboard.press('Tab')
                             # --- 修改: 增加确认价格后的等待时间 ---
-                            await random_sleep(4, 7) # 原来是 asyncio.sleep(5)
+                            await random_sleep(2, 4) # 原来是 asyncio.sleep(5)
                         final_response = await response_info.value
                     else:
                         print("LOG: 警告 - 未找到价格输入容器。")
@@ -555,7 +555,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                                 await next_btn.click()
                                 # --- 修改: 增加翻页后的等待时间 ---
-                                await random_sleep(5, 8) # 原来是 (1.5, 3.5)
+                                await random_sleep(2, 5) # 原来是 (1.5, 3.5)
                             current_response = await response_info.value
                         except PlaywrightTimeoutError:
                             log_time(f"翻页到第 {page_num} 页超时，停止翻页。")
@@ -583,7 +583,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                         log_time(f"[页内进度 {i}/{total_items_on_page}] 发现新商品，获取详情: {item_data['商品标题'][:30]}...")
                         # --- 修改: 访问详情页前的等待时间，模拟用户在列表页上看了一会儿 ---
-                        await random_sleep(3, 6) # 原来是 (2, 4)
+                        await random_sleep(2, 4) # 原来是 (2, 4)
 
                         detail_page = await context.new_page()
                         try:
