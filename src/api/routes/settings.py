@@ -7,18 +7,14 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 from src.infrastructure.config.env_manager import env_manager
-import importlib
-from src.infrastructure.config.settings import AISettings, notification_settings, scraper_settings
+from src.infrastructure.config.settings import AISettings, notification_settings, scraper_settings, reload_settings
 
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 def _reload_env() -> None:
     load_dotenv(dotenv_path=env_manager.env_file, override=True)
-    settings_module = importlib.import_module("src.infrastructure.config.settings")
-    settings_module.ai_settings = settings_module.AISettings()
-    settings_module.notification_settings = settings_module.NotificationSettings()
-    settings_module.scraper_settings = settings_module.ScraperSettings()
+    reload_settings()
 
 def _env_bool(key: str, default: bool = False) -> bool:
     value = env_manager.get_value(key)
