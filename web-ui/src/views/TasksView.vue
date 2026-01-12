@@ -228,7 +228,7 @@ watch(
         <DialogTrigger as-child>
           <Button>+ 创建新任务</Button>
         </DialogTrigger>
-        <DialogContent class="sm:max-w-[600px]">
+        <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>创建新监控任务 (AI驱动)</DialogTitle>
             <DialogDescription>
@@ -252,7 +252,7 @@ watch(
 
     <!-- Edit Task Dialog -->
     <Dialog v-model:open="isEditDialogOpen">
-      <DialogContent class="sm:max-w-[600px]">
+      <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>编辑任务: {{ selectedTask?.task_name }}</DialogTitle>
         </DialogHeader>
