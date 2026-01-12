@@ -14,6 +14,9 @@ export interface Task {
   ai_prompt_base_file: string;
   ai_prompt_criteria_file: string;
   account_state_file?: string | null;
+  free_shipping?: boolean;
+  new_publish_option?: string | null;
+  region?: string | null;
   is_running: boolean;
 }
 
@@ -31,4 +34,7 @@ export interface TaskGenerateRequest {
   max_pages?: number;
   cron?: string | null;
   account_state_file?: string | null;
+  free_shipping?: boolean;
+  new_publish_option?: string | null;
+  region?: string | null;
 }

@@ -91,10 +91,26 @@ const emit = defineEmits<{
               {{ task.min_price || '不限' }} - {{ task.max_price || '不限' }}
             </TableCell>
             <TableCell>
-              <Badge v-if="task.personal_only" variant="secondary">
-                个人闲置
-              </Badge>
-              <span v-else class="text-sm text-gray-500">不限</span>
+              <div class="flex flex-wrap gap-2 items-center">
+                <Badge v-if="task.personal_only" variant="secondary">
+                  个人闲置
+                </Badge>
+                <Badge v-else variant="outline" class="text-gray-500">
+                  个人/商家不限
+                </Badge>
+                <Badge v-if="task.free_shipping" variant="secondary">
+                  包邮
+                </Badge>
+                <Badge v-else variant="outline" class="text-gray-500">
+                  运费不限
+                </Badge>
+                <Badge variant="outline">
+                  新发布：{{ task.new_publish_option || '不筛选' }}
+                </Badge>
+                <span class="text-xs text-gray-500 truncate max-w-[180px]" :title="task.region || '—'">
+                  区域：{{ task.region || '—' }}
+                </span>
+              </div>
             </TableCell>
             <TableCell class="text-sm text-gray-500">
               {{ task.max_pages || 3 }}
