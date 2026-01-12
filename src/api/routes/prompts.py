@@ -3,9 +3,8 @@ Prompt 管理路由
 """
 import os
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from src.api.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
@@ -17,7 +16,7 @@ class PromptUpdate(BaseModel):
 
 
 @router.get("")
-async def list_prompts(username: str = Depends(get_current_user)):
+async def list_prompts():
     """列出所有 prompt 文件"""
     prompts_dir = "prompts"
     if not os.path.isdir(prompts_dir):
@@ -26,7 +25,7 @@ async def list_prompts(username: str = Depends(get_current_user)):
 
 
 @router.get("/{filename}")
-async def get_prompt(filename: str, username: str = Depends(get_current_user)):
+async def get_prompt(filename: str):
     """获取 prompt 文件内容"""
     if "/" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="无效的文件名")
@@ -44,7 +43,6 @@ async def get_prompt(filename: str, username: str = Depends(get_current_user)):
 async def update_prompt(
     filename: str,
     prompt_update: PromptUpdate,
-    username: str = Depends(get_current_user)
 ):
     """更新 prompt 文件内容"""
     if "/" in filename or ".." in filename:

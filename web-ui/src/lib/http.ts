@@ -5,14 +5,9 @@ interface FetchOptions extends RequestInit {
 }
 
 export async function http(url: string, options: FetchOptions = {}) {
-  const { credentials, logout } = useAuth()
+  const { logout } = useAuth()
   
   const headers = new Headers(options.headers)
-  
-  // Add Basic Auth header if credentials exist
-  if (credentials.value) {
-    headers.set('Authorization', `Basic ${credentials.value}`)
-  }
 
   // Handle Query Params
   let fullUrl = url

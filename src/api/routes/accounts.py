@@ -5,10 +5,9 @@ import json
 import os
 import re
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
-from src.api.dependencies import get_current_user
 from src.infrastructure.config.env_manager import env_manager
 
 
@@ -63,7 +62,7 @@ def _validate_json(content: str) -> None:
 
 
 @router.get("", response_model=List[dict])
-async def list_accounts(username: str = Depends(get_current_user)):
+async def list_accounts():
     state_dir = _state_dir()
     if not os.path.isdir(state_dir):
         return []
@@ -79,7 +78,7 @@ async def list_accounts(username: str = Depends(get_current_user)):
 
 
 @router.get("/{name}", response_model=dict)
-async def get_account(name: str, username: str = Depends(get_current_user)):
+async def get_account(name: str):
     account_name = _validate_name(name)
     path = _account_path(account_name)
     if not os.path.exists(path):
@@ -90,7 +89,7 @@ async def get_account(name: str, username: str = Depends(get_current_user)):
 
 
 @router.post("", response_model=dict)
-async def create_account(data: AccountCreate, username: str = Depends(get_current_user)):
+async def create_account(data: AccountCreate):
     account_name = _validate_name(data.name)
     _validate_json(data.content)
     state_dir = _state_dir()
@@ -104,7 +103,7 @@ async def create_account(data: AccountCreate, username: str = Depends(get_curren
 
 
 @router.put("/{name}", response_model=dict)
-async def update_account(name: str, data: AccountUpdate, username: str = Depends(get_current_user)):
+async def update_account(name: str, data: AccountUpdate):
     account_name = _validate_name(name)
     _validate_json(data.content)
     state_dir = _state_dir()
@@ -118,7 +117,7 @@ async def update_account(name: str, data: AccountUpdate, username: str = Depends
 
 
 @router.delete("/{name}", response_model=dict)
-async def delete_account(name: str, username: str = Depends(get_current_user)):
+async def delete_account(name: str):
     account_name = _validate_name(name)
     path = _account_path(account_name)
     if not os.path.exists(path):

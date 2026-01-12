@@ -2,15 +2,19 @@
 设置管理路由
 """
 import os
-from fastapi import APIRouter, Depends
+from dotenv import load_dotenv
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
-from src.api.dependencies import get_current_user
 from src.infrastructure.config.env_manager import env_manager
-from src.infrastructure.config.settings import ai_settings, notification_settings, scraper_settings
+from src.infrastructure.config.settings import AISettings, notification_settings, scraper_settings, reload_settings
 
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+def _reload_env() -> None:
+    load_dotenv(dotenv_path=env_manager.env_file, override=True)
+    reload_settings()
 
 def _env_bool(key: str, default: bool = False) -> bool:
     value = env_manager.get_value(key)
@@ -59,7 +63,7 @@ class RotationSettingsModel(BaseModel):
 
 
 @router.get("/notifications")
-async def get_notification_settings(username: str = Depends(get_current_user)):
+async def get_notification_settings():
     """获取通知设置"""
     return {
         "NTFY_TOPIC_URL": env_manager.get_value("NTFY_TOPIC_URL", ""),
@@ -72,17 +76,17 @@ async def get_notification_settings(username: str = Depends(get_current_user)):
 @router.put("/notifications")
 async def update_notification_settings(
     settings: NotificationSettingsModel,
-    username: str = Depends(get_current_user)
 ):
     """更新通知设置"""
     updates = settings.dict(exclude_none=True)
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "通知设置已成功更新"}
     return {"message": "更新通知设置失败"}
 
 @router.get("/rotation")
-async def get_rotation_settings(username: str = Depends(get_current_user)):
+async def get_rotation_settings():
     return {
         "PROXY_ROTATION_ENABLED": _env_bool("PROXY_ROTATION_ENABLED", False),
         "PROXY_ROTATION_MODE": env_manager.get_value("PROXY_ROTATION_MODE", "per_task"),
@@ -95,7 +99,6 @@ async def get_rotation_settings(username: str = Depends(get_current_user)):
 @router.put("/rotation")
 async def update_rotation_settings(
     settings: RotationSettingsModel,
-    username: str = Depends(get_current_user)
 ):
     updates = {}
     payload = settings.dict(exclude_none=True)
@@ -106,12 +109,13 @@ async def update_rotation_settings(
             updates[key] = str(value)
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "轮换设置已成功更新"}
     return {"message": "更新轮换设置失败"}
 
 
 @router.get("/status")
-async def get_system_status(username: str = Depends(get_current_user)):
+async def get_system_status():
     """获取系统状态"""
     state_file = "xianyu_state.json"
     login_state_exists = os.path.exists(state_file)
@@ -125,6 +129,7 @@ async def get_system_status(username: str = Depends(get_current_user)):
     openai_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
     ntfy_topic_url = env_manager.get_value("NTFY_TOPIC_URL", "")
 
+    ai_settings = AISettings()
     return {
         "ai_configured": ai_settings.is_configured(),
         "notification_configured": notification_settings.has_any_notification_enabled(),
@@ -153,7 +158,7 @@ class AISettingsModel(BaseModel):
 
 
 @router.get("/ai")
-async def get_ai_settings(username: str = Depends(get_current_user)):
+async def get_ai_settings():
     """获取AI设置"""
     return {
         "OPENAI_BASE_URL": env_manager.get_value("OPENAI_BASE_URL", ""),
@@ -165,7 +170,6 @@ async def get_ai_settings(username: str = Depends(get_current_user)):
 @router.put("/ai")
 async def update_ai_settings(
     settings: AISettingsModel,
-    username: str = Depends(get_current_user)
 ):
     """更新AI设置"""
     updates = {}
@@ -180,6 +184,7 @@ async def update_ai_settings(
 
     success = env_manager.update_values(updates)
     if success:
+        _reload_env()
         return {"message": "AI设置已成功更新"}
     return {"message": "更新AI设置失败"}
 
@@ -187,7 +192,6 @@ async def update_ai_settings(
 @router.post("/ai/test")
 async def test_ai_settings(
     settings: dict,
-    username: str = Depends(get_current_user)
 ):
     """测试AI模型设置是否有效"""
     try:

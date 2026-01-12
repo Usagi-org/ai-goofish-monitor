@@ -10,6 +10,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from src.infrastructure.config.settings import AISettings
+from src.infrastructure.config.env_manager import env_manager
 
 
 class AIClient:
@@ -21,7 +22,7 @@ class AIClient:
         self.refresh()
 
     def _load_settings(self) -> None:
-        load_dotenv(override=True)
+        load_dotenv(dotenv_path=env_manager.env_file, override=True)
         self.settings = AISettings()
 
     def refresh(self) -> None:

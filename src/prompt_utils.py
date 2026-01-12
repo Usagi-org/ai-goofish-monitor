@@ -61,15 +61,15 @@ async def generate_criteria(user_description: str, reference_file_path: str) -> 
 
     print("正在调用AI生成新的分析标准，请稍候...")
     try:
-        from src.config import get_ai_request_params
-        
-        response = await ai_client.client.chat.completions.create(
-            **get_ai_request_params(
-                model=ai_client.settings.model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.5 # Lower temperature for more predictable structure
-            )
-        )
+        request_params = {
+            "model": ai_client.settings.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.5,
+        }
+        if ai_client.settings.enable_thinking:
+            request_params["extra_body"] = {"enable_thinking": False}
+
+        response = await ai_client.client.chat.completions.create(**request_params)
         # 兼容不同API响应格式，检查response是否为字符串
         if hasattr(response, 'choices'):
             generated_text = response.choices[0].message.content

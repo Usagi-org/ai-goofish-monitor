@@ -9,8 +9,8 @@ class WebSocketService {
 
   constructor() {
     // 延迟连接，等待认证完成
-    // 只有在有认证信息时才尝试连接
-    if (localStorage.getItem('auth_credentials')) {
+    // 只有在已登录时才尝试连接
+    if (localStorage.getItem('auth_logged_in') === 'true') {
       this.connect();
     }
   }
@@ -37,11 +37,7 @@ class WebSocketService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host; // This includes port if present
 
-    // Get auth credentials from localStorage
-    const credentials = localStorage.getItem('auth_credentials');
-    const url = credentials
-      ? `${protocol}//${host}/ws?token=${credentials}`
-      : `${protocol}//${host}/ws`;
+    const url = `${protocol}//${host}/ws`;
 
     console.log(`Connecting to WebSocket at ${url}`);
     this.ws = new WebSocket(url);
@@ -70,8 +66,8 @@ class WebSocketService {
         this.isConnected = false;
         this.emit('disconnected', { isConnected: false });
       }
-      // 只有在 shouldConnect 为 true 或有认证信息时才重连
-      if (this.shouldConnect || localStorage.getItem('auth_credentials')) {
+      // 只有在 shouldConnect 为 true 或已登录时才重连
+      if (this.shouldConnect || localStorage.getItem('auth_logged_in') === 'true') {
         setTimeout(() => this.connect(), this.reconnectInterval);
       }
     };

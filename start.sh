@@ -110,13 +110,6 @@ if [ "$has_browser" = false ]; then
     MISSING_ITEMS+=("浏览器(Chrome 或 Edge)")
 fi
 
-if [ ! -f ".env" ]; then
-    MISSING_ITEMS+=(".env")
-fi
-
-if [ ! -f "config.json" ]; then
-    MISSING_ITEMS+=("config.json")
-fi
 
 print_solution_macos() {
     cat <<'EOF'
@@ -132,7 +125,7 @@ macOS 解决办法:
    brew install --cask google-chrome
    # 或
    brew install --cask microsoft-edge
-5) 配置文件:
+5) 配置文件（可选）:
    cp .env.example .env
    cp config.json.example config.json
 EOF
@@ -155,7 +148,7 @@ Linux (Debian/Ubuntu) 解决办法:
    sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
    # 或安装 Edge:
    sudo apt-get install -y microsoft-edge-stable
-5) 配置文件:
+5) 配置文件（可选）:
    cp .env.example .env
    cp config.json.example config.json
 EOF
@@ -176,7 +169,7 @@ Linux (RHEL/CentOS/Fedora) 解决办法:
    sudo dnf install -y chromium
    # 或安装 Edge:
    sudo dnf install -y microsoft-edge-stable
-5) 配置文件:
+5) 配置文件（可选）:
    cp .env.example .env
    cp config.json.example config.json
 EOF
@@ -238,7 +231,7 @@ Windows (PowerShell) 解决办法:
    winget install Google.Chrome
    # 或
    winget install Microsoft.Edge
-4) 配置文件:
+4) 配置文件（可选）:
    Copy-Item .env.example .env
    Copy-Item config.json.example config.json
 EOF
@@ -253,7 +246,7 @@ print_solution_generic() {
    python3 -m pip install playwright
    python3 -m playwright install chromium
 4) 安装浏览器 Chrome 或 Edge
-5) 配置文件:
+5) 配置文件（可选）:
    cp .env.example .env
    cp config.json.example config.json
 EOF

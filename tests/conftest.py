@@ -79,12 +79,8 @@ def api_context(tmp_path):
     def override_get_process_service():
         return process_service
 
-    def override_get_current_user():
-        return "test-user"
-
     app.dependency_overrides[deps.get_task_service] = override_get_task_service
     app.dependency_overrides[deps.get_process_service] = override_get_process_service
-    app.dependency_overrides[deps.get_current_user] = override_get_current_user
 
     return {
         "app": app,

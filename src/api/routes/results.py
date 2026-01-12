@@ -1,21 +1,20 @@
 """
 结果文件管理路由
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from typing import List
 import os
 import glob
 import json
 import aiofiles
-from src.api.dependencies import get_current_user
 
 
 router = APIRouter(prefix="/api/results", tags=["results"])
 
 
 @router.get("/files")
-async def get_result_files(username: str = Depends(get_current_user)):
+async def get_result_files():
     """获取所有结果文件列表"""
     # 主要从 jsonl 目录获取文件
     jsonl_dir = "jsonl"
@@ -29,7 +28,7 @@ async def get_result_files(username: str = Depends(get_current_user)):
 
 
 @router.get("/files/{filename:path}")
-async def download_result_file(filename: str, username: str = Depends(get_current_user)):
+async def download_result_file(filename: str):
     """下载指定的结果文件"""
     # 安全检查：防止路径遍历攻击
     if ".." in filename or filename.startswith("/"):
@@ -49,7 +48,7 @@ async def download_result_file(filename: str, username: str = Depends(get_curren
 
 
 @router.delete("/files/{filename:path}")
-async def delete_result_file(filename: str, username: str = Depends(get_current_user)):
+async def delete_result_file(filename: str):
     """删除指定的结果文件"""
     # 安全检查：防止路径遍历攻击
     if ".." in filename or filename.startswith("/"):
@@ -80,7 +79,6 @@ async def get_result_file_content(
     recommended_only: bool = Query(False),
     sort_by: str = Query("crawl_time"),
     sort_order: str = Query("desc"),
-    username: str = Depends(get_current_user)
 ):
     """读取指定的 .jsonl 文件内容，支持分页、筛选和排序"""
     # 安全检查
