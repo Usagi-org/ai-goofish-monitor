@@ -203,6 +203,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     min_price = task_config.get('min_price')
     max_price = task_config.get('max_price')
     ai_prompt_text = task_config.get('ai_prompt_text', '')
+    free_shipping = task_config.get('free_shipping', False)
+    raw_new_publish = task_config.get('new_publish_option') or ''
+    new_publish_option = raw_new_publish.strip()
+    if new_publish_option == '__none__':
+        new_publish_option = ''
+    region_filter = (task_config.get('region') or '').strip()
 
     processed_links = set()
     output_filename = os.path.join("jsonl", f"{keyword.replace(' ', '_')}_full_data.jsonl")
@@ -341,7 +347,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 log_time("步骤 0 - 模拟真实用户访问首页...")
                 await page.goto("https://www.goofish.com/", wait_until="domcontentloaded", timeout=30000)
                 log_time("[反爬] 在首页停留，模拟浏览...")
-                await random_sleep(3, 6)
+                await random_sleep(1, 2)
 
                 # 模拟随机滚动（移动设备的触摸滚动）
                 await page.evaluate("window.scrollBy(0, Math.random() * 500 + 200)")
@@ -364,7 +370,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                 # 模拟真实用户行为：页面加载后的初始停留和浏览
                 log_time("[反爬] 模拟用户查看页面...")
-                await random_sleep(5, 10)
+                await random_sleep(1, 3)
 
                 # --- 新增：检查是否存在验证弹窗 ---
                 baxia_dialog = page.locator("div.baxia-dialog-mask")
@@ -411,20 +417,105 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                 final_response = None
                 log_time("步骤 2 - 应用筛选条件...")
-                await page.click('text=新发布')
-                await random_sleep(2, 4) # 原来是 (1.5, 2.5)
-                async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
-                    await page.click('text=最新')
-                    # --- 修改: 增加排序后的等待时间 ---
-                    await random_sleep(4, 7) # 原来是 (3, 5)
-                final_response = await response_info.value
+                if new_publish_option:
+                    try:
+                        await page.click('text=新发布')
+                        await random_sleep(1, 2) # 原来是 (1.5, 2.5)
+                        async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
+                            await page.click(f"text={new_publish_option}")
+                            # --- 修改: 增加排序后的等待时间 ---
+                            await random_sleep(2, 4) # 原来是 (3, 5)
+                        final_response = await response_info.value
+                    except PlaywrightTimeoutError:
+                        log_time(f"新发布筛选 '{new_publish_option}' 请求超时，继续执行。")
+                    except Exception as e:
+                        print(f"LOG: 应用新发布筛选失败: {e}")
 
                 if personal_only:
                     async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                         await page.click('text=个人闲置')
                         # --- 修改: 将固定等待改为随机等待，并加长 ---
-                        await random_sleep(4, 6) # 原来是 asyncio.sleep(5)
+                        await random_sleep(2, 4) # 原来是 asyncio.sleep(5)
                     final_response = await response_info.value
+
+                if free_shipping:
+                    try:
+                        async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
+                            await page.click('text=包邮')
+                            await random_sleep(2, 4)
+                        final_response = await response_info.value
+                    except PlaywrightTimeoutError:
+                        log_time("包邮筛选请求超时，继续执行。")
+                    except Exception as e:
+                        print(f"LOG: 应用包邮筛选失败: {e}")
+
+                if region_filter:
+                    try:
+                        area_trigger = page.get_by_text("区域", exact=True)
+                        if await area_trigger.count():
+                            await area_trigger.first.click()
+                            await random_sleep(1.5, 2)
+                            popover_candidates = page.locator("div.ant-popover")
+                            popover = popover_candidates.filter(has=page.locator(".areaWrap--FaZHsn8E, [class*='areaWrap']")).last
+                            if not await popover.count():
+                                popover = popover_candidates.filter(has=page.get_by_text("重新定位")).last
+                            if not await popover.count():
+                                popover = popover_candidates.filter(has=page.get_by_text("查看")).last
+                            if not await popover.count():
+                                print("LOG: 未找到区域弹窗，跳过区域筛选。")
+                                raise PlaywrightTimeoutError("region-popover-not-found")
+                            await popover.wait_for(state="visible", timeout=5000)
+
+                            # 列表容器：第一层 children 即省/市/区三列，不再强依赖具体类名，提升鲁棒性
+                            area_wrap = popover.locator(".areaWrap--FaZHsn8E, [class*='areaWrap']").first
+                            await area_wrap.wait_for(state="visible", timeout=3000)
+                            columns = area_wrap.locator(":scope > div")
+                            col_prov = columns.nth(0)
+                            col_city = columns.nth(1)
+                            col_dist = columns.nth(2)
+
+                            region_parts = [p.strip() for p in region_filter.split('/') if p.strip()]
+
+                            async def _click_in_column(column_locator, text_value: str, desc: str) -> None:
+                                option = column_locator.locator(".provItem--QAdOx8nD", has_text=text_value).first
+                                if await option.count():
+                                    await option.click()
+                                    await random_sleep(1.5, 2)
+                                    try:
+                                        await option.wait_for(state="attached", timeout=1500)
+                                        await option.wait_for(state="visible", timeout=1500)
+                                    except PlaywrightTimeoutError:
+                                        pass
+                                else:
+                                    print(f"LOG: 未找到{desc} '{text_value}'，跳过。")
+
+                            if len(region_parts) >= 1:
+                                await _click_in_column(col_prov, region_parts[0], "省份")
+                                await random_sleep(1, 2)
+                            if len(region_parts) >= 2:
+                                await _click_in_column(col_city, region_parts[1], "城市")
+                                await random_sleep(1, 2)
+                            if len(region_parts) >= 3:
+                                await _click_in_column(col_dist, region_parts[2], "区/县")
+                                await random_sleep(1, 2)
+
+                            search_btn = popover.locator("div.searchBtn--Ic6RKcAb").first
+                            if await search_btn.count():
+                                try:
+                                    async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
+                                        await search_btn.click()
+                                        await random_sleep(2, 3)
+                                    final_response = await response_info.value
+                                except PlaywrightTimeoutError:
+                                    log_time("区域筛选提交超时，继续执行。")
+                            else:
+                                print("LOG: 未找到区域弹窗的“查看XX件宝贝”按钮，跳过提交。")
+                        else:
+                            print("LOG: 未找到区域筛选触发器。")
+                    except PlaywrightTimeoutError:
+                        log_time(f"区域筛选 '{region_filter}' 请求超时，继续执行。")
+                    except Exception as e:
+                        print(f"LOG: 应用区域筛选 '{region_filter}' 失败: {e}")
 
                 if min_price or max_price:
                     price_container = page.locator('div[class*="search-price-input-container"]').first
@@ -441,7 +532,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                             await page.keyboard.press('Tab')
                             # --- 修改: 增加确认价格后的等待时间 ---
-                            await random_sleep(4, 7) # 原来是 asyncio.sleep(5)
+                            await random_sleep(2, 4) # 原来是 asyncio.sleep(5)
                         final_response = await response_info.value
                     else:
                         print("LOG: 警告 - 未找到价格输入容器。")
@@ -464,7 +555,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             async with page.expect_response(lambda r: API_URL_PATTERN in r.url, timeout=20000) as response_info:
                                 await next_btn.click()
                                 # --- 修改: 增加翻页后的等待时间 ---
-                                await random_sleep(5, 8) # 原来是 (1.5, 3.5)
+                                await random_sleep(2, 5) # 原来是 (1.5, 3.5)
                             current_response = await response_info.value
                         except PlaywrightTimeoutError:
                             log_time(f"翻页到第 {page_num} 页超时，停止翻页。")
@@ -492,7 +583,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                         log_time(f"[页内进度 {i}/{total_items_on_page}] 发现新商品，获取详情: {item_data['商品标题'][:30]}...")
                         # --- 修改: 访问详情页前的等待时间，模拟用户在列表页上看了一会儿 ---
-                        await random_sleep(3, 6) # 原来是 (2, 4)
+                        await random_sleep(2, 4) # 原来是 (2, 4)
 
                         detail_page = await context.new_page()
                         try:

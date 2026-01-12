@@ -469,17 +469,14 @@ watch(selectedPrompt, async (value) => {
                 <!-- Login Guide -->
                 <div v-if="!systemStatus.login_state_file.exists" class="mt-4 bg-amber-50 border border-amber-200 rounded-md p-4 text-sm text-amber-800">
                     <h4 class="font-bold flex items-center gap-2 mb-2">
-                        ⚠️ 检测到未登录，请按以下步骤操作：
+                        ⚠️ 检测到未登录，请按以下步骤使用 Chrome 扩展提取 Cookie 登录：
                     </h4>
                     <ol class="list-decimal list-inside space-y-1 ml-1">
-                        <li>在服务器/本机终端执行命令进入容器：
-                            <code class="bg-black/10 px-1 rounded select-all">docker exec -it ai-goofish-monitor-app bash</code>
-                        </li>
-                        <li>在容器内执行登录脚本：
-                            <code class="bg-black/10 px-1 rounded select-all">python login.py</code>
-                        </li>
-                        <li>终端会显示一个二维码，使用闲鱼APP扫码确认登录。</li>
-                        <li>登录成功后，点击上方的 <span class="font-semibold">“刷新状态”</span> 按钮。</li>
+                        <li>安装 <a class="text-blue-600 hover:underline" href="https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa" target="_blank" rel="noopener noreferrer">闲鱼登录状态提取扩展</a></li>
+                        <li>打开并登录 <a class="text-blue-600 hover:underline" href="https://www.goofish.com" target="_blank" rel="noopener noreferrer">闲鱼官网</a></li>
+                        <li>点击扩展图标，选择“提取登录状态”，再点击“复制到剪贴板”</li>
+                        <li>将内容粘贴到登录凭证输入框并保存</li>
+                        <li>保存成功后点击上方的 <span class="font-semibold">“刷新状态”</span> 按钮</li>
                     </ol>
                 </div>
               </div>

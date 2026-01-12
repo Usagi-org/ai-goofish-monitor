@@ -12,6 +12,9 @@
     "ai_prompt_base_file": "prompts/base_prompt.txt",
     "ai_prompt_criteria_file": "prompts/苹果watch_s10_criteria.txt",
     "account_state_file": "state/acc1.json",
+    "free_shipping": true,
+    "new_publish_option": "14天内",
+    "region": "江苏/南京/全南京",
     "is_running": false
   }
 ]

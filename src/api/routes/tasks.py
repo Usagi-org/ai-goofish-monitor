@@ -103,6 +103,9 @@ async def generate_task(
             ai_prompt_base_file="prompts/base_prompt.txt",
             ai_prompt_criteria_file=output_filename,
             account_state_file=req.account_state_file,
+            free_shipping=req.free_shipping,
+            new_publish_option=req.new_publish_option,
+            region=req.region,
         )
 
         # 5. 使用 TaskService 创建任务

@@ -30,6 +30,9 @@ watchEffect(() => {
     form.value = {
       ...props.initialData,
       account_state_file: props.initialData.account_state_file || '',
+      free_shipping: props.initialData.free_shipping ?? true,
+      new_publish_option: props.initialData.new_publish_option || '__none__',
+      region: props.initialData.region || '江苏/南京/全南京',
     }
   } else {
     form.value = {
@@ -42,6 +45,9 @@ watchEffect(() => {
       max_price: undefined,
       cron: '',
       account_state_file: props.defaultAccount || '',
+      free_shipping: true,
+      new_publish_option: '__none__',
+      region: '江苏/南京/全南京',
     }
   }
 })
@@ -61,6 +67,18 @@ function handleSubmit() {
   const { id, is_running, ...submitData } = form.value as any
   if (submitData.account_state_file === '') {
     submitData.account_state_file = null
+  }
+  if (typeof submitData.region === 'string') {
+    const normalized = submitData.region
+      .trim()
+      .split('/')
+      .map((part: string) => part.trim().replace(/(省|市)$/u, ''))
+      .filter((part: string) => part.length > 0)
+      .join('/')
+    submitData.region = normalized
+  }
+  if (submitData.new_publish_option === '__none__') {
+    submitData.new_publish_option = ''
   }
   emit('submit', submitData)
 }
@@ -122,6 +140,36 @@ function handleSubmit() {
       <div class="grid grid-cols-4 items-center gap-4">
         <Label for="personal-only" class="text-right">仅个人卖家</Label>
         <Switch id="personal-only" v-model="form.personal_only" />
+      </div>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">是否包邮</Label>
+        <Switch v-model="form.free_shipping" />
+      </div>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">新发布范围</Label>
+        <div class="col-span-3">
+          <Select v-model="form.new_publish_option as any">
+            <SelectTrigger>
+              <SelectValue placeholder="不筛选（默认）" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">不筛选（默认）</SelectItem>
+              <SelectItem value="最新">最新</SelectItem>
+              <SelectItem value="1天内">1天内</SelectItem>
+              <SelectItem value="3天内">3天内</SelectItem>
+              <SelectItem value="7天内">7天内</SelectItem>
+              <SelectItem value="14天内">14天内</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">区域筛选</Label>
+        <Input
+          v-model="form.region as any"
+          class="col-span-3"
+          placeholder="例如： 浙江/杭州/滨江区 或 浙江/杭州/全杭州 或 上海/徐汇区"
+        />
       </div>
     </div>
   </form>

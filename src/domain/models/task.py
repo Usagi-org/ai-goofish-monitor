@@ -29,6 +29,9 @@ class Task(BaseModel):
     ai_prompt_base_file: str
     ai_prompt_criteria_file: str
     account_state_file: Optional[str] = None
+    free_shipping: bool = True
+    new_publish_option: Optional[str] = None
+    region: Optional[str] = "江苏/南京/全南京"
     is_running: bool = False
 
     class Config:
@@ -62,6 +65,9 @@ class TaskCreate(BaseModel):
     ai_prompt_base_file: str = "prompts/base_prompt.txt"
     ai_prompt_criteria_file: str
     account_state_file: Optional[str] = None
+    free_shipping: bool = True
+    new_publish_option: Optional[str] = None
+    region: Optional[str] = "江苏/南京/全南京"
 
 
 class TaskUpdate(BaseModel):
@@ -78,6 +84,9 @@ class TaskUpdate(BaseModel):
     ai_prompt_base_file: Optional[str] = None
     ai_prompt_criteria_file: Optional[str] = None
     account_state_file: Optional[str] = None
+    free_shipping: Optional[bool] = None
+    new_publish_option: Optional[str] = None
+    region: Optional[str] = None
     is_running: Optional[bool] = None
 
 
@@ -92,6 +101,9 @@ class TaskGenerateRequest(BaseModel):
     max_pages: int = 3
     cron: Optional[str] = None
     account_state_file: Optional[str] = None
+    free_shipping: bool = True
+    new_publish_option: Optional[str] = None
+    region: Optional[str] = "江苏/南京/全南京"
 
     @validator('min_price', 'max_price', pre=True)
     def convert_price_to_str(cls, v):
@@ -112,6 +124,12 @@ class TaskGenerateRequest(BaseModel):
 
     @validator('account_state_file', pre=True)
     def empty_account_to_none(cls, v):
+        if v == "" or v == "null" or v == "undefined":
+            return None
+        return v
+
+    @validator('new_publish_option', 'region', pre=True)
+    def empty_str_to_none_for_strings(cls, v):
         if v == "" or v == "null" or v == "undefined":
             return None
         return v
