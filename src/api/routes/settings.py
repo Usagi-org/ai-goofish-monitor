@@ -49,10 +49,19 @@ def _normalize_bool_value(value: bool) -> str:
 class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
     NTFY_TOPIC_URL: Optional[str] = None
+    GOTIFY_URL: Optional[str] = None
+    GOTIFY_TOKEN: Optional[str] = None
     BARK_URL: Optional[str] = None
     WX_BOT_URL: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
+    WEBHOOK_URL: Optional[str] = None
+    WEBHOOK_METHOD: Optional[str] = None
+    WEBHOOK_HEADERS: Optional[str] = None
+    WEBHOOK_CONTENT_TYPE: Optional[str] = None
+    WEBHOOK_QUERY_PARAMETERS: Optional[str] = None
+    WEBHOOK_BODY: Optional[str] = None
+    PCURL_TO_MOBILE: Optional[bool] = None
 
 
 class AISettingsModel(BaseModel):
@@ -77,10 +86,19 @@ async def get_notification_settings():
     """获取通知设置"""
     return {
         "NTFY_TOPIC_URL": env_manager.get_value("NTFY_TOPIC_URL", ""),
+        "GOTIFY_URL": env_manager.get_value("GOTIFY_URL", ""),
+        "GOTIFY_TOKEN": env_manager.get_value("GOTIFY_TOKEN", ""),
         "BARK_URL": env_manager.get_value("BARK_URL", ""),
         "WX_BOT_URL": env_manager.get_value("WX_BOT_URL", ""),
         "TELEGRAM_BOT_TOKEN": env_manager.get_value("TELEGRAM_BOT_TOKEN", ""),
-        "TELEGRAM_CHAT_ID": env_manager.get_value("TELEGRAM_CHAT_ID", "")
+        "TELEGRAM_CHAT_ID": env_manager.get_value("TELEGRAM_CHAT_ID", ""),
+        "WEBHOOK_URL": env_manager.get_value("WEBHOOK_URL", ""),
+        "WEBHOOK_METHOD": env_manager.get_value("WEBHOOK_METHOD", "POST"),
+        "WEBHOOK_HEADERS": env_manager.get_value("WEBHOOK_HEADERS", ""),
+        "WEBHOOK_CONTENT_TYPE": env_manager.get_value("WEBHOOK_CONTENT_TYPE", "JSON"),
+        "WEBHOOK_QUERY_PARAMETERS": env_manager.get_value("WEBHOOK_QUERY_PARAMETERS", ""),
+        "WEBHOOK_BODY": env_manager.get_value("WEBHOOK_BODY", ""),
+        "PCURL_TO_MOBILE": _env_bool("PCURL_TO_MOBILE", True),
     }
 
 
@@ -89,7 +107,13 @@ async def update_notification_settings(
     settings: NotificationSettingsModel,
 ):
     """更新通知设置"""
-    updates = settings.dict(exclude_none=True)
+    updates = {}
+    payload = settings.dict(exclude_none=True)
+    for key, value in payload.items():
+        if isinstance(value, bool):
+            updates[key] = _normalize_bool_value(value)
+        else:
+            updates[key] = str(value)
     success = env_manager.update_values(updates)
     if success:
         _reload_env()
