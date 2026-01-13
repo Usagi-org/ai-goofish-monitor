@@ -50,6 +50,7 @@ class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
     NTFY_TOPIC_URL: Optional[str] = None
     BARK_URL: Optional[str] = None
+    WX_BOT_URL: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
 
@@ -77,6 +78,7 @@ async def get_notification_settings():
     return {
         "NTFY_TOPIC_URL": env_manager.get_value("NTFY_TOPIC_URL", ""),
         "BARK_URL": env_manager.get_value("BARK_URL", ""),
+        "WX_BOT_URL": env_manager.get_value("WX_BOT_URL", ""),
         "TELEGRAM_BOT_TOKEN": env_manager.get_value("TELEGRAM_BOT_TOKEN", ""),
         "TELEGRAM_CHAT_ID": env_manager.get_value("TELEGRAM_CHAT_ID", "")
     }
