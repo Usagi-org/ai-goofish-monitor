@@ -116,8 +116,8 @@ const emit = defineEmits<{
     <div class="flex items-center space-x-2">
       <Checkbox
         id="recommended-only"
-        :checked="props.recommendedOnly"
-        @update:checked="(value: boolean) => emit('update:recommendedOnly', !!value)"
+        :model-value="props.recommendedOnly"
+        @update:modelValue="(value) => emit('update:recommendedOnly', value === true)"
       />
       <Label for="recommended-only" class="cursor-pointer">仅看AI推荐</Label>
     </div>
