@@ -5,82 +5,59 @@ document.addEventListener('DOMContentLoaded', function() {
   const stateOutput = document.getElementById('stateOutput');
   const statusDiv = document.getElementById('status');
 
-  // Update status message
+  let latestSnapshot = null;
+
+  function setLoading(isLoading) {
+    extractBtn.disabled = isLoading;
+    extractBtn.textContent = isLoading ? '采集中，请稍候...' : '1.点击获取环境+登录状态';
+  }
+
   function updateStatus(message, isSuccess = false) {
     statusDiv.textContent = message;
     statusDiv.className = 'status ' + (isSuccess ? 'success' : 'error');
     setTimeout(() => {
       statusDiv.textContent = '';
       statusDiv.className = 'status';
-    }, 3000);
+    }, 4000);
   }
 
-  // Map Chrome cookie sameSite values to Playwright compatible values
-  function mapSameSiteValue(chromeSameSite) {
-    // Chrome returns undefined for cookies without SameSite attribute
-    if (chromeSameSite === undefined || chromeSameSite === null) {
-      return "Lax"; // Default value for unspecified cookies
-    }
-    
-    // Map Chrome's cookie sameSite values to Playwright's expected values (with proper capitalization)
-    const sameSiteMap = {
-      "no_restriction": "None",
-      "lax": "Lax",
-      "strict": "Strict",
-      "unspecified": "Lax" // Treat unspecified as Lax (browser default)
-    };
-    
-    return sameSiteMap[chromeSameSite] || "Lax";
+  function renderSnapshot(snapshot) {
+    latestSnapshot = snapshot;
+    stateOutput.value = JSON.stringify(snapshot, null, 2);
   }
 
-  // Extract cookies when button is clicked
-  extractBtn.addEventListener('click', async () => {
-    try {
-      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
-      
-      if (!tab.url.includes('goofish.com')) {
-        updateStatus('Please navigate to goofish.com first');
+  async function captureSnapshot() {
+    setLoading(true);
+    updateStatus('正在采集浏览器环境与登录状态...');
+    stateOutput.value = '';
+
+    chrome.runtime.sendMessage({ type: 'captureSnapshot' }, (response) => {
+      setLoading(false);
+
+      if (chrome.runtime.lastError) {
+        updateStatus('通信失败: ' + chrome.runtime.lastError.message);
+        return;
+      }
+      if (!response || !response.ok) {
+        updateStatus('采集失败: ' + (response?.error || '未知错误'));
         return;
       }
 
-      // Directly call chrome.cookies API from popup script
-      const cookies = await new Promise((resolve) => {
-        chrome.cookies.getAll({url: "https://www.goofish.com/"}, resolve);
-      });
-      
-      const state = {
-        cookies: cookies.map(cookie => ({
-          name: cookie.name,
-          value: cookie.value,
-          domain: cookie.domain,
-          path: cookie.path,
-          expires: cookie.expirationDate,
-          httpOnly: cookie.httpOnly,
-          secure: cookie.secure,
-          sameSite: mapSameSiteValue(cookie.sameSite)
-        }))
-      };
+      renderSnapshot(response.data);
+      updateStatus('采集完成，已生成JSON', true);
+    });
+  }
 
-      stateOutput.value = JSON.stringify(state, null, 2);
-      updateStatus('Login state extracted successfully!', true);
-    } catch (error) {
-      console.error('Error extracting cookies:', error);
-      updateStatus('Error: ' + error.message);
+  function copySnapshot() {
+    if (!stateOutput.value) {
+      updateStatus('没有可复制的数据');
+      return;
     }
-  });
+    navigator.clipboard.writeText(stateOutput.value)
+      .then(() => updateStatus('已复制到剪贴板', true))
+      .catch(err => updateStatus('复制失败: ' + err));
+  }
 
-  // Copy to clipboard when button is clicked
-  copyBtn.addEventListener('click', () => {
-    if (stateOutput.value) {
-      navigator.clipboard.writeText(stateOutput.value)
-        .then(() => {
-          updateStatus('Copied to clipboard!', true);
-        })
-        .catch(err => {
-          updateStatus('Failed to copy: ' + err);
-        });
-    } else {
-      updateStatus('No data to copy');
-    }
-  });
+  extractBtn.addEventListener('click', captureSnapshot);
+  copyBtn.addEventListener('click', copySnapshot);
 });

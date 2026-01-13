@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>闲鱼登录态采集扩展隐私权政策</title>
+  <style>
+    body { max-width: 880px; margin: 40px auto; padding: 0 16px; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; line-height: 1.6; color: #222; }
+    h1, h2, h3 { color: #111; }
+    code { background: #f6f8fa; padding: 2px 4px; border-radius: 4px; }
+    ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <h1>闲鱼登录态采集扩展隐私权政策</h1>
+  <p>版本：2026-01-13 · 本文档说明浏览器扩展“Xianyu Login State Extractor”如何收集、使用和存储数据。</p>
+
+  <h2>单一用途</h2>
+  <p>扩展唯一用途：在用户点击“提取”时，读取当前页面的登录态 Cookie、常用请求头和浏览器环境信息，生成本地 JSON 供用户复制到闲鱼监控爬虫使用。</p>
+
+  <h2>收集的数据类型（仅在用户点击“提取”时触发）</h2>
+  <ul>
+    <li>身份验证信息：当前页面的登录 Cookie/令牌。</li>
+    <li>请求头：User-Agent、Accept、Accept-Language、Accept-Encoding、Referer、Sec-CH UA 系列字段、Origin、Cache-Control/Pragma、Upgrade-Insecure-Requests、Content-Type（如有）。</li>
+    <li>浏览器环境信息：语言、时区、平台、hardwareConcurrency、deviceMemory、maxTouchPoints、webdriver 状态、屏幕尺寸/分辨率/色深、devicePixelRatio、User-Agent。</li>
+    <li>当前页面 URL，用于生成 JSON 描述当前站点。</li>
+    <li>存储数据：localStorage/sessionStorage，仅为当前页面读取，长度超过 4096 字节的键会被丢弃并标记。</li>
+  </ul>
+
+  <h2>数据使用方式</h2>
+  <ul>
+    <li>数据仅在本地内存中拼装为 JSON，供用户手动复制；不会上传到任何服务器。</li>
+    <li>不用于广告、画像、再营销或任何与上述单一用途无关的目的。</li>
+  </ul>
+
+  <h2>存储与传输</h2>
+  <ul>
+    <li>不做持久化存储；不写入远程服务。</li>
+    <li>剪贴板复制由用户主动点击触发。</li>
+  </ul>
+
+  <h2>权限说明</h2>
+  <ul>
+    <li><code>tabs</code> / <code>activeTab</code>：仅在用户点击“提取”时访问当前标签页 URL 并注入采集脚本。</li>
+    <li><code>scripting</code>：在当前页面注入脚本读取 navigator/screen 信息、localStorage/sessionStorage。</li>
+    <li><code>webRequest</code>：在当前域名发起一次 fetch 读取请求头，生成 JSON，不拦截或修改流量。</li>
+    <li><code>storage</code>：保存用户同意状态和功能开关，不存储敏感数据。</li>
+    <li><code>cookies</code>（如使用）：读取当前页面 Cookie 以生成登录态 JSON。</li>
+  </ul>
+
+  <h2>用户同意与控制</h2>
+  <ul>
+    <li>只有在弹窗中勾选同意并点击“提取”时才会收集上述数据；不使用则不收集。</li>
+    <li>可随时关闭或卸载扩展，即停止一切收集行为。</li>
+  </ul>
+
+  <h2>数据共享</h2>
+  <p>不与任何第三方共享或出售数据。</p>
+
+  <h2>联系</h2>
+  <p>如有疑问或删除请求，请联系维护者：<a href="mailto:privacy@your-domain.com">privacy@your-domain.com</a>。</p>
+</body>
+</html>
