@@ -2,12 +2,21 @@
 设置管理路由
 """
 import os
-from dotenv import load_dotenv
-from fastapi import APIRouter
-from pydantic import BaseModel
 from typing import Optional
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from src.api.dependencies import get_process_service
 from src.infrastructure.config.env_manager import env_manager
-from src.infrastructure.config.settings import AISettings, notification_settings, scraper_settings, reload_settings
+from src.infrastructure.config.settings import (
+    AISettings,
+    notification_settings,
+    reload_settings,
+    scraper_settings,
+)
+from src.services.process_service import ProcessService
 
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -115,7 +124,9 @@ async def update_rotation_settings(
 
 
 @router.get("/status")
-async def get_system_status():
+async def get_system_status(
+    process_service: ProcessService = Depends(get_process_service),
+):
     """获取系统状态"""
     state_file = "xianyu_state.json"
     login_state_exists = os.path.exists(state_file)
@@ -130,11 +141,19 @@ async def get_system_status():
     ntfy_topic_url = env_manager.get_value("NTFY_TOPIC_URL", "")
 
     ai_settings = AISettings()
+    running_task_ids = [
+        task_id
+        for task_id, process in process_service.processes.items()
+        if process and process.returncode is None
+    ]
+
     return {
         "ai_configured": ai_settings.is_configured(),
         "notification_configured": notification_settings.has_any_notification_enabled(),
         "headless_mode": scraper_settings.run_headless,
         "running_in_docker": scraper_settings.running_in_docker,
+        "scraper_running": len(running_task_ids) > 0,
+        "running_task_ids": running_task_ids,
         "login_state_file": {
             "exists": login_state_exists,
             "path": state_file
