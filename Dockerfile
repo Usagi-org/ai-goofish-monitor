@@ -46,6 +46,7 @@ COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         tzdata \
+        tini \
         libzbar0 \
         curl \
         wget \
@@ -70,6 +71,9 @@ COPY . .
 
 # 声明服务运行的端口
 EXPOSE 8000
+
+# 使用 tini 作为 init，负责回收孤儿子进程
+ENTRYPOINT ["tini", "--"]
 
 # 容器启动时执行的命令
 # 使用新架构的启动方式

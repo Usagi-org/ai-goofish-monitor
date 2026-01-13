@@ -750,7 +750,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             except PlaywrightTimeoutError as e:
                 print(f"\n操作超时错误: 页面元素或网络响应未在规定时间内出现。\n{e}")
                 raise
+            except asyncio.CancelledError:
+                log_time("收到取消信号，正在终止当前爬虫任务...")
+                raise
             except Exception as e:
+                if type(e).__name__ == "TargetClosedError":
+                    log_time("浏览器已关闭，忽略后续异常（可能是任务被停止）。")
+                    return processed_item_count
                 print(f"\n爬取过程中发生未知错误: {e}")
                 raise
             finally:

@@ -3,6 +3,8 @@ import sys
 import os
 import argparse
 import json
+import signal
+import contextlib
 
 from src.config import STATE_FILE
 from src.scraper import scrape_xianyu
@@ -126,13 +128,35 @@ async def main():
         return
 
     # 为每个启用的任务创建一个异步执行协程
-    coroutines = []
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop_event.set)
+        except NotImplementedError:
+            pass
+
+    tasks = []
     for task_conf in active_task_configs:
         print(f"-> 任务 '{task_conf['task_name']}' 已加入执行队列。")
-        coroutines.append(scrape_xianyu(task_config=task_conf, debug_limit=args.debug_limit))
+        tasks.append(asyncio.create_task(scrape_xianyu(task_config=task_conf, debug_limit=args.debug_limit)))
 
-    # 并发执行所有任务
-    results = await asyncio.gather(*coroutines, return_exceptions=True)
+    async def _shutdown_watcher():
+        await stop_event.wait()
+        print("\n收到终止信号，正在优雅退出，取消所有爬虫任务...")
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+
+    shutdown_task = asyncio.create_task(_shutdown_watcher())
+
+    try:
+        # 并发执行所有任务
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        shutdown_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await shutdown_task
 
     print("\n--- 所有任务执行完毕 ---")
     for i, result in enumerate(results):
