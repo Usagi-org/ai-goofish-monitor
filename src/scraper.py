@@ -96,6 +96,94 @@ def _get_rotation_settings(task_config: dict) -> dict:
     }
 
 
+def _default_context_options() -> dict:
+    return {
+        "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+        "viewport": {"width": 412, "height": 915},
+        "device_scale_factor": 2.625,
+        "is_mobile": True,
+        "has_touch": True,
+        "locale": "zh-CN",
+        "timezone_id": "Asia/Shanghai",
+        "permissions": ["geolocation"],
+        "geolocation": {"longitude": 121.4737, "latitude": 31.2304},
+        "color_scheme": "light",
+    }
+
+
+def _clean_kwargs(options: dict) -> dict:
+    return {k: v for k, v in options.items() if v is not None}
+
+
+def _looks_like_mobile(ua: str) -> Optional[bool]:
+    if not ua:
+        return None
+    ua_lower = ua.lower()
+    if "mobile" in ua_lower or "android" in ua_lower or "iphone" in ua_lower:
+        return True
+    if "windows" in ua_lower or "macintosh" in ua_lower:
+        return False
+    return None
+
+
+def _build_context_overrides(snapshot: dict) -> dict:
+    env = snapshot.get("env") or {}
+    headers = snapshot.get("headers") or {}
+    navigator = env.get("navigator") or {}
+    screen = env.get("screen") or {}
+    intl = env.get("intl") or {}
+
+    overrides = {}
+
+    ua = headers.get("User-Agent") or headers.get("user-agent") or navigator.get("userAgent")
+    if ua:
+        overrides["user_agent"] = ua
+
+    accept_language = headers.get("Accept-Language") or headers.get("accept-language")
+    locale = None
+    if accept_language:
+        locale = accept_language.split(",")[0].strip()
+    elif navigator.get("language"):
+        locale = navigator["language"]
+    if locale:
+        overrides["locale"] = locale
+
+    tz = intl.get("timeZone")
+    if tz:
+        overrides["timezone_id"] = tz
+
+    width = screen.get("width")
+    height = screen.get("height")
+    if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+        overrides["viewport"] = {"width": int(width), "height": int(height)}
+
+    dpr = screen.get("devicePixelRatio")
+    if isinstance(dpr, (int, float)):
+        overrides["device_scale_factor"] = float(dpr)
+
+    touch_points = navigator.get("maxTouchPoints")
+    if isinstance(touch_points, (int, float)):
+        overrides["has_touch"] = touch_points > 0
+
+    mobile_flag = _looks_like_mobile(ua or "")
+    if mobile_flag is not None:
+        overrides["is_mobile"] = mobile_flag
+
+    return _clean_kwargs(overrides)
+
+
+def _build_extra_headers(raw_headers: Optional[dict]) -> dict:
+    if not raw_headers:
+        return {}
+    excluded = {"cookie", "content-length"}
+    headers = {}
+    for key, value in raw_headers.items():
+        if not key or key.lower() in excluded or value is None:
+            continue
+        headers[key] = value
+    return headers
+
+
 async def scrape_user_profile(context, user_id: str) -> dict:
     """
     【新版】访问指定用户的个人主页，按顺序采集其摘要信息、完整的商品列表和完整的评价列表。
@@ -277,6 +365,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
         if not os.path.exists(state_file):
             raise FileNotFoundError(f"登录状态文件不存在: {state_file}")
 
+        snapshot_data = None
+        try:
+            with open(state_file, "r", encoding="utf-8") as f:
+                snapshot_data = json.load(f)
+        except Exception as e:
+            print(f"警告：读取登录状态文件失败，将直接按路径使用: {e}")
+
         async with async_playwright() as p:
             # 反检测启动参数
             launch_args = [
@@ -300,21 +395,23 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
             browser = await p.chromium.launch(**launch_kwargs)
 
-            # 使用移动设备模拟（与真实Chrome移动模式一致）
-            # 基于HAR分析：真实浏览器使用Android移动设备模拟
-            context = await browser.new_context(
-                storage_state=state_file,
-                user_agent="Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-                viewport={'width': 412, 'height': 915},  # Pixel 5尺寸
-                device_scale_factor=2.625,
-                is_mobile=True,
-                has_touch=True,
-                locale='zh-CN',
-                timezone_id='Asia/Shanghai',
-                permissions=['geolocation'],
-                geolocation={'longitude': 121.4737, 'latitude': 31.2304},
-                color_scheme='light'
-            )
+            context_kwargs = _default_context_options()
+            storage_state_arg = state_file
+
+            if isinstance(snapshot_data, dict):
+                # 新版扩展导出的增强快照，包含环境和Header
+                if any(key in snapshot_data for key in ("env", "headers", "page", "storage")):
+                    print(f"检测到增强浏览器快照，应用环境参数: {state_file}")
+                    storage_state_arg = {"cookies": snapshot_data.get("cookies", [])}
+                    context_kwargs.update(_build_context_overrides(snapshot_data))
+                    extra_headers = _build_extra_headers(snapshot_data.get("headers"))
+                    if extra_headers:
+                        context_kwargs["extra_http_headers"] = extra_headers
+                else:
+                    storage_state_arg = snapshot_data
+
+            context_kwargs = _clean_kwargs(context_kwargs)
+            context = await browser.new_context(storage_state=storage_state_arg, **context_kwargs)
 
             # 增强反检测脚本（模拟真实移动设备）
             await context.add_init_script("""
