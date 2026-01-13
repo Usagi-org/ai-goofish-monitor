@@ -31,7 +31,7 @@ class Task(BaseModel):
     account_state_file: Optional[str] = None
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
-    region: Optional[str] = "江苏/南京/全南京"
+    region: Optional[str] = None
     is_running: bool = False
 
     class Config:
@@ -67,7 +67,7 @@ class TaskCreate(BaseModel):
     account_state_file: Optional[str] = None
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
-    region: Optional[str] = "江苏/南京/全南京"
+    region: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -103,7 +103,7 @@ class TaskGenerateRequest(BaseModel):
     account_state_file: Optional[str] = None
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
-    region: Optional[str] = "江苏/南京/全南京"
+    region: Optional[str] = None
 
     @validator('min_price', 'max_price', pre=True)
     def convert_price_to_str(cls, v):

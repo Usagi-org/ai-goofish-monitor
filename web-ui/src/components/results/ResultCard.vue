@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { ResultItem } from '@/types/result.d.ts'
 import {
   Card,
@@ -27,6 +28,8 @@ const crawlTime = props.item.爬取时间
   ? new Date(props.item.爬取时间).toLocaleString('sv-SE')
   : '未知'
 const publishTime = info.发布时间 || '未知'
+
+const expanded = ref(false)
 </script>
 
 <template>
@@ -61,9 +64,16 @@ const publishTime = info.发布时间 || '未知'
         <p class="font-semibold" :class="[isRecommended ? 'text-green-800' : 'text-red-800']">
           AI建议: {{ recommendationText }}
         </p>
-        <p class="mt-1 text-gray-600 line-clamp-3">
+        <p class="mt-1 text-gray-600" :class="{ 'line-clamp-3': !expanded }">
           原因: {{ ai?.reason || '无' }}
         </p>
+        <button
+          v-if="ai?.reason"
+          @click="expanded = !expanded"
+          class="mt-1 text-xs text-blue-600 hover:underline"
+        >
+          {{ expanded ? '收起' : '展开' }}
+        </button>
       </div>
     </CardContent>
     <CardFooter class="text-xs text-gray-500 flex items-center justify-between gap-2">
