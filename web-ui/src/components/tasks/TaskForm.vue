@@ -32,7 +32,7 @@ watchEffect(() => {
       account_state_file: props.initialData.account_state_file || '',
       free_shipping: props.initialData.free_shipping ?? true,
       new_publish_option: props.initialData.new_publish_option || '__none__',
-      region: props.initialData.region || '江苏/南京/全南京',
+      region: props.initialData.region || '',
     }
   } else {
     form.value = {

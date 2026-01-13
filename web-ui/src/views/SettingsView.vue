@@ -10,9 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
-import { deleteLoginState, updateLoginState } from '@/api/settings'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 
 const {
@@ -34,11 +32,6 @@ const {
 const activeTab = ref('ai')
 const route = useRoute()
 const validTabs = new Set(['notifications', 'ai', 'rotation', 'status', 'prompts'])
-const isLoginDialogOpen = ref(false)
-const loginStateContent = ref('')
-const isLoginStateSaving = ref(false)
-const isLoginStateDeleting = ref(false)
-const isDeleteLoginDialogOpen = ref(false)
 
 const promptFiles = ref<string[]>([])
 const selectedPrompt = ref<string | null>(null)
@@ -88,42 +81,6 @@ async function handleTestAi() {
     notifySuccess('AI 连接测试完成', res.message)
   } catch (e) {
     notifyError('AI 连接测试失败', (e as Error).message)
-  }
-}
-
-async function handleSaveLoginState() {
-  const content = loginStateContent.value.trim()
-  if (!content) {
-    notifyError('缺少登录内容', '请粘贴从浏览器获取的 JSON 内容。')
-    return
-  }
-  isLoginStateSaving.value = true
-  try {
-    const res = await updateLoginState(content)
-    notifySuccess('登录状态更新成功', res.message)
-    loginStateContent.value = ''
-    isLoginDialogOpen.value = false
-    await refreshStatus()
-    window.dispatchEvent(new Event('login-state-changed'))
-  } catch (e) {
-    notifyError('登录状态更新失败', (e as Error).message)
-  } finally {
-    isLoginStateSaving.value = false
-  }
-}
-
-async function handleDeleteLoginState() {
-  isLoginStateDeleting.value = true
-  try {
-    const res = await deleteLoginState()
-    notifySuccess('登录凭证已删除', res.message)
-    await refreshStatus()
-    window.dispatchEvent(new Event('login-state-changed'))
-    isDeleteLoginDialogOpen.value = false
-  } catch (e) {
-    notifyError('删除登录凭证失败', (e as Error).message)
-  } finally {
-    isLoginStateDeleting.value = false
   }
 }
 
@@ -440,47 +397,6 @@ watch(selectedPrompt, async (value) => {
                 </span>
               </div>
 
-              <!-- Login State Status -->
-              <div class="border-b pb-4">
-                <div class="flex items-center justify-between mb-2">
-                    <div>
-                        <h3 class="font-medium">闲鱼登录凭证</h3>
-                        <p class="text-sm text-gray-500">用于访问闲鱼数据的 Cookie 文件 (xianyu_state.json)</p>
-                    </div>
-                    <span :class="systemStatus.login_state_file.exists ? 'text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full' : 'text-red-600 font-bold bg-red-50 px-3 py-1 rounded-full'">
-                        {{ systemStatus.login_state_file.exists ? '有效' : '缺失' }}
-                    </span>
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" @click="isLoginDialogOpen = true">
-                    手动更新
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    :disabled="isLoginStateDeleting || !systemStatus.login_state_file.exists"
-                    @click="isDeleteLoginDialogOpen = true"
-                  >
-                    {{ isLoginStateDeleting ? '删除中...' : '删除凭证' }}
-                  </Button>
-                </div>
-                
-                <!-- Login Guide -->
-                <div v-if="!systemStatus.login_state_file.exists" class="mt-4 bg-amber-50 border border-amber-200 rounded-md p-4 text-sm text-amber-800">
-                    <h4 class="font-bold flex items-center gap-2 mb-2">
-                        ⚠️ 检测到未登录，请按以下步骤使用 Chrome 扩展提取 Cookie 登录：
-                    </h4>
-                    <ol class="list-decimal list-inside space-y-1 ml-1">
-                        <li>安装 <a class="text-blue-600 hover:underline" href="https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa" target="_blank" rel="noopener noreferrer">闲鱼登录状态提取扩展</a></li>
-                        <li>打开并登录 <a class="text-blue-600 hover:underline" href="https://www.goofish.com" target="_blank" rel="noopener noreferrer">闲鱼官网</a></li>
-                        <li>点击扩展图标，选择“提取登录状态”，再点击“复制到剪贴板”</li>
-                        <li>将内容粘贴到登录凭证输入框并保存</li>
-                        <li>保存成功后点击上方的 <span class="font-semibold">“刷新状态”</span> 按钮</li>
-                    </ol>
-                </div>
-              </div>
-
               <!-- Env Config Status -->
               <div>
                 <div class="flex items-center justify-between mb-4">
@@ -578,56 +494,5 @@ watch(selectedPrompt, async (value) => {
         </Card>
       </TabsContent>
     </Tabs>
-
-    <!-- Login State Dialog -->
-    <Dialog v-model:open="isLoginDialogOpen">
-      <DialogContent class="sm:max-w-[700px]">
-        <DialogHeader>
-          <DialogTitle>手动更新登录状态 (Cookie)</DialogTitle>
-          <DialogDescription>
-            用于在无法运行图形化浏览器的服务器上更新闲鱼登录凭证。
-          </DialogDescription>
-        </DialogHeader>
-        <div class="space-y-4 text-sm text-gray-600">
-          <div>
-            <h4 class="font-medium text-gray-800 mb-2">使用 Chrome 扩展（推荐）</h4>
-            <ol class="list-decimal list-inside space-y-1">
-              <li>安装 <a class="text-blue-600 hover:underline" href="https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa" target="_blank" rel="noopener noreferrer">闲鱼登录状态提取扩展</a></li>
-              <li>打开并登录 <a class="text-blue-600 hover:underline" href="https://www.goofish.com" target="_blank" rel="noopener noreferrer">闲鱼官网</a></li>
-              <li>点击扩展图标，选择“提取登录状态”，再点击“复制到剪贴板”</li>
-              <li>将内容粘贴到下方文本框并保存</li>
-            </ol>
-          </div>
-          <div class="grid gap-2">
-            <Label>粘贴 JSON 内容</Label>
-            <Textarea v-model="loginStateContent" class="min-h-[160px]" placeholder="请在此处粘贴从浏览器扩展复制的 JSON 文本..." />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" @click="isLoginDialogOpen = false">取消</Button>
-          <Button :disabled="isLoginStateSaving" @click="handleSaveLoginState">
-            {{ isLoginStateSaving ? '保存中...' : '保存' }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    <!-- Delete Login State Dialog -->
-    <Dialog v-model:open="isDeleteLoginDialogOpen">
-      <DialogContent class="sm:max-w-[420px]">
-        <DialogHeader>
-          <DialogTitle>删除登录凭证</DialogTitle>
-          <DialogDescription>
-            删除后需要重新设置才能运行任务，确定要继续吗？
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" @click="isDeleteLoginDialogOpen = false">取消</Button>
-          <Button variant="destructive" :disabled="isLoginStateDeleting" @click="handleDeleteLoginState">
-            {{ isLoginStateDeleting ? '删除中...' : '确认删除' }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>
