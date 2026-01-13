@@ -34,6 +34,11 @@ export interface RotationSettings {
 
 export interface SystemStatus {
   scraper_running: boolean
+  running_task_ids?: number[]
+  ai_configured?: boolean
+  notification_configured?: boolean
+  headless_mode?: boolean
+  running_in_docker?: boolean
   login_state_file: {
     exists: boolean
     path: string
