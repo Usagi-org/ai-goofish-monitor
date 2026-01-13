@@ -47,7 +47,7 @@ watchEffect(() => {
       account_state_file: props.defaultAccount || '',
       free_shipping: true,
       new_publish_option: '__none__',
-      region: '江苏/南京/全南京',
+      region: '',
     }
   }
 })
@@ -164,12 +164,14 @@ function handleSubmit() {
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">区域筛选</Label>
-        <Input
-          v-model="form.region as any"
-          class="col-span-3"
-          placeholder="例如： 浙江/杭州/滨江区 或 浙江/杭州/全杭州 或 上海/徐汇区"
-        />
+        <Label class="text-right">区域筛选(默认不填)</Label>
+        <div class="col-span-3 space-y-1">
+          <Input
+            v-model="form.region as any"
+            placeholder="例如： 浙江/杭州/滨江区 或 浙江/杭州/全杭州 或 上海/徐汇区"
+          />
+          <p class="text-xs text-gray-500">区域筛选会导致满足条件的商品数量很少</p>
+        </div>
       </div>
     </div>
   </form>

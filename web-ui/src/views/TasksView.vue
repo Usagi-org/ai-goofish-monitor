@@ -19,7 +19,17 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-const { tasks, isLoading, error, removeTask, createTask, updateTask, startTask, stopTask } = useTasks()
+const {
+  tasks,
+  isLoading,
+  error,
+  removeTask,
+  createTask,
+  updateTask,
+  startTask,
+  stopTask,
+  stoppingTaskIds,
+} = useTasks()
 
 // State for dialogs
 const isCreateDialogOpen = ref(false)
@@ -307,6 +317,7 @@ watch(
     <TasksTable
       :tasks="tasks"
       :is-loading="isLoading"
+      :stopping-ids="stoppingTaskIds"
       @delete-task="handleDeleteTask"
       @edit-task="handleEditTask"
       @run-task="handleStartTask"

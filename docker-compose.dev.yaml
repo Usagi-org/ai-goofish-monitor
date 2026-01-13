@@ -2,6 +2,7 @@ services:
   app:
     build: .
     container_name: ai-goofish-monitor-app
+    init: true
     ports:
       - "8000:8000"
     env_file:

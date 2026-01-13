@@ -58,8 +58,7 @@ class ProcessService:
             print(f"启动任务 '{task_name}' 失败: {e}")
             return False
 
-    def _append_stop_marker(self, task_id: int) -> None:
-        log_path = self.log_paths.get(task_id)
+    def _append_stop_marker(self, log_path: str | None) -> None:
         if not log_path:
             return
         try:
@@ -67,17 +66,17 @@ class ProcessService:
             with open(log_path, 'a', encoding='utf-8') as f:
                 f.write(f"[{ts}] !!! 任务已被终止 !!!\n")
         except Exception as e:
-            print(f"写入任务终止标记失败 (ID: {task_id}): {e}")
+            print(f"写入任务终止标记失败: {e}")
 
     async def stop_task(self, task_id: int) -> bool:
         """停止任务进程"""
-        process = self.processes.get(task_id)
-        if not process or process.returncode is not None:
+        process = self.processes.pop(task_id, None)
+        log_path = self.log_paths.pop(task_id, None)
+        if not process:
             print(f"任务 ID {task_id} 没有正在运行的进程")
-            if task_id in self.processes:
-                del self.processes[task_id]
-            if task_id in self.log_paths:
-                del self.log_paths[task_id]
+            return False
+        if process.returncode is not None:
+            print(f"任务进程 {process.pid} (ID: {task_id}) 已退出，略过停止")
             return False
 
         try:
@@ -86,20 +85,23 @@ class ProcessService:
             else:
                 process.terminate()
 
-            await process.wait()
-            self._append_stop_marker(task_id)
+            try:
+                await asyncio.wait_for(process.wait(), timeout=20)
+            except asyncio.TimeoutError:
+                print(f"任务进程 {process.pid} (ID: {task_id}) 未在 20 秒内退出，准备强制终止...")
+                if sys.platform != "win32":
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                else:
+                    process.kill()
+                await process.wait()
+
+            self._append_stop_marker(log_path)
             print(f"任务进程 {process.pid} (ID: {task_id}) 已终止")
-            del self.processes[task_id]
-            if task_id in self.log_paths:
-                del self.log_paths[task_id]
             return True
 
         except ProcessLookupError:
             print(f"进程 (ID: {task_id}) 已不存在")
-            if task_id in self.processes:
-                del self.processes[task_id]
-            if task_id in self.log_paths:
-                del self.log_paths[task_id]
             return False
         except Exception as e:
             print(f"停止任务进程 (ID: {task_id}) 时出错: {e}")

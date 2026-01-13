@@ -722,7 +722,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                                 # --- 修改: 增加单个商品处理后的主要延迟 ---
                                 log_time("[反爬] 执行一次主要的随机延迟以模拟用户浏览间隔...")
-                                await random_sleep(15, 30) # 原来是 (8, 15)，这是最重要的修改之一
+                                await random_sleep(5, 10)
                             else:
                                 print(f"   错误: 获取商品详情API响应失败，状态码: {detail_response.status}")
                                 if AI_DEBUG_MODE:
@@ -745,12 +745,18 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     # --- 新增: 在处理完一页所有商品后，翻页前，增加一个更长的“休息”时间 ---
                     if not stop_scraping and page_num < max_pages:
                         print(f"--- 第 {page_num} 页处理完毕，准备翻页。执行一次页面间的长时休息... ---")
-                        await random_sleep(25, 50)
+                        await random_sleep(10, 15)
 
             except PlaywrightTimeoutError as e:
                 print(f"\n操作超时错误: 页面元素或网络响应未在规定时间内出现。\n{e}")
                 raise
+            except asyncio.CancelledError:
+                log_time("收到取消信号，正在终止当前爬虫任务...")
+                raise
             except Exception as e:
+                if type(e).__name__ == "TargetClosedError":
+                    log_time("浏览器已关闭，忽略后续异常（可能是任务被停止）。")
+                    return processed_item_count
                 print(f"\n爬取过程中发生未知错误: {e}")
                 raise
             finally:
