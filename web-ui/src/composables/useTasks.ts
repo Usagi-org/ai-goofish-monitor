@@ -7,6 +7,7 @@ export function useTasks() {
   const tasks = ref<Task[]>([])
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
+  const stoppingTaskIds = ref<Set<number>>(new Set())
   const { on } = useWebSocket()
 
   async function fetchTasks() {
@@ -92,10 +93,18 @@ export function useTasks() {
 
   async function startTask(taskId: number) {
     isLoading.value = true
+    const task = tasks.value.find((t) => t.id === taskId)
+    const previous = task?.is_running
+    if (task) {
+      task.is_running = true // 乐观更新：点击后立刻显示运行中
+    }
     try {
       await taskApi.startTask(taskId)
       // The websocket will update the status, but we can also optimistically update
     } catch (e) {
+      if (task && previous !== undefined) {
+        task.is_running = previous
+      }
       if (e instanceof Error) error.value = e
       throw e
     } finally {
@@ -105,12 +114,18 @@ export function useTasks() {
 
   async function stopTask(taskId: number) {
     isLoading.value = true
+    const next = new Set(stoppingTaskIds.value)
+    next.add(taskId)
+    stoppingTaskIds.value = next
     try {
       await taskApi.stopTask(taskId)
     } catch (e) {
       if (e instanceof Error) error.value = e
       throw e
     } finally {
+      const cleaned = new Set(stoppingTaskIds.value)
+      cleaned.delete(taskId)
+      stoppingTaskIds.value = cleaned
       isLoading.value = false
     }
   }
@@ -128,5 +143,6 @@ export function useTasks() {
     removeTask,
     startTask,
     stopTask,
+    stoppingTaskIds,
   }
 }
