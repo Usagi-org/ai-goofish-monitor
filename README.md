@@ -2,7 +2,7 @@
 
 基于 Playwright 和 AI 的闲鱼多任务实时监控工具，提供完整的 Web 管理界面。
 
-体验地址：[点我去在线体验](https://vphtcbiabwvs.ap-southeast-1.clawcloudrun.com)
+体验地址：[点我去在线体验](https://sxceimnfdrpp.ap-northeast-1.clawcloudrun.com)
 
 登录账密：admin/admin123
 
