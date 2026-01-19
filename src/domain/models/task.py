@@ -69,6 +69,14 @@ class TaskCreate(BaseModel):
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
 
+    @validator('min_price', 'max_price', pre=True)
+    def convert_price_to_str(cls, v):
+        """将价格转换为字符串，处理空字符串和数字"""
+        if v == "" or v == "null" or v == "undefined" or v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
 
 class TaskUpdate(BaseModel):
     """更新任务的DTO"""
@@ -88,6 +96,15 @@ class TaskUpdate(BaseModel):
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
     is_running: Optional[bool] = None
+    
+    @validator('min_price', 'max_price', pre=True)
+    def convert_price_to_str(cls, v):
+        """将价格转换为字符串，处理空字符串和数字"""
+        if v == "" or v == "null" or v == "undefined" or v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
 
 
 class TaskGenerateRequest(BaseModel):

@@ -5,9 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import os
 import aiofiles
-from src.api.dependencies import get_task_service, get_process_service
+from src.api.dependencies import get_task_service, get_process_service, get_scheduler_service
 from src.services.task_service import TaskService
 from src.services.process_service import ProcessService
+from src.services.scheduler_service import SchedulerService
 from src.domain.models.task import Task, TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.api.routes.websocket import broadcast_message
 from src.prompt_utils import generate_criteria
@@ -15,6 +16,13 @@ from src.utils import resolve_task_log_path
 
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+async def _reload_scheduler_if_needed(
+    task_service: TaskService,
+    scheduler_service: SchedulerService,
+):
+    tasks = await task_service.get_all_tasks()
+    await scheduler_service.reload_jobs(tasks)
 
 
 @router.get("", response_model=List[dict])
@@ -42,9 +50,11 @@ async def get_task(
 async def create_task(
     task_create: TaskCreate,
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """创建新任务"""
     task = await service.create_task(task_create)
+    await _reload_scheduler_if_needed(service, scheduler_service)
     return {"message": "任务创建成功", "task": task.dict()}
 
 
@@ -52,6 +62,7 @@ async def create_task(
 async def generate_task(
     req: TaskGenerateRequest,
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """使用 AI 生成分析标准并创建新任务"""
     print(f"收到 AI 任务生成请求: {req.task_name}")
@@ -113,6 +124,7 @@ async def generate_task(
         task = await service.create_task(task_create)
 
         print(f"AI任务创建成功: {req.task_name}")
+        await _reload_scheduler_if_needed(service, scheduler_service)
         return {"message": "AI 任务创建成功。", "task": task.dict()}
 
     except HTTPException:
@@ -139,6 +151,7 @@ async def update_task(
     task_id: int,
     task_update: TaskUpdate,
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """更新任务"""
     try:
@@ -192,6 +205,7 @@ async def update_task(
 
         # 执行任务更新
         task = await service.update_task(task_id, task_update)
+        await _reload_scheduler_if_needed(service, scheduler_service)
         return {"message": "任务更新成功", "task": task.dict()}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -201,6 +215,7 @@ async def update_task(
 async def delete_task(
     task_id: int,
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """删除任务"""
     task = await service.get_task(task_id)
@@ -210,6 +225,8 @@ async def delete_task(
     success = await service.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail="任务未找到")
+        
+    await _reload_scheduler_if_needed(service, scheduler_service)
 
     try:
         keyword = (task.keyword or "").strip()
