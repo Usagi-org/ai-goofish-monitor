@@ -55,4 +55,4 @@ jobs:
         env:
           ANTHROPIC_BASE_URL: http://localhost:3456
         with:
-          anthropic_api_key: "any-string-is-ok"
+          anthropic_api_key: "Any-string-is-ok"
