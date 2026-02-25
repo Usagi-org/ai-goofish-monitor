@@ -1,5 +1,11 @@
 // Based on the Pydantic model in the backend
 
+export interface KeywordRuleGroup {
+  name?: string | null;
+  include_keywords: string[];
+  exclude_keywords: string[];
+}
+
 export interface Task {
   id: number;
   task_name: string;
@@ -17,6 +23,8 @@ export interface Task {
   free_shipping?: boolean;
   new_publish_option?: string | null;
   region?: string | null;
+  decision_mode: 'ai' | 'keyword';
+  keyword_rule_groups: KeywordRuleGroup[];
   is_running: boolean;
 }
 
@@ -27,7 +35,7 @@ export type TaskUpdate = Partial<Omit<Task, 'id'>>;
 export interface TaskGenerateRequest {
   task_name: string;
   keyword: string;
-  description: string;
+  description?: string;
   personal_only?: boolean;
   min_price?: string | null;
   max_price?: string | null;
@@ -37,4 +45,6 @@ export interface TaskGenerateRequest {
   free_shipping?: boolean;
   new_publish_option?: string | null;
   region?: string | null;
+  decision_mode?: 'ai' | 'keyword';
+  keyword_rule_groups?: KeywordRuleGroup[];
 }

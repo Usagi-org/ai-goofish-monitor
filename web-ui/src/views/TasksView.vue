@@ -242,9 +242,9 @@ watch(
         </DialogTrigger>
         <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>创建新监控任务 (AI驱动)</DialogTitle>
+            <DialogTitle>创建新监控任务（AI或KeyWord）</DialogTitle>
             <DialogDescription>
-              请填写任务详情。AI将根据你的“详细需求”自动生成分析标准。
+              请填写任务详情。可选择 AI 判断或关键词判断模式。
             </DialogDescription>
           </DialogHeader>
           <TaskForm

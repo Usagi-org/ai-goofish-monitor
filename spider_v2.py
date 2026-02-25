@@ -60,8 +60,17 @@ async def main():
             f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
         )
 
-    # 读取所有prompt文件内容
+    # 读取所有prompt文件内容（关键词模式不需要加载prompt）
     for task in tasks_config:
+        decision_mode = str(task.get("decision_mode", "ai")).strip().lower()
+        if decision_mode not in {"ai", "keyword"}:
+            decision_mode = "ai"
+        task["decision_mode"] = decision_mode
+
+        if decision_mode == "keyword":
+            task["ai_prompt_text"] = ""
+            continue
+
         if task.get("enabled", False) and task.get("ai_prompt_base_file") and task.get("ai_prompt_criteria_file"):
             try:
                 with open(task["ai_prompt_base_file"], 'r', encoding='utf-8') as f_base:

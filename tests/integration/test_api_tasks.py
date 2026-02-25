@@ -44,3 +44,28 @@ def test_start_stop_task_updates_status(api_client, api_context, sample_task_pay
     process_service = api_context["process_service"]
     assert process_service.started == [(0, sample_task_payload["task_name"])]
     assert process_service.stopped == [0]
+
+
+def test_generate_keyword_mode_task_without_ai_criteria(api_client):
+    payload = {
+        "task_name": "A7M4 关键词筛选",
+        "keyword": "sony a7m4",
+        "description": "",
+        "decision_mode": "keyword",
+        "keyword_rule_groups": [
+            {
+                "name": "主规则",
+                "include_keywords": ["a7m4", "验货宝"],
+                "exclude_keywords": ["瑕疵", "磕碰"],
+            }
+        ],
+        "max_pages": 2,
+        "personal_only": True,
+    }
+
+    response = api_client.post("/api/tasks/generate", json=payload)
+    assert response.status_code == 200
+    created = response.json()["task"]
+    assert created["decision_mode"] == "keyword"
+    assert created["ai_prompt_criteria_file"] == ""
+    assert created["keyword_rule_groups"][0]["include_keywords"] == ["a7m4", "验货宝"]

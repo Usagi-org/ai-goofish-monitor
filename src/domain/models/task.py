@@ -2,8 +2,9 @@
 任务领域模型
 定义任务实体及其业务逻辑
 """
-from pydantic import BaseModel, Field, validator
-from typing import Optional
+import re
+from pydantic import BaseModel, Field, root_validator, validator
+from typing import List, Literal, Optional
 from enum import Enum
 
 
@@ -12,6 +13,60 @@ class TaskStatus(str, Enum):
     STOPPED = "stopped"
     RUNNING = "running"
     SCHEDULED = "scheduled"
+
+
+def _normalize_keyword_values(value) -> List[str]:
+    if value is None:
+        return []
+
+    raw_values = []
+    if isinstance(value, (list, tuple, set)):
+        raw_values = list(value)
+    elif isinstance(value, str):
+        raw_values = re.split(r"[\n,]+", value)
+    else:
+        raw_values = [value]
+
+    normalized: List[str] = []
+    seen = set()
+    for item in raw_values:
+        text = str(item).strip()
+        if not text:
+            continue
+        dedup_key = text.lower()
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        normalized.append(text)
+    return normalized
+
+
+def _has_valid_keyword_groups(groups) -> bool:
+    if not groups:
+        return False
+    for group in groups:
+        include_keywords = getattr(group, "include_keywords", None)
+        if include_keywords:
+            return True
+    return False
+
+
+class KeywordRuleGroup(BaseModel):
+    """关键词规则分组。组内 include 为 AND，exclude 为 NOT。"""
+    name: Optional[str] = None
+    include_keywords: List[str] = Field(default_factory=list)
+    exclude_keywords: List[str] = Field(default_factory=list)
+
+    @validator("name", pre=True)
+    def normalize_name(cls, v):
+        if v is None:
+            return None
+        text = str(v).strip()
+        return text or None
+
+    @validator("include_keywords", "exclude_keywords", pre=True)
+    def normalize_keyword_list(cls, v):
+        return _normalize_keyword_values(v)
 
 
 class Task(BaseModel):
@@ -32,6 +87,8 @@ class Task(BaseModel):
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
+    decision_mode: Literal["ai", "keyword"] = "ai"
+    keyword_rule_groups: List[KeywordRuleGroup] = Field(default_factory=list)
     is_running: bool = False
 
     class Config:
@@ -68,6 +125,8 @@ class TaskCreate(BaseModel):
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
+    decision_mode: Literal["ai", "keyword"] = "ai"
+    keyword_rule_groups: List[KeywordRuleGroup] = Field(default_factory=list)
 
     @validator('min_price', 'max_price', pre=True)
     def convert_price_to_str(cls, v):
@@ -77,6 +136,19 @@ class TaskCreate(BaseModel):
         if isinstance(v, (int, float)):
             return str(v)
         return v
+
+    @root_validator(skip_on_failure=True)
+    def validate_decision_mode_payload(cls, values):
+        mode = (values.get("decision_mode") or "ai").lower()
+        description = str(values.get("description") or "").strip()
+        keyword_groups = values.get("keyword_rule_groups") or []
+
+        if mode == "ai" and not description:
+            raise ValueError("AI 判断模式下，详细需求(description)不能为空。")
+        if mode == "keyword" and not _has_valid_keyword_groups(keyword_groups):
+            raise ValueError("关键词判断模式下，至少需要一个包含关键词。")
+        return values
+
 
 class TaskUpdate(BaseModel):
     """更新任务的DTO"""
@@ -95,6 +167,8 @@ class TaskUpdate(BaseModel):
     free_shipping: Optional[bool] = None
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
+    decision_mode: Optional[Literal["ai", "keyword"]] = None
+    keyword_rule_groups: Optional[List[KeywordRuleGroup]] = None
     is_running: Optional[bool] = None
     
     @validator('min_price', 'max_price', pre=True)
@@ -106,12 +180,24 @@ class TaskUpdate(BaseModel):
             return str(v)
         return v
 
+    @root_validator(skip_on_failure=True)
+    def validate_partial_keyword_payload(cls, values):
+        mode = values.get("decision_mode")
+        groups = values.get("keyword_rule_groups")
+        description = values.get("description")
+
+        if mode == "keyword" and groups is not None and not _has_valid_keyword_groups(groups):
+            raise ValueError("关键词判断模式下，至少需要一个包含关键词。")
+        if mode == "ai" and description is not None and not str(description).strip():
+            raise ValueError("AI 判断模式下，详细需求(description)不能为空。")
+        return values
+
 
 class TaskGenerateRequest(BaseModel):
     """AI生成任务的请求DTO"""
     task_name: str
     keyword: str
-    description: str
+    description: Optional[str] = ""
     personal_only: bool = True
     min_price: Optional[str] = None
     max_price: Optional[str] = None
@@ -121,6 +207,8 @@ class TaskGenerateRequest(BaseModel):
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
+    decision_mode: Literal["ai", "keyword"] = "ai"
+    keyword_rule_groups: List[KeywordRuleGroup] = Field(default_factory=list)
 
     @validator('min_price', 'max_price', pre=True)
     def convert_price_to_str(cls, v):
@@ -150,3 +238,15 @@ class TaskGenerateRequest(BaseModel):
         if v == "" or v == "null" or v == "undefined":
             return None
         return v
+
+    @root_validator(skip_on_failure=True)
+    def validate_decision_mode_payload(cls, values):
+        mode = (values.get("decision_mode") or "ai").lower()
+        description = str(values.get("description") or "").strip()
+        keyword_groups = values.get("keyword_rule_groups") or []
+
+        if mode == "ai" and not description:
+            raise ValueError("AI 判断模式下，详细需求(description)不能为空。")
+        if mode == "keyword" and not _has_valid_keyword_groups(keyword_groups):
+            raise ValueError("关键词判断模式下，至少需要一个包含关键词。")
+        return values

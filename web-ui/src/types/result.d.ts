@@ -37,9 +37,13 @@ export interface SellerInfo {
 export interface AiAnalysis {
   is_recommended: boolean;
   reason: string;
+  analysis_source?: 'ai' | 'keyword';
   prompt_version?: string;
   risk_tags?: string[];
   criteria_analysis?: Record<string, any>;
+  matched_groups?: string[];
+  matched_keywords?: string[];
+  blocked_keywords?: string[];
   error?: string;
 }
 
