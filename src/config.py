@@ -23,7 +23,7 @@ DETAIL_API_URL_PATTERN = "h5api.m.goofish.com/h5/mtop.taobao.idle.pc.detail"
 
 # --- Environment Variables ---
 GEMINI_OPENAI_COMPAT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_DEFAULT_MODEL_NAME = "gemini-2.0-flash"
+GEMINI_DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 
 
 def resolve_ai_runtime_config(env: Optional[Mapping[str, str]] = None) -> dict:
@@ -37,12 +37,18 @@ def resolve_ai_runtime_config(env: Optional[Mapping[str, str]] = None) -> dict:
     use_gemini_defaults = bool(gemini_api_key and not openai_api_key)
     resolved_base_url = base_url or (GEMINI_OPENAI_COMPAT_BASE_URL if use_gemini_defaults else "")
     resolved_model_name = model_name or (GEMINI_DEFAULT_MODEL_NAME if use_gemini_defaults else "")
+    is_gemini_endpoint = "generativelanguage.googleapis.com" in resolved_base_url
+
+    if is_gemini_endpoint:
+        resolved_api_key = gemini_api_key or openai_api_key
+    else:
+        resolved_api_key = openai_api_key or gemini_api_key
 
     return {
-        "api_key": openai_api_key or gemini_api_key,
+        "api_key": resolved_api_key,
         "base_url": resolved_base_url,
         "model_name": resolved_model_name,
-        "is_gemini_openai_compat": use_gemini_defaults,
+        "is_gemini_openai_compat": use_gemini_defaults or is_gemini_endpoint,
     }
 
 

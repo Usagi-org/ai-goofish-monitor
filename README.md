@@ -58,7 +58,7 @@ cp .env.example .env
 完整配置项参考 `.env.example`
 
 > 使用 `GEMINI_API_KEY` 时，若未手动填写 `OPENAI_BASE_URL` 和 `OPENAI_MODEL_NAME`，系统会自动使用
-> `https://generativelanguage.googleapis.com/v1beta/openai/` 与 `gemini-2.0-flash`。
+> `https://generativelanguage.googleapis.com/v1beta/openai/` 与 `gemini-2.5-flash`。
 
 3. **启动服务**
 

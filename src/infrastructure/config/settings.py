@@ -17,7 +17,7 @@ import os
 
 
 GEMINI_OPENAI_COMPAT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-GEMINI_DEFAULT_MODEL_NAME = "gemini-2.0-flash"
+GEMINI_DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 
 
 def _env_field(default, env_name: str, **kwargs):
@@ -59,6 +59,8 @@ class AISettings(_EnvSettings):
     skip_analysis: bool = _env_field(False, "SKIP_AI_ANALYSIS")
 
     def resolved_api_key(self) -> Optional[str]:
+        if "generativelanguage.googleapis.com" in self.resolved_base_url():
+            return self.gemini_api_key or self.api_key
         return self.api_key or self.gemini_api_key
 
     def resolved_base_url(self) -> str:

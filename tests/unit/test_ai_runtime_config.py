@@ -49,3 +49,17 @@ def test_resolve_ai_runtime_keeps_custom_base_and_model_for_gemini_key():
     assert runtime["base_url"] == "https://gateway.example/v1/"
     assert runtime["model_name"] == "gemini-2.5-flash"
     assert runtime["is_gemini_openai_compat"] is True
+
+
+def test_resolve_ai_runtime_prefers_gemini_key_for_gemini_endpoint():
+    runtime = resolve_ai_runtime_config(
+        {
+            "OPENAI_API_KEY": "openai-key",
+            "GEMINI_API_KEY": "gemini-key",
+            "OPENAI_BASE_URL": GEMINI_OPENAI_COMPAT_BASE_URL,
+            "OPENAI_MODEL_NAME": "gemini-2.5-flash",
+        }
+    )
+
+    assert runtime["api_key"] == "gemini-key"
+    assert runtime["is_gemini_openai_compat"] is True

@@ -281,26 +281,40 @@ async def test_ai_settings(
         submitted_api_key = settings.get("OPENAI_API_KEY", "")
         submitted_gemini_api_key = settings.get("GEMINI_API_KEY", "")
 
-        api_key = (
-            submitted_api_key or stored_api_key or submitted_gemini_api_key or stored_gemini_api_key
-        )
-
         submitted_base_url = settings.get("OPENAI_BASE_URL", "")
         submitted_model_name = settings.get("OPENAI_MODEL_NAME", "")
+        stored_base_url = env_manager.get_value("OPENAI_BASE_URL", "")
+        stored_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
         submitted_or_stored_openai = submitted_api_key or stored_api_key
         submitted_or_stored_gemini = submitted_gemini_api_key or stored_gemini_api_key
 
-        resolved_base_url = submitted_base_url
+        resolved_base_url = submitted_base_url or stored_base_url
         if not resolved_base_url and submitted_or_stored_gemini and not submitted_or_stored_openai:
             resolved_base_url = GEMINI_OPENAI_COMPAT_BASE_URL
 
-        resolved_model_name = submitted_model_name
+        resolved_model_name = submitted_model_name or stored_model_name
         if (
             not resolved_model_name
             and submitted_or_stored_gemini
             and not submitted_or_stored_openai
         ):
             resolved_model_name = GEMINI_DEFAULT_MODEL_NAME
+
+        is_gemini_endpoint = "generativelanguage.googleapis.com" in resolved_base_url
+        if is_gemini_endpoint:
+            api_key = (
+                submitted_gemini_api_key
+                or stored_gemini_api_key
+                or submitted_api_key
+                or stored_api_key
+            )
+        else:
+            api_key = (
+                submitted_api_key
+                or stored_api_key
+                or submitted_gemini_api_key
+                or stored_gemini_api_key
+            )
 
         # 创建OpenAI客户端
         client_params = {
