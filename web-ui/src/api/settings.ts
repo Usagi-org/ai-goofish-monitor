@@ -19,6 +19,7 @@ export interface NotificationSettings {
 
 export interface AiSettings {
   OPENAI_API_KEY?: string
+  GEMINI_API_KEY?: string
   OPENAI_BASE_URL?: string
   OPENAI_MODEL_NAME?: string
   PROXY_URL?: string
@@ -46,6 +47,7 @@ export interface SystemStatus {
   env_file: {
     exists: boolean
     openai_api_key_set: boolean
+    gemini_api_key_set?: boolean
     openai_base_url_set: boolean
     openai_model_name_set: boolean
     ntfy_topic_url_set: boolean

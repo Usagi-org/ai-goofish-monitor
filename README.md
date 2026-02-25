@@ -47,6 +47,7 @@ cp .env.example .env
 | 变量 | 说明 | 必填 |
 |------|------|------|
 | `OPENAI_API_KEY` | AI 模型 API Key | 是 |
+| `GEMINI_API_KEY` | Gemini API Key（当未设置 `OPENAI_API_KEY` 时可直接使用） | 否 |
 | `OPENAI_BASE_URL` | API 接口地址（兼容 OpenAI 格式） | 是 |
 | `OPENAI_MODEL_NAME` | 多模态模型名称（如 `gpt-4o`） | 是 |
 | `WEB_USERNAME` / `WEB_PASSWORD` | Web 界面登录凭据（默认 `admin` / `admin123`） | 否 |
@@ -55,6 +56,9 @@ cp .env.example .env
 | `WX_BOT_URL` | 企业微信 Webhook（需用双引号包围） | 否 |
 
 完整配置项参考 `.env.example`
+
+> 使用 `GEMINI_API_KEY` 时，若未手动填写 `OPENAI_BASE_URL` 和 `OPENAI_MODEL_NAME`，系统会自动使用
+> `https://generativelanguage.googleapis.com/v1beta/openai/` 与 `gemini-2.0-flash`。
 
 3. **启动服务**
 
