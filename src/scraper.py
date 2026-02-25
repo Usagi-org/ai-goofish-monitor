@@ -295,7 +295,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     decision_mode = str(task_config.get("decision_mode", "ai")).strip().lower()
     if decision_mode not in {"ai", "keyword"}:
         decision_mode = "ai"
-    keyword_rule_groups = task_config.get("keyword_rule_groups") or []
+    keyword_rules = task_config.get("keyword_rules") or []
     free_shipping = task_config.get('free_shipping', False)
     raw_new_publish = task_config.get('new_publish_option') or ''
     new_publish_option = raw_new_publish.strip()
@@ -759,7 +759,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 ai_analysis_result = None
                                 if decision_mode == "keyword":
                                     search_text = build_search_text(final_record)
-                                    ai_analysis_result = evaluate_keyword_rules(keyword_rule_groups, search_text)
+                                    ai_analysis_result = evaluate_keyword_rules(keyword_rules, search_text)
                                     final_record["ai_analysis"] = ai_analysis_result
                                     log_time(f"关键词判断完成。推荐状态: {ai_analysis_result.get('is_recommended')}")
 
@@ -789,6 +789,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                             "analysis_source": "ai",
                                             "is_recommended": True,
                                             "reason": "商品已跳过AI分析，直接通知",
+                                            "keyword_hit_count": 0,
                                         }
                                         final_record["ai_analysis"] = ai_analysis_result
 
@@ -808,6 +809,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                                 ai_analysis_result = await get_ai_analysis(final_record, downloaded_image_paths, prompt_text=ai_prompt_text)
                                                 if ai_analysis_result:
                                                     ai_analysis_result.setdefault("analysis_source", "ai")
+                                                    ai_analysis_result.setdefault("keyword_hit_count", 0)
                                                     final_record['ai_analysis'] = ai_analysis_result
                                                     log_time(f"AI分析完成。推荐状态: {ai_analysis_result.get('is_recommended')}")
                                                 else:
@@ -816,6 +818,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                                         "is_recommended": False,
                                                         "reason": "AI analysis returned None after retries.",
                                                         "error": "AI analysis returned None after retries.",
+                                                        "keyword_hit_count": 0,
                                                     }
                                                     final_record['ai_analysis'] = ai_analysis_result
                                             except Exception as e:
@@ -825,6 +828,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                                     "is_recommended": False,
                                                     "reason": f"AI分析异常: {e}",
                                                     "error": str(e),
+                                                    "keyword_hit_count": 0,
                                                 }
                                                 final_record['ai_analysis'] = ai_analysis_result
                                         else:
@@ -833,6 +837,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                                 "analysis_source": "ai",
                                                 "is_recommended": False,
                                                 "reason": "任务未配置AI prompt，跳过分析。",
+                                                "keyword_hit_count": 0,
                                             }
                                             final_record["ai_analysis"] = ai_analysis_result
 

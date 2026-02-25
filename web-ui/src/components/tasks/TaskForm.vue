@@ -1,22 +1,15 @@
 <script setup lang="ts">
 import { ref, watchEffect } from 'vue'
-import type { KeywordRuleGroup, Task, TaskGenerateRequest } from '@/types/task.d.ts'
+import type { Task, TaskGenerateRequest } from '@/types/task.d.ts'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toast'
-import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 type FormMode = 'create' | 'edit'
 type EmittedData = TaskGenerateRequest | Partial<Task>
-
-interface KeywordRuleGroupForm {
-  name: string
-  includeInput: string
-  excludeInput: string
-}
 
 const props = defineProps<{
   mode: FormMode
@@ -30,7 +23,7 @@ const emit = defineEmits<{
 }>()
 
 const form = ref<any>({})
-const keywordRuleGroups = ref<KeywordRuleGroupForm[]>([])
+const keywordRulesInput = ref('')
 
 function parseKeywordText(text: string): string[] {
   const values = String(text || '')
@@ -49,44 +42,6 @@ function parseKeywordText(text: string): string[] {
   return deduped
 }
 
-function toGroupForm(group?: KeywordRuleGroup | null): KeywordRuleGroupForm {
-  if (!group) {
-    return {
-      name: '',
-      includeInput: '',
-      excludeInput: '',
-    }
-  }
-  return {
-    name: group.name || '',
-    includeInput: (group.include_keywords || []).join('\n'),
-    excludeInput: (group.exclude_keywords || []).join('\n'),
-  }
-}
-
-function addKeywordGroup() {
-  keywordRuleGroups.value.push(toGroupForm())
-}
-
-function removeKeywordGroup(index: number) {
-  keywordRuleGroups.value.splice(index, 1)
-}
-
-function buildKeywordRuleGroups(): KeywordRuleGroup[] {
-  return keywordRuleGroups.value
-    .map((group) => {
-      const includeKeywords = parseKeywordText(group.includeInput)
-      const excludeKeywords = parseKeywordText(group.excludeInput)
-      return {
-        name: group.name.trim() || null,
-        include_keywords: includeKeywords,
-        exclude_keywords: excludeKeywords,
-      } as KeywordRuleGroup
-    })
-    .filter((group) => group.include_keywords.length > 0)
-}
-
-// Initialize form based on mode and initialData
 watchEffect(() => {
   if (props.mode === 'edit' && props.initialData) {
     form.value = {
@@ -97,9 +52,7 @@ watchEffect(() => {
       region: props.initialData.region || '',
       decision_mode: props.initialData.decision_mode || 'ai',
     }
-
-    const existingGroups = props.initialData.keyword_rule_groups || []
-    keywordRuleGroups.value = existingGroups.map((group) => toGroupForm(group))
+    keywordRulesInput.value = (props.initialData.keyword_rules || []).join('\n')
   } else {
     form.value = {
       task_name: '',
@@ -116,13 +69,7 @@ watchEffect(() => {
       region: '',
       decision_mode: 'ai',
     }
-    keywordRuleGroups.value = []
-  }
-})
-
-watchEffect(() => {
-  if (form.value.decision_mode === 'keyword' && keywordRuleGroups.value.length === 0) {
-    addKeywordGroup()
+    keywordRulesInput.value = ''
   }
 })
 
@@ -146,11 +93,11 @@ function handleSubmit() {
     return
   }
 
-  const normalizedGroups = buildKeywordRuleGroups()
-  if (decisionMode === 'keyword' && normalizedGroups.length === 0) {
+  const keywordRules = parseKeywordText(keywordRulesInput.value)
+  if (decisionMode === 'keyword' && keywordRules.length === 0) {
     toast({
       title: '关键词规则不完整',
-      description: '关键词模式下至少需要一个分组，且每个分组至少有一个包含关键词。',
+      description: '关键词模式下至少需要一个关键词。',
       variant: 'destructive',
     })
     return
@@ -178,7 +125,7 @@ function handleSubmit() {
   }
 
   submitData.decision_mode = decisionMode
-  submitData.keyword_rule_groups = decisionMode === 'keyword' ? normalizedGroups : []
+  submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
   if (decisionMode === 'keyword' && !submitData.description) {
     submitData.description = ''
   }
@@ -228,53 +175,15 @@ function handleSubmit() {
 
       <div v-if="form.decision_mode === 'keyword'" class="grid grid-cols-4 gap-4">
         <Label class="text-right pt-2">关键词规则</Label>
-        <div class="col-span-3 space-y-3">
+        <div class="col-span-3 space-y-2">
           <p class="text-xs text-gray-500">
-            规则逻辑：组内“包含词”是 AND，组内“排除词”是 NOT，组间是 OR。
+            单组 OR 逻辑：命中任一关键词即推荐（每行一个关键词，或使用逗号分隔）。
           </p>
-          <div
-            v-for="(group, index) in keywordRuleGroups"
-            :key="`group-${index}`"
-            class="rounded-md border border-slate-200 p-3 space-y-2"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <Input
-                v-model="group.name"
-                :placeholder="`规则组名称（可选）- 组 ${index + 1}`"
-                class="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                @click="removeKeywordGroup(index)"
-                :disabled="keywordRuleGroups.length === 1"
-              >
-                删除组
-              </Button>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div class="space-y-1">
-                <Label class="text-xs">包含关键词（AND）</Label>
-                <Textarea
-                  v-model="group.includeInput"
-                  class="min-h-[90px]"
-                  placeholder="每行一个关键词，或使用逗号分隔"
-                />
-              </div>
-              <div class="space-y-1">
-                <Label class="text-xs">排除关键词（NOT）</Label>
-                <Textarea
-                  v-model="group.excludeInput"
-                  class="min-h-[90px]"
-                  placeholder="每行一个关键词，或使用逗号分隔"
-                />
-              </div>
-            </div>
-          </div>
-          <Button type="button" variant="outline" size="sm" @click="addKeywordGroup">
-            + 添加规则组
-          </Button>
+          <Textarea
+            v-model="keywordRulesInput"
+            class="min-h-[120px]"
+            placeholder="示例：a7m4&#10;验货宝&#10;全画幅"
+          />
         </div>
       </div>
 

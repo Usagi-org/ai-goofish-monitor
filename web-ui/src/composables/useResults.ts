@@ -22,6 +22,8 @@ export function useResults() {
   
   const filters = reactive<Required<Omit<GetResultContentParams, 'page' | 'limit'>>>({
     recommended_only: false,
+    ai_recommended_only: false,
+    keyword_recommended_only: false,
     sort_by: 'crawl_time',
     sort_order: 'desc',
   })

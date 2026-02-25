@@ -76,7 +76,9 @@ async def get_result_file_content(
     filename: str,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    recommended_only: bool = Query(False),
+    recommended_only: bool = Query(False),  # 兼容旧参数，等价于 ai_recommended_only
+    ai_recommended_only: bool = Query(False),
+    keyword_recommended_only: bool = Query(False),
     sort_by: str = Query("crawl_time"),
     sort_order: str = Query("desc"),
 ):
@@ -89,14 +91,28 @@ async def get_result_file_content(
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="结果文件未找到")
 
+    if ai_recommended_only and keyword_recommended_only:
+        raise HTTPException(status_code=400, detail="AI推荐筛选与关键词推荐筛选不能同时开启。")
+
+    # 兼容旧参数 recommended_only：映射到 ai_recommended_only
+    if recommended_only and not ai_recommended_only and not keyword_recommended_only:
+        ai_recommended_only = True
+
     results = []
     try:
         async with aiofiles.open(filepath, 'r', encoding='utf-8') as f:
             async for line in f:
                 try:
                     record = json.loads(line)
-                    if recommended_only:
-                        if record.get("ai_analysis", {}).get("is_recommended") is True:
+                    ai_analysis = record.get("ai_analysis", {}) or {}
+                    is_recommended = ai_analysis.get("is_recommended") is True
+                    source = ai_analysis.get("analysis_source")
+
+                    if ai_recommended_only:
+                        if is_recommended and source == "ai":
+                            results.append(record)
+                    elif keyword_recommended_only:
+                        if is_recommended and source == "keyword":
                             results.append(record)
                     else:
                         results.append(record)
@@ -116,6 +132,12 @@ async def get_result_file_content(
                 return float(price_str)
             except (ValueError, TypeError):
                 return 0.0
+        elif sort_by == "keyword_hit_count":
+            raw_count = item.get("ai_analysis", {}).get("keyword_hit_count", 0)
+            try:
+                return int(raw_count)
+            except (TypeError, ValueError):
+                return 0
         else:  # default to crawl_time
             return item.get("爬取时间", "")
 

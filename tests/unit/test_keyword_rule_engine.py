@@ -22,32 +22,31 @@ def test_build_search_text_contains_product_and_seller_fields():
     assert "支持同城面交" in text
 
 
-def test_keyword_rules_group_and_or_match():
+def test_keyword_rules_or_match_any_keyword():
     text = build_search_text(_sample_record())
-    groups = [
-        {"name": "组1", "include_keywords": ["a7m4", "佳能"], "exclude_keywords": []},
-        {"name": "组2", "include_keywords": ["a7m4", "验货宝"], "exclude_keywords": []},
-    ]
-    result = evaluate_keyword_rules(groups, text)
+    result = evaluate_keyword_rules(["a7m4", "佳能"], text)
     assert result["is_recommended"] is True
     assert result["analysis_source"] == "keyword"
-    assert result["matched_groups"] == ["组2"]
+    assert result["keyword_hit_count"] == 1
+    assert result["matched_keywords"] == ["a7m4"]
 
 
-def test_keyword_rules_not_keyword_blocks_group():
+def test_keyword_rules_count_multiple_hits():
     text = build_search_text(_sample_record())
-    groups = [
-        {"name": "组1", "include_keywords": ["a7m4"], "exclude_keywords": ["面交"]},
-    ]
-    result = evaluate_keyword_rules(groups, text)
-    assert result["is_recommended"] is False
-    assert "排除词" in result["reason"]
+    result = evaluate_keyword_rules(["a7m4", "验货宝", "摄影器材店"], text)
+    assert result["is_recommended"] is True
+    assert result["keyword_hit_count"] == 3
 
 
 def test_keyword_rules_case_insensitive_contains():
     text = build_search_text(_sample_record())
-    groups = [
-        {"name": "组1", "include_keywords": ["SONY", "A7M4"], "exclude_keywords": []},
-    ]
-    result = evaluate_keyword_rules(groups, text)
+    result = evaluate_keyword_rules(["SONY", "A7M4"], text)
     assert result["is_recommended"] is True
+    assert result["keyword_hit_count"] == 2
+
+
+def test_keyword_rules_no_match():
+    text = build_search_text(_sample_record())
+    result = evaluate_keyword_rules(["佳能", "单反"], text)
+    assert result["is_recommended"] is False
+    assert result["keyword_hit_count"] == 0

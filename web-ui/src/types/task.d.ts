@@ -1,11 +1,5 @@
 // Based on the Pydantic model in the backend
 
-export interface KeywordRuleGroup {
-  name?: string | null;
-  include_keywords: string[];
-  exclude_keywords: string[];
-}
-
 export interface Task {
   id: number;
   task_name: string;
@@ -24,14 +18,14 @@ export interface Task {
   new_publish_option?: string | null;
   region?: string | null;
   decision_mode: 'ai' | 'keyword';
-  keyword_rule_groups: KeywordRuleGroup[];
+  keyword_rules: string[];
   is_running: boolean;
 }
 
 // For PATCH requests, all fields are optional
 export type TaskUpdate = Partial<Omit<Task, 'id'>>;
 
-// For AI-driven task creation
+// For task creation
 export interface TaskGenerateRequest {
   task_name: string;
   keyword: string;
@@ -46,5 +40,5 @@ export interface TaskGenerateRequest {
   new_publish_option?: string | null;
   region?: string | null;
   decision_mode?: 'ai' | 'keyword';
-  keyword_rule_groups?: KeywordRuleGroup[];
+  keyword_rules?: string[];
 }

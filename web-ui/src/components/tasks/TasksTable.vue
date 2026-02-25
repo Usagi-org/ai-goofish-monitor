@@ -22,7 +22,7 @@ interface Props {
 const props = defineProps<Props>()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
 const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
-const keywordGroupCount = (task: Task) => task.keyword_rule_groups?.length || 0
+const keywordRuleCount = (task: Task) => task.keyword_rules?.length || 0
 
 const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
@@ -162,10 +162,10 @@ const emit = defineEmits<{
             <TableCell class="align-middle">
               <div v-if="isKeywordMode(task)" class="flex flex-col items-center gap-2">
                 <Badge variant="outline" class="border-blue-200 text-blue-700 bg-blue-50">
-                  规则组 {{ keywordGroupCount(task) }} 个
+                  关键词 {{ keywordRuleCount(task) }} 个
                 </Badge>
                 <span class="text-xs text-slate-500">
-                  组内AND / 组间OR / 支持NOT
+                  单组OR（命中一个即可）
                 </span>
               </div>
               <div v-else class="flex flex-col items-center gap-2">

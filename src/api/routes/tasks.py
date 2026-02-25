@@ -25,14 +25,8 @@ async def _reload_scheduler_if_needed(
     await scheduler_service.reload_jobs(tasks)
 
 
-def _has_keyword_groups(groups) -> bool:
-    if not groups:
-        return False
-    for group in groups:
-        include_keywords = getattr(group, "include_keywords", None)
-        if include_keywords:
-            return True
-    return False
+def _has_keyword_rules(rules) -> bool:
+    return bool(rules and len(rules) > 0)
 
 
 @router.get("", response_model=List[dict])
@@ -132,7 +126,7 @@ async def generate_task(
             new_publish_option=req.new_publish_option,
             region=req.region,
             decision_mode=mode,
-            keyword_rule_groups=req.keyword_rule_groups,
+            keyword_rules=req.keyword_rules,
         )
 
         # 5. 使用 TaskService 创建任务
@@ -184,13 +178,13 @@ async def update_task(
         switched_to_ai = current_mode != "ai" and target_mode == "ai"
 
         if target_mode == "keyword":
-            final_groups = (
-                task_update.keyword_rule_groups
-                if task_update.keyword_rule_groups is not None
-                else getattr(existing_task, "keyword_rule_groups", [])
+            final_rules = (
+                task_update.keyword_rules
+                if task_update.keyword_rules is not None
+                else getattr(existing_task, "keyword_rules", [])
             )
-            if not _has_keyword_groups(final_groups):
-                raise HTTPException(status_code=400, detail="关键词模式下至少需要一个包含关键词。")
+            if not _has_keyword_rules(final_rules):
+                raise HTTPException(status_code=400, detail="关键词模式下至少需要一个关键词。")
 
         # 检查是否需要重新生成 criteria 文件
         if target_mode == "ai" and (description_changed or switched_to_ai):

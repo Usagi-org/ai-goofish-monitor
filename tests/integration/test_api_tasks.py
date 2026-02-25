@@ -52,13 +52,7 @@ def test_generate_keyword_mode_task_without_ai_criteria(api_client):
         "keyword": "sony a7m4",
         "description": "",
         "decision_mode": "keyword",
-        "keyword_rule_groups": [
-            {
-                "name": "主规则",
-                "include_keywords": ["a7m4", "验货宝"],
-                "exclude_keywords": ["瑕疵", "磕碰"],
-            }
-        ],
+        "keyword_rules": ["a7m4", "验货宝"],
         "max_pages": 2,
         "personal_only": True,
     }
@@ -68,4 +62,4 @@ def test_generate_keyword_mode_task_without_ai_criteria(api_client):
     created = response.json()["task"]
     assert created["decision_mode"] == "keyword"
     assert created["ai_prompt_criteria_file"] == ""
-    assert created["keyword_rule_groups"][0]["include_keywords"] == ["a7m4", "验货宝"]
+    assert created["keyword_rules"] == ["a7m4", "验货宝"]

@@ -20,8 +20,9 @@ interface Props {
   files: string[]
   fileOptions?: FileOption[]
   selectedFile: string | null
-  recommendedOnly: boolean
-  sortBy: 'crawl_time' | 'publish_time' | 'price'
+  aiRecommendedOnly: boolean
+  keywordRecommendedOnly: boolean
+  sortBy: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'
   sortOrder: 'asc' | 'desc'
   isLoading: boolean
   isReady: boolean
@@ -60,12 +61,27 @@ const isSelectDisabled = computed(() => !props.isReady || options.value.length =
 
 const emit = defineEmits<{
   (e: 'update:selectedFile', value: string): void
-  (e: 'update:recommendedOnly', value: boolean): void
-  (e: 'update:sortBy', value: 'crawl_time' | 'publish_time' | 'price'): void
+  (e: 'update:aiRecommendedOnly', value: boolean): void
+  (e: 'update:keywordRecommendedOnly', value: boolean): void
+  (e: 'update:sortBy', value: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'): void
   (e: 'update:sortOrder', value: 'asc' | 'desc'): void
   (e: 'refresh'): void
   (e: 'delete'): void
 }>()
+
+function handleToggleAiRecommended(value: boolean) {
+  emit('update:aiRecommendedOnly', value)
+  if (value) {
+    emit('update:keywordRecommendedOnly', false)
+  }
+}
+
+function handleToggleKeywordRecommended(value: boolean) {
+  emit('update:keywordRecommendedOnly', value)
+  if (value) {
+    emit('update:aiRecommendedOnly', false)
+  }
+}
 </script>
 
 <template>
@@ -97,6 +113,7 @@ const emit = defineEmits<{
         <SelectItem value="crawl_time">按爬取时间</SelectItem>
         <SelectItem value="publish_time">按发布时间</SelectItem>
         <SelectItem value="price">按价格</SelectItem>
+        <SelectItem value="keyword_hit_count">按命中数</SelectItem>
       </SelectContent>
     </Select>
 
@@ -115,11 +132,20 @@ const emit = defineEmits<{
 
     <div class="flex items-center space-x-2">
       <Checkbox
-        id="recommended-only"
-        :model-value="props.recommendedOnly"
-        @update:modelValue="(value) => emit('update:recommendedOnly', value === true)"
+        id="ai-recommended-only"
+        :model-value="props.aiRecommendedOnly"
+        @update:modelValue="(value) => handleToggleAiRecommended(value === true)"
       />
-      <Label for="recommended-only" class="cursor-pointer">仅看AI推荐</Label>
+      <Label for="ai-recommended-only" class="cursor-pointer">仅看AI推荐</Label>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <Checkbox
+        id="keyword-recommended-only"
+        :model-value="props.keywordRecommendedOnly"
+        @update:modelValue="(value) => handleToggleKeywordRecommended(value === true)"
+      />
+      <Label for="keyword-recommended-only" class="cursor-pointer">仅看关键词推荐</Label>
     </div>
 
     <Button @click="emit('refresh')" :disabled="props.isLoading">

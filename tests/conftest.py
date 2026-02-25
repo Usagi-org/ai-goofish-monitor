@@ -46,7 +46,7 @@ def sample_task_payload():
         "ai_prompt_base_file": "prompts/base_prompt.txt",
         "ai_prompt_criteria_file": "prompts/sony_a7m4_criteria.txt",
         "decision_mode": "ai",
-        "keyword_rule_groups": [],
+        "keyword_rules": [],
     }
 
 

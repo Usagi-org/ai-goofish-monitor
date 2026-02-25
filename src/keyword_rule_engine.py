@@ -1,6 +1,5 @@
 """
-关键词规则判断引擎。
-组内 include_keywords 为 AND，exclude_keywords 为 NOT，组间为 OR。
+关键词判断引擎：单组 OR 逻辑，命中任意关键词即推荐。
 """
 from typing import Any, Dict, Iterable, List
 
@@ -53,83 +52,41 @@ def _normalize_keywords(values: Iterable[str]) -> List[str]:
     return normalized
 
 
-def _extract_group_fields(group: Any, fallback_name: str) -> Dict[str, Any]:
-    if isinstance(group, dict):
-        name = group.get("name")
-        include_keywords = group.get("include_keywords") or []
-        exclude_keywords = group.get("exclude_keywords") or []
-    else:
-        name = getattr(group, "name", None)
-        include_keywords = getattr(group, "include_keywords", []) or []
-        exclude_keywords = getattr(group, "exclude_keywords", []) or []
-
-    group_name = str(name).strip() if name else fallback_name
-    return {
-        "name": group_name,
-        "include_keywords": _normalize_keywords(include_keywords),
-        "exclude_keywords": _normalize_keywords(exclude_keywords),
-    }
-
-
-def evaluate_keyword_rules(groups: List[Any], search_text: str) -> Dict[str, Any]:
+def evaluate_keyword_rules(keywords: List[str], search_text: str) -> Dict[str, Any]:
     normalized_text = normalize_text(search_text)
+    normalized_keywords = _normalize_keywords(keywords)
+
     if not normalized_text:
         return {
             "analysis_source": "keyword",
             "is_recommended": False,
             "reason": "可匹配文本为空，关键词规则无法执行。",
-            "matched_groups": [],
             "matched_keywords": [],
-            "blocked_keywords": [],
+            "keyword_hit_count": 0,
         }
 
-    if not groups:
+    if not normalized_keywords:
         return {
             "analysis_source": "keyword",
             "is_recommended": False,
-            "reason": "未配置关键词规则分组。",
-            "matched_groups": [],
+            "reason": "未配置关键词规则。",
             "matched_keywords": [],
-            "blocked_keywords": [],
+            "keyword_hit_count": 0,
         }
 
-    group_fail_reasons: List[str] = []
-    for index, raw_group in enumerate(groups, start=1):
-        group = _extract_group_fields(raw_group, fallback_name=f"规则组{index}")
-        include_keywords = group["include_keywords"]
-        exclude_keywords = group["exclude_keywords"]
-        group_name = group["name"]
+    matched_keywords = [kw for kw in normalized_keywords if kw in normalized_text]
+    hit_count = len(matched_keywords)
+    is_recommended = hit_count > 0
 
-        if not include_keywords:
-            group_fail_reasons.append(f"{group_name}: 缺少包含关键词")
-            continue
+    if is_recommended:
+        reason = f"命中 {hit_count} 个关键词：{', '.join(matched_keywords)}"
+    else:
+        reason = "未命中任何关键词。"
 
-        missing = [kw for kw in include_keywords if kw not in normalized_text]
-        blocked = [kw for kw in exclude_keywords if kw in normalized_text]
-        if missing or blocked:
-            detail_parts = []
-            if missing:
-                detail_parts.append(f"缺少 {', '.join(missing)}")
-            if blocked:
-                detail_parts.append(f"命中排除词 {', '.join(blocked)}")
-            group_fail_reasons.append(f"{group_name}: {'; '.join(detail_parts)}")
-            continue
-
-        return {
-            "analysis_source": "keyword",
-            "is_recommended": True,
-            "reason": f"命中关键词规则：{group_name}（包含词全部满足，且未触发排除词）。",
-            "matched_groups": [group_name],
-            "matched_keywords": include_keywords,
-            "blocked_keywords": [],
-        }
-
-    reason = "；".join(group_fail_reasons[:3]) if group_fail_reasons else "所有关键词规则组均未命中。"
     return {
         "analysis_source": "keyword",
-        "is_recommended": False,
+        "is_recommended": is_recommended,
         "reason": reason,
-        "matched_groups": [],
-        "matched_keywords": [],
-        "blocked_keywords": [],
+        "matched_keywords": matched_keywords,
+        "keyword_hit_count": hit_count,
     }

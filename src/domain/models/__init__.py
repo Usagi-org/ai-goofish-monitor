@@ -1,3 +1,3 @@
-from .task import KeywordRuleGroup, Task, TaskCreate, TaskUpdate, TaskStatus
+from .task import Task, TaskCreate, TaskUpdate, TaskStatus
 
-__all__ = ["KeywordRuleGroup", "Task", "TaskCreate", "TaskUpdate", "TaskStatus"]
+__all__ = ["Task", "TaskCreate", "TaskUpdate", "TaskStatus"]
