@@ -21,6 +21,8 @@ interface Props {
 
 const props = defineProps<Props>()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
+const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
+const keywordRuleCount = (task: Task) => task.keyword_rules?.length || 0
 
 const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
@@ -43,7 +45,7 @@ const emit = defineEmits<{
           <TableHead class="text-center text-slate-600">价格范围</TableHead>
           <TableHead class="text-center text-slate-600">筛选条件</TableHead>
           <TableHead class="text-center text-slate-600">最大页数</TableHead>
-          <TableHead class="text-center text-slate-600">AI 标准</TableHead>
+          <TableHead class="text-center text-slate-600">判断配置</TableHead>
           <TableHead class="text-center text-slate-600">定时规则</TableHead>
           <TableHead class="text-right text-slate-600">操作</TableHead>
         </TableRow>
@@ -80,6 +82,12 @@ const emit = defineEmits<{
               <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2">
                   <span class="text-base font-semibold text-slate-900">{{ task.task_name }}</span>
+                  <Badge
+                    variant="outline"
+                    :class="isKeywordMode(task) ? 'border-blue-200 text-blue-600' : 'border-emerald-200 text-emerald-700'"
+                  >
+                    {{ isKeywordMode(task) ? '关键词判断' : 'AI判断' }}
+                  </Badge>
                   <Badge variant="outline" class="border-slate-200 text-xs text-slate-500">
                     关键词
                   </Badge>
@@ -152,7 +160,15 @@ const emit = defineEmits<{
             </TableCell>
 
             <TableCell class="align-middle">
-              <div class="flex flex-col items-center gap-2">
+              <div v-if="isKeywordMode(task)" class="flex flex-col items-center gap-2">
+                <Badge variant="outline" class="border-blue-200 text-blue-700 bg-blue-50">
+                  关键词 {{ keywordRuleCount(task) }} 个
+                </Badge>
+                <span class="text-xs text-slate-500">
+                  单组OR（命中一个即可）
+                </span>
+              </div>
+              <div v-else class="flex flex-col items-center gap-2">
                 <span
                   class="px-2 py-1 rounded-md bg-slate-100 text-xs font-mono text-slate-700 truncate max-w-[170px]"
                   :title="task.ai_prompt_criteria_file || '暂无标准文件'"

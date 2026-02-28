@@ -45,6 +45,8 @@ def sample_task_payload():
         "cron": "*/15 * * * *",
         "ai_prompt_base_file": "prompts/base_prompt.txt",
         "ai_prompt_criteria_file": "prompts/sony_a7m4_criteria.txt",
+        "decision_mode": "ai",
+        "keyword_rules": [],
     }
 
 
@@ -61,6 +63,14 @@ class FakeProcessService:
         self.stopped.append(task_id)
 
 
+class FakeSchedulerService:
+    def __init__(self):
+        self.reload_calls = 0
+
+    async def reload_jobs(self, _tasks):
+        self.reload_calls += 1
+
+
 @pytest.fixture()
 def api_context(tmp_path):
     config_file = tmp_path / "config.json"
@@ -69,6 +79,7 @@ def api_context(tmp_path):
     repository = JsonTaskRepository(config_file=str(config_file))
     task_service = TaskService(repository)
     process_service = FakeProcessService()
+    scheduler_service = FakeSchedulerService()
 
     app = FastAPI()
     app.include_router(tasks.router)
@@ -79,13 +90,18 @@ def api_context(tmp_path):
     def override_get_process_service():
         return process_service
 
+    def override_get_scheduler_service():
+        return scheduler_service
+
     app.dependency_overrides[deps.get_task_service] = override_get_task_service
     app.dependency_overrides[deps.get_process_service] = override_get_process_service
+    app.dependency_overrides[deps.get_scheduler_service] = override_get_scheduler_service
 
     return {
         "app": app,
         "config_file": config_file,
         "process_service": process_service,
+        "scheduler_service": scheduler_service,
     }
 
 

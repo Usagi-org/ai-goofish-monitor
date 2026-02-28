@@ -22,9 +22,26 @@ const emit = defineEmits<{
   (e: 'submit', data: EmittedData): void
 }>()
 
-const form = ref<EmittedData>({})
+const form = ref<any>({})
+const keywordRulesInput = ref('')
 
-// Initialize form based on mode and initialData
+function parseKeywordText(text: string): string[] {
+  const values = String(text || '')
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+
+  const seen = new Set<string>()
+  const deduped: string[] = []
+  for (const value of values) {
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(value)
+  }
+  return deduped
+}
+
 watchEffect(() => {
   if (props.mode === 'edit' && props.initialData) {
     form.value = {
@@ -33,7 +50,9 @@ watchEffect(() => {
       free_shipping: props.initialData.free_shipping ?? true,
       new_publish_option: props.initialData.new_publish_option || '__none__',
       region: props.initialData.region || '',
+      decision_mode: props.initialData.decision_mode || 'ai',
     }
+    keywordRulesInput.value = (props.initialData.keyword_rules || []).join('\n')
   } else {
     form.value = {
       task_name: '',
@@ -48,16 +67,37 @@ watchEffect(() => {
       free_shipping: true,
       new_publish_option: '__none__',
       region: '',
+      decision_mode: 'ai',
     }
+    keywordRulesInput.value = ''
   }
 })
 
 function handleSubmit() {
-  // Basic validation
-  if (!form.value.task_name || !form.value.keyword || !form.value.description) {
+  if (!form.value.task_name || !form.value.keyword) {
     toast({
       title: '信息不完整',
-      description: '任务名称、关键词和详细需求不能为空。',
+      description: '任务名称和关键词不能为空。',
+      variant: 'destructive',
+    })
+    return
+  }
+
+  const decisionMode = form.value.decision_mode || 'ai'
+  if (decisionMode === 'ai' && !String(form.value.description || '').trim()) {
+    toast({
+      title: '信息不完整',
+      description: 'AI 模式下详细需求不能为空。',
+      variant: 'destructive',
+    })
+    return
+  }
+
+  const keywordRules = parseKeywordText(keywordRulesInput.value)
+  if (decisionMode === 'keyword' && keywordRules.length === 0) {
+    toast({
+      title: '关键词规则不完整',
+      description: '关键词模式下至少需要一个关键词。',
       variant: 'destructive',
     })
     return
@@ -65,9 +105,11 @@ function handleSubmit() {
 
   // Filter out fields that shouldn't be sent in update requests
   const { id, is_running, ...submitData } = form.value as any
+
   if (submitData.account_state_file === '') {
     submitData.account_state_file = null
   }
+
   if (typeof submitData.region === 'string') {
     const normalized = submitData.region
       .trim()
@@ -77,9 +119,17 @@ function handleSubmit() {
       .join('/')
     submitData.region = normalized
   }
+
   if (submitData.new_publish_option === '__none__') {
     submitData.new_publish_option = ''
   }
+
+  submitData.decision_mode = decisionMode
+  submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
+  if (decisionMode === 'keyword' && !submitData.description) {
+    submitData.description = ''
+  }
+
   emit('submit', submitData)
 }
 </script>
@@ -96,15 +146,47 @@ function handleSubmit() {
         <Input id="keyword" v-model="form.keyword" class="col-span-3" placeholder="例如：a7m4" required />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="description" class="text-right">详细需求</Label>
-        <Textarea
-          id="description"
-          v-model="form.description"
-          class="col-span-3"
-          placeholder="请用自然语言详细描述你的购买需求，AI将根据此描述生成分析标准..."
-          required
-        />
+        <Label class="text-right">判断模式</Label>
+        <div class="col-span-3">
+          <Select v-model="form.decision_mode">
+            <SelectTrigger>
+              <SelectValue placeholder="请选择判断模式" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ai">AI判断</SelectItem>
+              <SelectItem value="keyword">关键词判断</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label for="description" class="text-right">详细需求</Label>
+        <div class="col-span-3 space-y-1">
+          <Textarea
+            id="description"
+            v-model="form.description"
+            placeholder="请用自然语言详细描述你的购买需求，AI将根据此描述生成分析标准..."
+          />
+          <p v-if="form.decision_mode === 'keyword'" class="text-xs text-gray-500">
+            关键词模式下可留空；AI模式下必填。
+          </p>
+        </div>
+      </div>
+
+      <div v-if="form.decision_mode === 'keyword'" class="grid grid-cols-4 gap-4">
+        <Label class="text-right pt-2">关键词规则</Label>
+        <div class="col-span-3 space-y-2">
+          <p class="text-xs text-gray-500">
+            单组 OR 逻辑：命中任一关键词即推荐（每行一个关键词，或使用逗号分隔）。
+          </p>
+          <Textarea
+            v-model="keywordRulesInput"
+            class="min-h-[120px]"
+            placeholder="示例：a7m4&#10;验货宝&#10;全画幅"
+          />
+        </div>
+      </div>
+
       <div class="grid grid-cols-4 items-center gap-4">
         <Label class="text-right">价格范围</Label>
         <div class="col-span-3 flex items-center gap-2">

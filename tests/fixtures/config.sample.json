@@ -10,7 +10,9 @@
     "max_price": "16000",
     "cron": "*/15 * * * *",
     "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/sony_a7m4_criteria.txt"
+    "ai_prompt_criteria_file": "prompts/sony_a7m4_criteria.txt",
+    "decision_mode": "ai",
+    "keyword_rules": []
   },
   {
     "task_name": "Canon R6",
@@ -23,6 +25,8 @@
     "max_price": "12000",
     "cron": "*/30 * * * *",
     "ai_prompt_base_file": "prompts/base_prompt.txt",
-    "ai_prompt_criteria_file": "prompts/canon_r6_criteria.txt"
+    "ai_prompt_criteria_file": "prompts/canon_r6_criteria.txt",
+    "decision_mode": "ai",
+    "keyword_rules": []
   }
 ]

@@ -5,6 +5,7 @@ import argparse
 import json
 import signal
 import contextlib
+import re
 
 from src.config import STATE_FILE
 from src.scraper import scrape_xianyu
@@ -40,6 +41,36 @@ async def main():
     except (json.JSONDecodeError, IOError) as e:
         sys.exit(f"错误: 读取或解析配置文件 '{args.config}' 失败: {e}")
 
+    def normalize_keywords(value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_values = re.split(r"[\n,]+", value)
+        elif isinstance(value, (list, tuple, set)):
+            raw_values = list(value)
+        else:
+            raw_values = [value]
+
+        normalized = []
+        seen = set()
+        for item in raw_values:
+            text = str(item).strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            normalized.append(text)
+        return normalized
+
+    def flatten_legacy_groups(groups):
+        merged = []
+        for group in groups or []:
+            if isinstance(group, dict):
+                merged.extend(normalize_keywords(group.get("include_keywords")))
+        return normalize_keywords(merged)
+
     def has_bound_account(tasks: list) -> bool:
         for task in tasks:
             account = task.get("account_state_file")
@@ -60,8 +91,22 @@ async def main():
             f"错误: 未找到登录状态文件。请在 state/ 中添加账号或配置 account_state_file。"
         )
 
-    # 读取所有prompt文件内容
+    # 读取所有prompt文件内容（关键词模式不需要加载prompt）
     for task in tasks_config:
+        decision_mode = str(task.get("decision_mode", "ai")).strip().lower()
+        if decision_mode not in {"ai", "keyword"}:
+            decision_mode = "ai"
+        task["decision_mode"] = decision_mode
+        keyword_rules = task.get("keyword_rules")
+        if keyword_rules is None and task.get("keyword_rule_groups") is not None:
+            task["keyword_rules"] = flatten_legacy_groups(task.get("keyword_rule_groups") or [])
+        else:
+            task["keyword_rules"] = normalize_keywords(keyword_rules)
+
+        if decision_mode == "keyword":
+            task["ai_prompt_text"] = ""
+            continue
+
         if task.get("enabled", False) and task.get("ai_prompt_base_file") and task.get("ai_prompt_criteria_file"):
             try:
                 with open(task["ai_prompt_base_file"], 'r', encoding='utf-8') as f_base:

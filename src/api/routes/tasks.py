@@ -25,6 +25,10 @@ async def _reload_scheduler_if_needed(
     await scheduler_service.reload_jobs(tasks)
 
 
+def _has_keyword_rules(rules) -> bool:
+    return bool(rules and len(rules) > 0)
+
+
 @router.get("", response_model=List[dict])
 async def get_tasks(
     service: TaskService = Depends(get_task_service),
@@ -64,40 +68,44 @@ async def generate_task(
     service: TaskService = Depends(get_task_service),
     scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
-    """使用 AI 生成分析标准并创建新任务"""
-    print(f"收到 AI 任务生成请求: {req.task_name}")
+    """创建任务。AI模式会生成分析标准，关键词模式直接保存规则。"""
+    print(f"收到任务生成请求: {req.task_name}，模式: {req.decision_mode}")
 
     try:
-        # 1. 生成唯一的文件名
-        safe_keyword = "".join(
-            c for c in req.keyword.lower().replace(' ', '_')
-            if c.isalnum() or c in "_-"
-        ).rstrip()
-        output_filename = f"prompts/{safe_keyword}_criteria.txt"
-        print(f"生成的文件路径: {output_filename}")
+        mode = req.decision_mode or "ai"
+        output_filename = ""
 
-        # 2. 调用 AI 生成分析标准
-        print("开始调用AI生成分析标准...")
-        generated_criteria = await generate_criteria(
-            user_description=req.description,
-            reference_file_path="prompts/macbook_criteria.txt"
-        )
+        if mode == "ai":
+            # 1. 生成唯一的文件名
+            safe_keyword = "".join(
+                c for c in req.keyword.lower().replace(' ', '_')
+                if c.isalnum() or c in "_-"
+            ).rstrip()
+            output_filename = f"prompts/{safe_keyword}_criteria.txt"
+            print(f"生成的文件路径: {output_filename}")
 
-        print(f"AI生成的分析标准长度: {len(generated_criteria) if generated_criteria else 0}")
-        if not generated_criteria or len(generated_criteria.strip()) == 0:
-            print("AI返回的内容为空或只有空白字符")
-            raise HTTPException(status_code=500, detail="AI未能生成分析标准，返回内容为空。")
+            # 2. 调用 AI 生成分析标准
+            print("开始调用AI生成分析标准...")
+            generated_criteria = await generate_criteria(
+                user_description=req.description,
+                reference_file_path="prompts/macbook_criteria.txt"
+            )
 
-        # 3. 保存生成的文本到新文件
-        print(f"开始保存分析标准到文件: {output_filename}")
-        try:
-            os.makedirs("prompts", exist_ok=True)
-            async with aiofiles.open(output_filename, 'w', encoding='utf-8') as f:
-                await f.write(generated_criteria)
-            print(f"新的分析标准已保存到: {output_filename}")
-        except IOError as e:
-            print(f"保存分析标准文件失败: {e}")
-            raise HTTPException(status_code=500, detail=f"保存分析标准文件失败: {e}")
+            print(f"AI生成的分析标准长度: {len(generated_criteria) if generated_criteria else 0}")
+            if not generated_criteria or len(generated_criteria.strip()) == 0:
+                print("AI返回的内容为空或只有空白字符")
+                raise HTTPException(status_code=500, detail="AI未能生成分析标准，返回内容为空。")
+
+            # 3. 保存生成的文本到新文件
+            print(f"开始保存分析标准到文件: {output_filename}")
+            try:
+                os.makedirs("prompts", exist_ok=True)
+                async with aiofiles.open(output_filename, 'w', encoding='utf-8') as f:
+                    await f.write(generated_criteria)
+                print(f"新的分析标准已保存到: {output_filename}")
+            except IOError as e:
+                print(f"保存分析标准文件失败: {e}")
+                raise HTTPException(status_code=500, detail=f"保存分析标准文件失败: {e}")
 
         # 4. 创建新任务对象
         print("开始创建新任务对象...")
@@ -105,7 +113,7 @@ async def generate_task(
             task_name=req.task_name,
             enabled=True,
             keyword=req.keyword,
-            description=req.description,
+            description=req.description or "",
             max_pages=req.max_pages,
             personal_only=req.personal_only,
             min_price=req.min_price,
@@ -117,15 +125,17 @@ async def generate_task(
             free_shipping=req.free_shipping,
             new_publish_option=req.new_publish_option,
             region=req.region,
+            decision_mode=mode,
+            keyword_rules=req.keyword_rules,
         )
 
         # 5. 使用 TaskService 创建任务
         print("开始通过 TaskService 创建任务...")
         task = await service.create_task(task_create)
 
-        print(f"AI任务创建成功: {req.task_name}")
+        print(f"任务创建成功: {req.task_name}")
         await _reload_scheduler_if_needed(service, scheduler_service)
-        return {"message": "AI 任务创建成功。", "task": task.dict()}
+        return {"message": "任务创建成功。", "task": task.dict()}
 
     except HTTPException:
         raise
@@ -159,11 +169,36 @@ async def update_task(
         if not existing_task:
             raise HTTPException(status_code=404, detail="任务未找到")
 
+        current_mode = getattr(existing_task, "decision_mode", "ai") or "ai"
+        target_mode = task_update.decision_mode or current_mode
+        description_changed = (
+            task_update.description is not None
+            and task_update.description != existing_task.description
+        )
+        switched_to_ai = current_mode != "ai" and target_mode == "ai"
+
+        if target_mode == "keyword":
+            final_rules = (
+                task_update.keyword_rules
+                if task_update.keyword_rules is not None
+                else getattr(existing_task, "keyword_rules", [])
+            )
+            if not _has_keyword_rules(final_rules):
+                raise HTTPException(status_code=400, detail="关键词模式下至少需要一个关键词。")
+
         # 检查是否需要重新生成 criteria 文件
-        if task_update.description is not None and task_update.description != existing_task.description:
-            print(f"检测到任务 {task_id} 的 description 更新，开始重新生成 criteria 文件...")
+        if target_mode == "ai" and (description_changed or switched_to_ai):
+            print(f"检测到任务 {task_id} 需要刷新 AI 标准文件，开始重新生成...")
 
             try:
+                description_for_ai = (
+                    task_update.description
+                    if task_update.description is not None
+                    else existing_task.description
+                )
+                if not str(description_for_ai or "").strip():
+                    raise HTTPException(status_code=400, detail="AI 模式下详细需求不能为空。")
+
                 # 生成新的文件名
                 safe_keyword = "".join(
                     c for c in existing_task.keyword.lower().replace(' ', '_')
@@ -175,7 +210,7 @@ async def update_task(
                 # 调用 AI 生成新的分析标准
                 print("开始调用 AI 生成新的分析标准...")
                 generated_criteria = await generate_criteria(
-                    user_description=task_update.description,
+                    user_description=description_for_ai,
                     reference_file_path="prompts/macbook_criteria.txt"
                 )
 

@@ -22,6 +22,8 @@ const ai = props.item.ai_analysis
 
 const isRecommended = ai?.is_recommended === true
 const recommendationText = isRecommended ? '推荐' : (ai?.is_recommended === false ? '不推荐' : '待定')
+const analysisSource = ai?.analysis_source === 'keyword' ? '关键词' : 'AI'
+const keywordHitCount = ai?.keyword_hit_count ?? 0
 
 const imageUrl = info.商品图片列表?.[0] || info.商品主图链接 || ''
 const crawlTime = props.item.爬取时间
@@ -62,7 +64,13 @@ const expanded = ref(false)
         ]"
       >
         <p class="font-semibold" :class="[isRecommended ? 'text-green-800' : 'text-red-800']">
-          AI建议: {{ recommendationText }}
+          判断建议: {{ recommendationText }}
+        </p>
+        <p class="mt-1 text-xs text-gray-500">
+          来源: {{ analysisSource }}
+        </p>
+        <p v-if="analysisSource === '关键词'" class="mt-1 text-xs text-gray-500">
+          命中关键词: {{ keywordHitCount }}
         </p>
         <p class="mt-1 text-gray-600" :class="{ 'line-clamp-3': !expanded }">
           原因: {{ ai?.reason || '无' }}

@@ -17,17 +17,19 @@ export interface Task {
   free_shipping?: boolean;
   new_publish_option?: string | null;
   region?: string | null;
+  decision_mode: 'ai' | 'keyword';
+  keyword_rules: string[];
   is_running: boolean;
 }
 
 // For PATCH requests, all fields are optional
 export type TaskUpdate = Partial<Omit<Task, 'id'>>;
 
-// For AI-driven task creation
+// For task creation
 export interface TaskGenerateRequest {
   task_name: string;
   keyword: string;
-  description: string;
+  description?: string;
   personal_only?: boolean;
   min_price?: string | null;
   max_price?: string | null;
@@ -37,4 +39,6 @@ export interface TaskGenerateRequest {
   free_shipping?: boolean;
   new_publish_option?: string | null;
   region?: string | null;
+  decision_mode?: 'ai' | 'keyword';
+  keyword_rules?: string[];
 }
