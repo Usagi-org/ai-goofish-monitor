@@ -2,15 +2,22 @@
 统一配置管理模块
 使用 Pydantic 进行类型安全的配置管理
 """
+
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
+
     _USING_PYDANTIC_SETTINGS = True
 except ImportError:
     from pydantic import BaseSettings
+
     _USING_PYDANTIC_SETTINGS = False
 from pydantic import Field
 from typing import Optional
 import os
+
+
+GEMINI_OPENAI_COMPAT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GEMINI_DEFAULT_MODEL_NAME = "gemini-2.5-flash"
 
 
 def _env_field(default, env_name: str, **kwargs):
@@ -20,6 +27,7 @@ def _env_field(default, env_name: str, **kwargs):
 
 
 if _USING_PYDANTIC_SETTINGS:
+
     class _EnvSettings(BaseSettings):
         model_config = SettingsConfigDict(
             env_file=".env",
@@ -28,6 +36,7 @@ if _USING_PYDANTIC_SETTINGS:
             protected_namespaces=(),
         )
 else:
+
     class _EnvSettings(BaseSettings):
         class Config:
             env_file = ".env"
@@ -38,7 +47,9 @@ else:
 
 class AISettings(_EnvSettings):
     """AI模型配置"""
+
     api_key: Optional[str] = _env_field(None, "OPENAI_API_KEY")
+    gemini_api_key: Optional[str] = _env_field(None, "GEMINI_API_KEY")
     base_url: str = _env_field("", "OPENAI_BASE_URL")
     model_name: str = _env_field("", "OPENAI_MODEL_NAME")
     proxy_url: Optional[str] = _env_field(None, "PROXY_URL")
@@ -47,13 +58,35 @@ class AISettings(_EnvSettings):
     enable_thinking: bool = _env_field(False, "ENABLE_THINKING")
     skip_analysis: bool = _env_field(False, "SKIP_AI_ANALYSIS")
 
+    def resolved_api_key(self) -> Optional[str]:
+        if "generativelanguage.googleapis.com" in self.resolved_base_url():
+            return self.gemini_api_key or self.api_key
+        return self.api_key or self.gemini_api_key
+
+    def resolved_base_url(self) -> str:
+        if self.base_url:
+            return self.base_url
+        if self.gemini_api_key and not self.api_key:
+            return GEMINI_OPENAI_COMPAT_BASE_URL
+        return ""
+
+    def resolved_model_name(self) -> str:
+        if self.model_name:
+            return self.model_name
+        if self.gemini_api_key and not self.api_key:
+            return GEMINI_DEFAULT_MODEL_NAME
+        return ""
+
     def is_configured(self) -> bool:
         """检查AI是否已正确配置"""
-        return bool(self.base_url and self.model_name)
+        return bool(
+            self.resolved_api_key() and self.resolved_base_url() and self.resolved_model_name()
+        )
 
 
 class NotificationSettings(_EnvSettings):
     """通知服务配置"""
+
     ntfy_topic_url: Optional[str] = _env_field(None, "NTFY_TOPIC_URL")
     gotify_url: Optional[str] = _env_field(None, "GOTIFY_URL")
     gotify_token: Optional[str] = _env_field(None, "GOTIFY_TOKEN")
@@ -71,18 +104,21 @@ class NotificationSettings(_EnvSettings):
 
     def has_any_notification_enabled(self) -> bool:
         """检查是否配置了任何通知服务"""
-        return any([
-            self.ntfy_topic_url,
-            self.wx_bot_url,
-            self.gotify_url and self.gotify_token,
-            self.bark_url,
-            self.telegram_bot_token and self.telegram_chat_id,
-            self.webhook_url
-        ])
+        return any(
+            [
+                self.ntfy_topic_url,
+                self.wx_bot_url,
+                self.gotify_url and self.gotify_token,
+                self.bark_url,
+                self.telegram_bot_token and self.telegram_chat_id,
+                self.webhook_url,
+            ]
+        )
 
 
 class ScraperSettings(_EnvSettings):
     """爬虫相关配置"""
+
     run_headless: bool = _env_field(True, "RUN_HEADLESS")
     login_is_edge: bool = _env_field(False, "LOGIN_IS_EDGE")
     running_in_docker: bool = _env_field(False, "RUNNING_IN_DOCKER")
@@ -91,6 +127,7 @@ class ScraperSettings(_EnvSettings):
 
 class AppSettings(_EnvSettings):
     """应用主配置"""
+
     server_port: int = _env_field(8000, "SERVER_PORT")
     web_username: str = _env_field("admin", "WEB_USERNAME")
     web_password: str = _env_field("admin123", "WEB_PASSWORD")
@@ -108,6 +145,7 @@ class AppSettings(_EnvSettings):
 
 # 全局配置实例（单例模式）
 _settings_instance = None
+
 
 def get_settings() -> AppSettings:
     """获取全局配置实例"""

@@ -1,6 +1,7 @@
 """
 设置管理路由
 """
+
 import os
 from typing import Optional
 
@@ -12,6 +13,8 @@ from src.api.dependencies import get_process_service
 from src.infrastructure.config.env_manager import env_manager
 from src.infrastructure.config.settings import (
     AISettings,
+    GEMINI_DEFAULT_MODEL_NAME,
+    GEMINI_OPENAI_COMPAT_BASE_URL,
     notification_settings,
     reload_settings,
     scraper_settings,
@@ -21,9 +24,11 @@ from src.services.process_service import ProcessService
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+
 def _reload_env() -> None:
     load_dotenv(dotenv_path=env_manager.env_file, override=True)
     reload_settings()
+
 
 def _env_bool(key: str, default: bool = False) -> bool:
     value = env_manager.get_value(key)
@@ -48,6 +53,7 @@ def _normalize_bool_value(value: bool) -> str:
 
 class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
+
     NTFY_TOPIC_URL: Optional[str] = None
     GOTIFY_URL: Optional[str] = None
     GOTIFY_TOKEN: Optional[str] = None
@@ -66,7 +72,9 @@ class NotificationSettingsModel(BaseModel):
 
 class AISettingsModel(BaseModel):
     """AI设置模型"""
+
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
     OPENAI_MODEL_NAME: Optional[str] = None
     SKIP_AI_ANALYSIS: Optional[bool] = None
@@ -120,6 +128,7 @@ async def update_notification_settings(
         return {"message": "通知设置已成功更新"}
     return {"message": "更新通知设置失败"}
 
+
 @router.get("/rotation")
 async def get_rotation_settings():
     return {
@@ -162,6 +171,7 @@ async def get_system_status(
 
     # 检查关键环境变量是否设置
     openai_api_key = env_manager.get_value("OPENAI_API_KEY", "")
+    gemini_api_key = env_manager.get_value("GEMINI_API_KEY", "")
     openai_base_url = env_manager.get_value("OPENAI_BASE_URL", "")
     openai_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
     ntfy_topic_url = env_manager.get_value("NTFY_TOPIC_URL", "")
@@ -180,35 +190,37 @@ async def get_system_status(
         "running_in_docker": scraper_settings.running_in_docker,
         "scraper_running": len(running_task_ids) > 0,
         "running_task_ids": running_task_ids,
-        "login_state_file": {
-            "exists": login_state_exists,
-            "path": state_file
-        },
+        "login_state_file": {"exists": login_state_exists, "path": state_file},
         "env_file": {
             "exists": env_file_exists,
             "openai_api_key_set": bool(openai_api_key),
+            "gemini_api_key_set": bool(gemini_api_key),
             "openai_base_url_set": bool(openai_base_url),
             "openai_model_name_set": bool(openai_model_name),
-            "ntfy_topic_url_set": bool(ntfy_topic_url)
-        }
+            "ntfy_topic_url_set": bool(ntfy_topic_url),
+        },
     }
-
-
-class AISettingsModel(BaseModel):
-    """AI设置模型"""
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_BASE_URL: Optional[str] = None
-    OPENAI_MODEL_NAME: Optional[str] = None
-    SKIP_AI_ANALYSIS: Optional[bool] = None
 
 
 @router.get("/ai")
 async def get_ai_settings():
     """获取AI设置"""
+    openai_api_key = env_manager.get_value("OPENAI_API_KEY", "")
+    gemini_api_key = env_manager.get_value("GEMINI_API_KEY", "")
+    openai_base_url = env_manager.get_value("OPENAI_BASE_URL", "")
+    openai_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
+
+    if not openai_base_url and gemini_api_key and not openai_api_key:
+        openai_base_url = GEMINI_OPENAI_COMPAT_BASE_URL
+
+    if not openai_model_name and gemini_api_key and not openai_api_key:
+        openai_model_name = GEMINI_DEFAULT_MODEL_NAME
+
     return {
-        "OPENAI_BASE_URL": env_manager.get_value("OPENAI_BASE_URL", ""),
-        "OPENAI_MODEL_NAME": env_manager.get_value("OPENAI_MODEL_NAME", ""),
-        "SKIP_AI_ANALYSIS": env_manager.get_value("SKIP_AI_ANALYSIS", "false").lower() == "true"
+        "OPENAI_BASE_URL": openai_base_url,
+        "OPENAI_MODEL_NAME": openai_model_name,
+        "SKIP_AI_ANALYSIS": str(env_manager.get_value("SKIP_AI_ANALYSIS", "false")).lower()
+        == "true",
     }
 
 
@@ -218,14 +230,35 @@ async def update_ai_settings(
 ):
     """更新AI设置"""
     updates = {}
+    current_openai_api_key = env_manager.get_value("OPENAI_API_KEY", "")
+    current_gemini_api_key = env_manager.get_value("GEMINI_API_KEY", "")
+
     if settings.OPENAI_API_KEY is not None:
         updates["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+    if settings.GEMINI_API_KEY is not None:
+        updates["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
     if settings.OPENAI_BASE_URL is not None:
         updates["OPENAI_BASE_URL"] = settings.OPENAI_BASE_URL
     if settings.OPENAI_MODEL_NAME is not None:
         updates["OPENAI_MODEL_NAME"] = settings.OPENAI_MODEL_NAME
     if settings.SKIP_AI_ANALYSIS is not None:
         updates["SKIP_AI_ANALYSIS"] = str(settings.SKIP_AI_ANALYSIS).lower()
+
+    submitted_openai_api_key = (
+        settings.OPENAI_API_KEY if settings.OPENAI_API_KEY is not None else current_openai_api_key
+    )
+    submitted_gemini_api_key = (
+        settings.GEMINI_API_KEY if settings.GEMINI_API_KEY is not None else current_gemini_api_key
+    )
+
+    use_gemini_defaults = bool(submitted_gemini_api_key and not submitted_openai_api_key)
+    if use_gemini_defaults:
+        if settings.OPENAI_BASE_URL is None and not env_manager.get_value("OPENAI_BASE_URL", ""):
+            updates["OPENAI_BASE_URL"] = GEMINI_OPENAI_COMPAT_BASE_URL
+        if settings.OPENAI_MODEL_NAME is None and not env_manager.get_value(
+            "OPENAI_MODEL_NAME", ""
+        ):
+            updates["OPENAI_MODEL_NAME"] = GEMINI_DEFAULT_MODEL_NAME
 
     success = env_manager.update_values(updates)
     if success:
@@ -244,13 +277,49 @@ async def test_ai_settings(
         import httpx
 
         stored_api_key = env_manager.get_value("OPENAI_API_KEY", "")
+        stored_gemini_api_key = env_manager.get_value("GEMINI_API_KEY", "")
         submitted_api_key = settings.get("OPENAI_API_KEY", "")
-        api_key = submitted_api_key or stored_api_key
+        submitted_gemini_api_key = settings.get("GEMINI_API_KEY", "")
+
+        submitted_base_url = settings.get("OPENAI_BASE_URL", "")
+        submitted_model_name = settings.get("OPENAI_MODEL_NAME", "")
+        stored_base_url = env_manager.get_value("OPENAI_BASE_URL", "")
+        stored_model_name = env_manager.get_value("OPENAI_MODEL_NAME", "")
+        submitted_or_stored_openai = submitted_api_key or stored_api_key
+        submitted_or_stored_gemini = submitted_gemini_api_key or stored_gemini_api_key
+
+        resolved_base_url = submitted_base_url or stored_base_url
+        if not resolved_base_url and submitted_or_stored_gemini and not submitted_or_stored_openai:
+            resolved_base_url = GEMINI_OPENAI_COMPAT_BASE_URL
+
+        resolved_model_name = submitted_model_name or stored_model_name
+        if (
+            not resolved_model_name
+            and submitted_or_stored_gemini
+            and not submitted_or_stored_openai
+        ):
+            resolved_model_name = GEMINI_DEFAULT_MODEL_NAME
+
+        is_gemini_endpoint = "generativelanguage.googleapis.com" in resolved_base_url
+        if is_gemini_endpoint:
+            api_key = (
+                submitted_gemini_api_key
+                or stored_gemini_api_key
+                or submitted_api_key
+                or stored_api_key
+            )
+        else:
+            api_key = (
+                submitted_api_key
+                or stored_api_key
+                or submitted_gemini_api_key
+                or stored_gemini_api_key
+            )
 
         # 创建OpenAI客户端
         client_params = {
             "api_key": api_key,
-            "base_url": settings.get("OPENAI_BASE_URL", ""),
+            "base_url": resolved_base_url,
             "timeout": httpx.Timeout(30.0),
         }
 
@@ -259,7 +328,7 @@ async def test_ai_settings(
         if proxy_url:
             client_params["http_client"] = httpx.Client(proxy=proxy_url)
 
-        model_name = settings.get("OPENAI_MODEL_NAME", "")
+        model_name = resolved_model_name
         print(f"AI测试 - BASE_URL: {client_params['base_url']}, MODEL: {model_name}")
 
         client = OpenAI(**client_params)
@@ -267,19 +336,14 @@ async def test_ai_settings(
         # 测试连接
         response = client.chat.completions.create(
             model=model_name,
-            messages=[
-                {"role": "user", "content": "Hello, this is a test message."}
-            ],
-            max_tokens=10
+            messages=[{"role": "user", "content": "Hello, this is a test message."}],
+            max_tokens=10,
         )
 
         return {
             "success": True,
             "message": "AI模型连接测试成功！",
-            "response": response.choices[0].message.content if response.choices else "No response"
+            "response": response.choices[0].message.content if response.choices else "No response",
         }
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"AI模型连接测试失败: {str(e)}"
-        }
+        return {"success": False, "message": f"AI模型连接测试失败: {str(e)}"}
