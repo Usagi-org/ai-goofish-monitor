@@ -87,6 +87,8 @@ async function handleCreateTask(data: TaskGenerateRequest) {
   try {
     await createTask(data)
     isCreateDialogOpen.value = false
+    // 创建成功后刷新页面
+    window.location.reload()
   }
   catch (e) {
     toast({
