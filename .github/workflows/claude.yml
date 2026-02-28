@@ -39,7 +39,7 @@ jobs:
             "NON_INTERACTIVE_MODE": true,
             "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
             "OPENAI_BASE_URL": "https://api-inference.modelscope.cn/v1",
-            "OPENAI_MODEL": "ZhipuAI/GLM-4.7"
+            "OPENAI_MODEL": "ZhipuAI/GLM-5"
           }
           EOF
         shell: bash
