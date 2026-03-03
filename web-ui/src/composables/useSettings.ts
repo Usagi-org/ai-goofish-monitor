@@ -66,15 +66,26 @@ export function useSettings() {
     isSaving.value = true
     try {
       const payload = { ...aiSettings.value }
-      const apiKey = (payload.OPENAI_API_KEY || '').trim()
-      if (apiKey) {
-        payload.OPENAI_API_KEY = apiKey
+      const openaiApiKey = (payload.OPENAI_API_KEY || '').trim()
+      if (openaiApiKey) {
+        payload.OPENAI_API_KEY = openaiApiKey
       } else {
         delete payload.OPENAI_API_KEY
       }
+
+      const geminiApiKey = (payload.GEMINI_API_KEY || '').trim()
+      if (geminiApiKey) {
+        payload.GEMINI_API_KEY = geminiApiKey
+      } else {
+        delete payload.GEMINI_API_KEY
+      }
+
       await settingsApi.updateAiSettings(payload)
       if (aiSettings.value.OPENAI_API_KEY) {
         aiSettings.value.OPENAI_API_KEY = ''
+      }
+      if (aiSettings.value.GEMINI_API_KEY) {
+        aiSettings.value.GEMINI_API_KEY = ''
       }
       // Refresh status
       systemStatus.value = await settingsApi.getSystemStatus()
@@ -102,12 +113,20 @@ export function useSettings() {
     isSaving.value = true
     try {
       const payload = { ...aiSettings.value }
-      const apiKey = (payload.OPENAI_API_KEY || '').trim()
-      if (apiKey) {
-        payload.OPENAI_API_KEY = apiKey
+      const openaiApiKey = (payload.OPENAI_API_KEY || '').trim()
+      if (openaiApiKey) {
+        payload.OPENAI_API_KEY = openaiApiKey
       } else {
         delete payload.OPENAI_API_KEY
       }
+
+      const geminiApiKey = (payload.GEMINI_API_KEY || '').trim()
+      if (geminiApiKey) {
+        payload.GEMINI_API_KEY = geminiApiKey
+      } else {
+        delete payload.GEMINI_API_KEY
+      }
+
       const res = await settingsApi.testAiSettings(payload)
       return res
     } catch (e) {

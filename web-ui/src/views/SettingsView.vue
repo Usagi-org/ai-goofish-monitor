@@ -13,6 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 
+const GEMINI_OPENAI_COMPAT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
+const GEMINI_DEFAULT_MODEL_NAME = 'gemini-2.0-flash'
+
 const {
   notificationSettings,
   aiSettings,
@@ -81,6 +84,16 @@ async function handleTestAi() {
     notifySuccess('AI 连接测试完成', res.message)
   } catch (e) {
     notifyError('AI 连接测试失败', (e as Error).message)
+  }
+}
+
+function applyGeminiDefaults() {
+  if (!aiSettings.value.OPENAI_BASE_URL) {
+    aiSettings.value.OPENAI_BASE_URL = GEMINI_OPENAI_COMPAT_BASE_URL
+  }
+
+  if (!aiSettings.value.OPENAI_MODEL_NAME) {
+    aiSettings.value.OPENAI_MODEL_NAME = GEMINI_DEFAULT_MODEL_NAME
   }
 }
 
@@ -201,6 +214,17 @@ watch(selectedPrompt, async (value) => {
               </p>
             </div>
             <div class="grid gap-2">
+              <Label>Gemini API Key (可选)</Label>
+              <Input
+                v-model="aiSettings.GEMINI_API_KEY"
+                type="password"
+                placeholder="留空表示不修改"
+              />
+              <p class="text-xs text-gray-500">
+                {{ systemStatus?.env_file.gemini_api_key_set ? '已配置' : '未配置' }}，仅在未设置 OPENAI_API_KEY 时生效。
+              </p>
+            </div>
+            <div class="grid gap-2">
               <Label>模型名称</Label>
               <Input v-model="aiSettings.OPENAI_MODEL_NAME" placeholder="gpt-3.5-turbo" />
             </div>
@@ -213,6 +237,7 @@ watch(selectedPrompt, async (value) => {
             正在加载 AI 配置...
           </CardContent>
           <CardFooter v-if="isReady" class="flex gap-2">
+            <Button variant="outline" @click="applyGeminiDefaults" :disabled="isSaving">填充 Gemini 默认值</Button>
             <Button variant="outline" @click="handleTestAi" :disabled="isSaving">测试连接</Button>
             <Button @click="handleSaveAi" :disabled="isSaving">保存 AI 设置</Button>
           </CardFooter>
