@@ -62,6 +62,7 @@ class NotificationSettingsModel(BaseModel):
     WEBHOOK_QUERY_PARAMETERS: Optional[str] = None
     WEBHOOK_BODY: Optional[str] = None
     PCURL_TO_MOBILE: Optional[bool] = None
+    NOTIFY_ALL_PRODUCTS: Optional[bool] = None
 
 
 class AISettingsModel(BaseModel):
@@ -99,6 +100,7 @@ async def get_notification_settings():
         "WEBHOOK_QUERY_PARAMETERS": env_manager.get_value("WEBHOOK_QUERY_PARAMETERS", ""),
         "WEBHOOK_BODY": env_manager.get_value("WEBHOOK_BODY", ""),
         "PCURL_TO_MOBILE": _env_bool("PCURL_TO_MOBILE", True),
+        "NOTIFY_ALL_PRODUCTS": _env_bool("NOTIFY_ALL_PRODUCTS", False),
     }
 
 

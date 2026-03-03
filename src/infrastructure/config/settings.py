@@ -68,6 +68,7 @@ class NotificationSettings(_EnvSettings):
     webhook_query_parameters: Optional[str] = _env_field(None, "WEBHOOK_QUERY_PARAMETERS")
     webhook_body: Optional[str] = _env_field(None, "WEBHOOK_BODY")
     pcurl_to_mobile: bool = _env_field(True, "PCURL_TO_MOBILE")
+    notify_all_products: bool = _env_field(False, "NOTIFY_ALL_PRODUCTS")
 
     def has_any_notification_enabled(self) -> bool:
         """检查是否配置了任何通知服务"""
