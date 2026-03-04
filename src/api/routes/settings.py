@@ -12,7 +12,7 @@ from src.api.dependencies import get_process_service
 from src.infrastructure.config.env_manager import env_manager
 from src.infrastructure.config.settings import (
     AISettings,
-    notification_settings,
+    NotificationSettings,
     reload_settings,
     scraper_settings,
 )
@@ -173,6 +173,7 @@ async def get_system_status(
         if process and process.returncode is None
     ]
 
+    notification_settings = NotificationSettings()
     return {
         "ai_configured": ai_settings.is_configured(),
         "notification_configured": notification_settings.has_any_notification_enabled(),
