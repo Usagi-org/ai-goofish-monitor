@@ -72,6 +72,13 @@ COPY . .
 # 声明服务运行的端口
 EXPOSE 8000
 
+# 创建非 root 用户并设置目录权限
+RUN useradd -m -s /bin/bash appuser && \
+    chown -R appuser:appuser /app
+
+# 切换到非 root 用户
+USER appuser
+
 # 使用 tini 作为 init，负责回收孤儿子进程
 ENTRYPOINT ["tini", "--"]
 
