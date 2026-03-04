@@ -598,19 +598,20 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 search_url = f"https://www.goofish.com/search?{urlencode(params)}"
                 log_time(f"目标URL: {search_url}")
 
-                # 先导航，再判断是否被重定向到登录页。
-                await page.goto(
-                    search_url, wait_until="domcontentloaded", timeout=60000
-                )
+                # 先监听搜索接口响应，再执行导航，避免错过首次请求
+                async with page.expect_response(
+                    lambda r: API_URL_PATTERN in r.url, timeout=30000
+                ) as initial_response_info:
+                    await page.goto(
+                        search_url, wait_until="domcontentloaded", timeout=60000
+                    )
                 if _is_login_url(page.url):
                     raise LoginRequiredError(
                         f"Login required: redirected to {page.url} (cookies/state likely expired)"
                     )
 
                 # 捕获初始搜索的API数据
-                initial_response = await page.wait_for_response(
-                    lambda r: API_URL_PATTERN in r.url, timeout=30000
-                )
+                initial_response = await initial_response_info.value
 
                 # 等待页面加载出关键筛选元素，以确认已成功进入搜索结果页
                 try:
