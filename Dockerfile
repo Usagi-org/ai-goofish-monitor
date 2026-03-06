@@ -34,8 +34,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 # 新增环境变量，用于区分Docker环境和本地环境
 ENV RUNNING_IN_DOCKER=true
-# 告知 Playwright 在哪里找到浏览器（使用独立目录，避免 root/appuser 主目录差异）
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# 告知 Playwright 在哪里找到浏览器
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 # 设置时区为中国时区
 ENV TZ=Asia/Shanghai
 
@@ -56,9 +56,11 @@ RUN apt-get update \
         netcat-openbsd \
         telnet \
     && playwright install-deps chromium \
-    && playwright install chromium \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# 从 builder 阶段复制预先下载好的浏览器
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # 复制前端构建产物到 /app/dist
 COPY --from=frontend-builder /web-ui/dist /app/dist
@@ -72,7 +74,7 @@ EXPOSE 8000
 
 # 创建非 root 用户并设置目录权限
 RUN useradd -m -s /bin/bash appuser && \
-    chown -R appuser:appuser /app /ms-playwright
+    chown -R appuser:appuser /app
 
 # 切换到非 root 用户
 USER appuser
