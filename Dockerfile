@@ -74,8 +74,12 @@ EXPOSE 8000
 RUN useradd -m -s /bin/bash appuser && \
     chown -R appuser:appuser /app /ms-playwright
 
-# 切换到非 root 用户
-USER appuser
+# 注意：运行时会挂载宿主机目录（prompts/jsonl/logs/images），
+# 在不同主机上这些目录可能由 root 或其他 UID 创建。
+# 若容器以内置 appuser 运行，常见场景会出现写入权限错误（Errno 13）。
+# 为保证开箱即用与历史行为一致，这里保持 root 运行主进程。
+# 如需非 root 运行，请在部署侧统一处理宿主机目录 UID/GID。
+USER root
 
 # 使用 tini 作为 init，负责回收孤儿子进程
 ENTRYPOINT ["tini", "--"]
