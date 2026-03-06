@@ -21,8 +21,8 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
-# 只下载 Playwright 的 Chromium 浏览器，系统依赖在下一阶段安装
-RUN playwright install chromium
+# 安装 Playwright 浏览器（包括 chromium 和 chromium-headless-shell）
+RUN playwright install chromium chromium-headless-shell
 
 # Stage 3: Create the final, lean image
 FROM python:3.11-slim-bookworm
