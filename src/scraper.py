@@ -74,6 +74,56 @@ def _format_failure_reason(reason: str, limit: int = 500) -> str:
     return cleaned[: limit - 3] + "..."
 
 
+def _normalize_region_keyword(value: str) -> str:
+    """Normalize free-form region text for fuzzy matching."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text.replace(" ", "")
+    text = text.replace("省", "").replace("市", "")
+    if text.startswith("全"):
+        text = text[1:]
+    return text
+
+
+def _parse_region_filters(region_filter: str) -> list[str]:
+    """Parse region filter text and return normalized, specific keywords.
+
+    Supports single region (e.g. 河北/石家庄/长安区) and multi-region values
+    split by comma/Chinese comma/newline (e.g. 河北/石家庄, 北京, 天津).
+    """
+    raw_filters = [
+        part.strip()
+        for part in str(region_filter or "").replace("\n", ",").replace("，", ",").split(",")
+        if part.strip()
+    ]
+    normalized_keywords: list[str] = []
+    for raw_filter in raw_filters:
+        parts = [
+            _normalize_region_keyword(p)
+            for p in raw_filter.split("/")
+            if _normalize_region_keyword(p)
+        ]
+        if not parts:
+            continue
+        # Prefer the most specific segment (district > city > province).
+        normalized_keywords.append(parts[-1])
+    return normalized_keywords
+
+
+def _item_matches_region_filter(item_area: str, region_keywords: list[str]) -> bool:
+    """Return whether item area matches one of configured region keywords."""
+    if not region_keywords:
+        return True
+    normalized_area = _normalize_region_keyword(item_area)
+    if not normalized_area:
+        return False
+    return any(
+        keyword and (keyword in normalized_area or normalized_area in keyword)
+        for keyword in region_keywords
+    )
+
+
 async def _notify_task_failure(
     task_config: dict, reason: str, *, cookie_path: Optional[str]
 ) -> None:
@@ -414,6 +464,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     if new_publish_option == "__none__":
         new_publish_option = ""
     region_filter = (task_config.get("region") or "").strip()
+    region_keywords = _parse_region_filters(region_filter)
+    region_ui_filter = (
+        region_filter.replace("\n", ",").replace("，", ",").split(",")[0].strip()
+        if region_filter
+        else ""
+    )
 
     processed_links = set()
     output_filename = os.path.join(
@@ -724,7 +780,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     except Exception as e:
                         print(f"LOG: 应用包邮筛选失败: {e}")
 
-                if region_filter:
+                if region_ui_filter:
                     try:
                         area_trigger = page.get_by_text("区域", exact=True)
                         if await area_trigger.count():
@@ -760,7 +816,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             col_dist = columns.nth(2)
 
                             region_parts = [
-                                p.strip() for p in region_filter.split("/") if p.strip()
+                                p.strip() for p in region_ui_filter.split("/") if p.strip()
                             ]
 
                             async def _click_in_column(
@@ -907,6 +963,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                     total_items_on_page = len(basic_items)
                     for i, item_data in enumerate(basic_items, 1):
+                        item_area = str(item_data.get("发货地区", ""))
+                        if not _item_matches_region_filter(item_area, region_keywords):
+                            log_time(
+                                f"[页内进度 {i}/{total_items_on_page}] 商品区域 '{item_area}' 不匹配筛选 '{region_filter}'，跳过。"
+                            )
+                            continue
+
                         if debug_limit > 0 and processed_item_count >= debug_limit:
                             log_time(
                                 f"已达到调试上限 ({debug_limit})，停止获取新商品。"
