@@ -39,6 +39,10 @@ from src.config import (
     ENABLE_RESPONSE_FORMAT,
     client,
 )
+from src.ai_message_builder import (
+    build_analysis_text_prompt,
+    build_user_message_content,
+)
 from src.utils import convert_goofish_link, retry_on_failure
 
 
@@ -537,28 +541,20 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
         safe_print(prompt_text)
         safe_print("-------------------\n")
 
-    combined_text_prompt = f"""请基于你的专业知识和我的要求，分析以下完整的商品JSON数据：
-
-```json
-    {product_details_json}
-```
-
-{system_prompt}
-"""
-    user_content_list = []
-
-    # 先添加图片内容
+    image_data_urls = []
     if image_paths:
         for path in image_paths:
             base64_image = encode_image_to_base64(path)
             if base64_image:
-                user_content_list.append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}})
+                image_data_urls.append(f"data:image/jpeg;base64,{base64_image}")
 
-    # 再添加文本内容
-    user_content_list.append({"type": "text", "text": combined_text_prompt})
-
-    messages = [{"role": "user", "content": user_content_list}]
+    combined_text_prompt = build_analysis_text_prompt(
+        product_details_json,
+        system_prompt,
+        include_images=bool(image_data_urls),
+    )
+    user_content = build_user_message_content(combined_text_prompt, image_data_urls)
+    messages = [{"role": "user", "content": user_content}]
 
     # 保存最终传输内容到日志文件
     try:
@@ -578,7 +574,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
             "task_name": task_name,
             "product_id": product_id,
             "title": item_info.get("商品标题", "无"),
-            "image_count": len(image_paths or []),
+            "image_count": len(image_data_urls),
         }
         log_content = json.dumps(log_payload, ensure_ascii=False)
 

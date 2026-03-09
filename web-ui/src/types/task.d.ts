@@ -6,6 +6,7 @@ export interface Task {
   enabled: boolean;
   keyword: string;
   description: string;
+  analyze_images: boolean;
   max_pages: number;
   personal_only: boolean;
   min_price: string | null;
@@ -57,6 +58,7 @@ export interface TaskGenerateRequest {
   task_name: string;
   keyword: string;
   description?: string;
+  analyze_images?: boolean;
   personal_only?: boolean;
   min_price?: string | null;
   max_price?: string | null;

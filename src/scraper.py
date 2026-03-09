@@ -65,6 +65,13 @@ def _is_login_url(url: str) -> bool:
     return "passport.goofish.com" in lowered or "mini_login" in lowered
 
 
+def _should_analyze_images(task_config: dict) -> bool:
+    raw_value = task_config.get("analyze_images", True)
+    if isinstance(raw_value, bool):
+        return raw_value
+    return str(raw_value).strip().lower() not in {"false", "0", "no", "off"}
+
+
 def _format_failure_reason(reason: str, limit: int = 500) -> str:
     if not reason:
         return "未知错误"
@@ -404,6 +411,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     min_price = task_config.get("min_price")
     max_price = task_config.get("max_price")
     ai_prompt_text = task_config.get("ai_prompt_text", "")
+    analyze_images = _should_analyze_images(task_config)
     decision_mode = str(task_config.get("decision_mode", "ai")).strip().lower()
     if decision_mode not in {"ai", "keyword"}:
         decision_mode = "ai"
@@ -1065,15 +1073,20 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         log_time(
                                             "环境变量 SKIP_AI_ANALYSIS 已设置，跳过AI分析并直接发送通知..."
                                         )
-                                        # 下载图片
-                                        image_urls = item_data.get("商品图片列表", [])
-                                        downloaded_image_paths = (
-                                            await download_all_images(
-                                                item_data["商品ID"],
-                                                image_urls,
-                                                task_config.get("task_name", "default"),
+                                        downloaded_image_paths = []
+                                        if analyze_images:
+                                            image_urls = item_data.get("商品图片列表", [])
+                                            downloaded_image_paths = (
+                                                await download_all_images(
+                                                    item_data["商品ID"],
+                                                    image_urls,
+                                                    task_config.get("task_name", "default"),
+                                                )
                                             )
-                                        )
+                                        else:
+                                            log_time(
+                                                "当前任务已关闭图片分析，跳过图片下载。"
+                                            )
 
                                         # 删除下载的图片文件，节省空间
                                         for img_path in downloaded_image_paths:
@@ -1105,15 +1118,20 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         log_time(
                                             f"开始对商品 #{item_data['商品ID']} 进行实时AI分析..."
                                         )
-                                        # 1. Download images
-                                        image_urls = item_data.get("商品图片列表", [])
-                                        downloaded_image_paths = (
-                                            await download_all_images(
-                                                item_data["商品ID"],
-                                                image_urls,
-                                                task_config.get("task_name", "default"),
+                                        downloaded_image_paths = []
+                                        if analyze_images:
+                                            image_urls = item_data.get("商品图片列表", [])
+                                            downloaded_image_paths = (
+                                                await download_all_images(
+                                                    item_data["商品ID"],
+                                                    image_urls,
+                                                    task_config.get("task_name", "default"),
+                                                )
                                             )
-                                        )
+                                        else:
+                                            log_time(
+                                                "当前任务已关闭图片分析，跳过图片下载，仅分析商品文字和卖家资质。"
+                                            )
 
                                         # 2. Get AI analysis
                                         if ai_prompt_text:

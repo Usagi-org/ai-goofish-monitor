@@ -85,3 +85,13 @@ def test_generate_request_accepts_legacy_group_payload():
         keyword_rule_groups=[{"include_keywords": ["a7m4", "验货宝"], "exclude_keywords": ["瑕疵"]}],
     )
     assert req.keyword_rules == ["a7m4", "验货宝"]
+
+
+def test_generate_request_enables_image_analysis_by_default():
+    req = TaskGenerateRequest(
+        task_name="Sony A7M4",
+        keyword="sony a7m4",
+        description="只看机身成色和卖家信用。",
+        decision_mode="ai",
+    )
+    assert req.analyze_images is True

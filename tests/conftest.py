@@ -39,6 +39,7 @@ def sample_task_payload():
         "enabled": True,
         "keyword": "sony a7m4",
         "description": "Good condition body with accessories",
+        "analyze_images": True,
         "max_pages": 2,
         "personal_only": True,
         "min_price": "8000",
