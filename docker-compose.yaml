@@ -9,6 +9,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./state:/app/state
       - ./config.json:/app/config.json
       - ./prompts:/app/prompts
       - ./jsonl:/app/jsonl
