@@ -9,6 +9,10 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+from src.ai_message_builder import (
+    build_analysis_text_prompt,
+    build_user_message_content,
+)
 from src.infrastructure.config.settings import AISettings
 from src.infrastructure.config.env_manager import env_manager
 
@@ -97,28 +101,18 @@ class AIClient:
     def _build_messages(self, product_data: Dict, image_paths: List[str], prompt_text: str) -> List[Dict]:
         """构建 AI 消息"""
         product_json = json.dumps(product_data, ensure_ascii=False, indent=2)
-        text_prompt = f"""请基于你的专业知识和我的要求，分析以下完整的商品JSON数据：
-
-```json
-{product_json}
-```
-
-{prompt_text}
-"""
-        user_content = []
-
-        # 先添加图片
+        image_data_urls: List[str] = []
         for path in image_paths:
             base64_img = self.encode_image(path)
             if base64_img:
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-                })
+                image_data_urls.append(f"data:image/jpeg;base64,{base64_img}")
 
-        # 再添加文本
-        user_content.append({"type": "text", "text": text_prompt})
-
+        text_prompt = build_analysis_text_prompt(
+            product_json,
+            prompt_text,
+            include_images=bool(image_data_urls),
+        )
+        user_content = build_user_message_content(text_prompt, image_data_urls)
         return [{"role": "user", "content": user_content}]
 
     async def _call_ai(self, messages: List[Dict]) -> str:

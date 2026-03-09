@@ -81,6 +81,7 @@ class Task(BaseModel):
     enabled: bool
     keyword: str
     description: Optional[str] = ""
+    analyze_images: bool = True
     max_pages: int
     personal_only: bool
     min_price: Optional[str] = None
@@ -128,6 +129,7 @@ class TaskCreate(BaseModel):
     enabled: bool = True
     keyword: str
     description: Optional[str] = ""
+    analyze_images: bool = True
     max_pages: int = 3
     personal_only: bool = True
     min_price: Optional[str] = None
@@ -181,6 +183,7 @@ class TaskUpdate(BaseModel):
     enabled: Optional[bool] = None
     keyword: Optional[str] = None
     description: Optional[str] = None
+    analyze_images: Optional[bool] = None
     max_pages: Optional[int] = None
     personal_only: Optional[bool] = None
     min_price: Optional[str] = None
@@ -234,6 +237,7 @@ class TaskGenerateRequest(BaseModel):
     task_name: str
     keyword: str
     description: Optional[str] = ""
+    analyze_images: bool = True
     personal_only: bool = True
     min_price: Optional[str] = None
     max_price: Optional[str] = None

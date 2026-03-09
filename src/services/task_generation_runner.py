@@ -25,6 +25,7 @@ def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreat
         enabled=True,
         keyword=req.keyword,
         description=req.description or "",
+        analyze_images=req.analyze_images,
         max_pages=req.max_pages,
         personal_only=req.personal_only,
         min_price=req.min_price,

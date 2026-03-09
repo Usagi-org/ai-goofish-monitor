@@ -7,17 +7,20 @@ def test_create_list_update_delete_task(api_client, api_context, sample_task_pay
     assert response.status_code == 200
     created = response.json()["task"]
     assert created["task_name"] == sample_task_payload["task_name"]
+    assert created["analyze_images"] is True
 
     response = api_client.get("/api/tasks")
     assert response.status_code == 200
     tasks = response.json()
     assert len(tasks) == 1
     assert tasks[0]["keyword"] == sample_task_payload["keyword"]
+    assert tasks[0]["analyze_images"] is True
 
-    response = api_client.patch("/api/tasks/0", json={"enabled": False})
+    response = api_client.patch("/api/tasks/0", json={"enabled": False, "analyze_images": False})
     assert response.status_code == 200
     updated = response.json()["task"]
     assert updated["enabled"] is False
+    assert updated["analyze_images"] is False
 
     response = api_client.delete("/api/tasks/0")
     assert response.status_code == 200
@@ -74,6 +77,7 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
         "task_name": "Apple Watch S10",
         "keyword": "apple watch s10",
         "description": "只看国行蜂窝版，电池健康高于 95%，拒绝维修机。",
+        "analyze_images": False,
         "decision_mode": "ai",
         "max_pages": 2,
         "personal_only": True,
@@ -110,4 +114,5 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
 
     assert latest_job["task"]["task_name"] == payload["task_name"]
     assert latest_job["task"]["ai_prompt_criteria_file"].endswith("_criteria.txt")
+    assert latest_job["task"]["analyze_images"] is False
     assert api_context["scheduler_service"].reload_calls == 1
