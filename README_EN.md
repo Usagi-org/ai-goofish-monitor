@@ -1,5 +1,7 @@
 # Xianyu Intelligent Monitor Bot
 
+[中文说明](README.md)
+
 A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲鱼), featuring a complete web management interface.
 
 ## Core Features
@@ -21,101 +23,188 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 
 ## Quick Start
 
-### Environment Preparation
+### Requirements
 
-**Requirements**:
 - Python 3.10+
-- Node.js + npm (for frontend build)
-- Playwright browser dependencies (run `playwright install chromium` if not installed)
+- Node.js + npm (`Node v20.18.3` has been verified to complete the frontend build)
+- Playwright and Chromium dependencies
 
 ```bash
 git clone https://github.com/Usagi-org/ai-goofish-monitor
 cd ai-goofish-monitor
-```
-
-### Configuration
-
-1. **Create Configuration File**
-
-```bash
 cp .env.example .env
 ```
 
-2. **Core Configuration Items**
+### Minimum Configuration
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | AI Model API Key | Yes |
-| `OPENAI_BASE_URL` | API endpoint URL (OpenAI compatible) | Yes |
-| `OPENAI_MODEL_NAME` | Multimodal model name (e.g., `gpt-4o`) | Yes |
-| `WEB_USERNAME` / `WEB_PASSWORD` | Web interface login credentials (default: `admin` / `admin123`) | No |
-| `NTFY_TOPIC_URL` | ntfy.sh notification URL | No |
-| `BARK_URL` | Bark push URL | No |
-| `WX_BOT_URL` | WeChat Work Webhook (wrap with double quotes) | No |
+| `OPENAI_API_KEY` | AI model API key | Yes |
+| `OPENAI_BASE_URL` | OpenAI-compatible API base URL | Yes |
+| `OPENAI_MODEL_NAME` | Model name with image input support | Yes |
+| `WEB_USERNAME` / `WEB_PASSWORD` | Web UI login credentials, default `admin/admin123` | No |
 
-Refer to `.env.example` for complete configuration options.
+See "Configuration" below for the rest.
 
-3. **Start Service**
+### Start Locally
 
 ```bash
-chmod +x start.sh && ./start.sh
+chmod +x start.sh
+./start.sh
 ```
 
-The start.sh script will automatically install dependencies, build frontend, and start the backend.
+`start.sh` handles dependency checks, installs, frontend build, artifact copy, and backend startup.
 
-4. **Access Web UI**
-Visit `http://127.0.0.1:8000`, 
-**Login with default credentials (admin/admin123)** → **Xianyu Account Management**, follow the prompts to use the [Chrome Extension](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) to extract and paste the login state JSON.
-Accounts are saved to the `state/` directory (e.g., `state/acc_1.json`). Then bind the account in **Task Management** to start using.
+### First-Time Setup
+
+1. Open `http://127.0.0.1:8000` and sign in to the Web UI.
+2. Go to "Xianyu Account Management" and use the [Chrome Extension](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) to export and paste the Xianyu login-state JSON.
+3. Login-state files are stored in `state/`, for example `state/acc_1.json`.
+4. Go back to "Task Management", create a task, bind an account if needed, and run it.
+
+### Create Your First Task
+
+- `AI mode`: fill in the requirement description. Submission opens a separate progress dialog while the criteria are generated asynchronously.
+- `Keyword mode`: provide keyword rules and the task is created immediately.
+- `Region filter`: now uses a structured province / city / district selector backed by a built-in snapshot from Goofish, not manual text input.
 
 ## 🐳 Docker Deployment
 
-Use `docker-compose.yaml` for one-click startup. The image includes pre-built frontend and runtime environment.
-
-### 1) Preparation (Optional, can be configured in UI after startup)
-
-```bash
-cp .env.example .env
-vim .env
-```
-
-### 2) Start
-
 ```bash
 docker compose up -d
+docker compose logs -f app
+docker compose down
 ```
 
-### 3) Access and Management
+- Web UI: `http://127.0.0.1:8000`
+- Update image: `docker compose pull && docker compose up -d`
+- `docker-compose.yaml` already persists these paths by default:
+  - `state/`
+  - `config.json`
+  - `prompts/`
+  - `jsonl/`
+  - `logs/`
+  - `images/`
 
-- **Access Web UI**: `http://127.0.0.1:8000`
-- **View Logs**: `docker compose logs -f app`
-- **Stop Service**: `docker compose down`
-
-Account state is saved in container `/app/state` by default. For persistence, add volume mount `./state:/app/state` in compose file.
-
-### 4) Update Image
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-## Web UI Features
+## User Guide
 
 <details>
-<summary>Click to expand Web UI features</summary>
+<summary>Click to expand Web UI usage notes</summary>
 
-- **Task Management**: AI creation, parameter editing, task scheduling, account binding
-- **Xianyu Account Management**: Add/update/delete accounts, import login state JSON
-- **Results View**: Card browsing, filtering and sorting, detail viewing
-- **Run Logs**: Grouped by task, incremental loading, auto-refresh
-- **System Settings**: Status check, Prompt editing, proxy rotation
+### Task Management
+
+- Supports AI creation, keyword rules, price range, new listing filters, region filters, account binding, and cron scheduling.
+- AI task creation runs as a background job and shows a dedicated progress dialog after submission.
+- Region filtering can greatly reduce results, so leaving it empty is the safer default.
+
+### Account Management
+
+- Import, update, and delete Xianyu login states.
+- Each task can bind a specific account or leave account selection to the system.
+
+### Results and Logs
+
+- The results page shows matched items and details.
+- The logs page is the first place to inspect login-state expiry, anti-bot issues, or AI call failures.
+
+### System Settings
+
+- View system status, edit prompts, and adjust proxy / rotation-related settings.
+
+</details>
+
+## Developer Guide
+
+### Local Development
+
+```bash
+# backend
+python -m src.app
+# or
+uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+
+# frontend
+cd web-ui
+npm install
+npm run dev
+```
+
+- The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:8000`.
+- `npm run build` writes `web-ui/dist/`, and `start.sh` copies it to the repository root `dist/`.
+- FastAPI serves `dist/index.html` and `dist/assets/` from the repository root.
+
+### Validation
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest
+cd web-ui && npm run build
+```
+
+### Task Creation API
+
+<details>
+<summary>Click to expand API behavior</summary>
+
+- `POST /api/tasks/generate`
+  - `decision_mode=ai`: returns `202` with a `job`; the client should poll for progress.
+  - `decision_mode=keyword`: returns the created task directly.
+- `GET /api/tasks/generate-jobs/{job_id}`: fetch AI task-generation progress.
+- `POST /auth/status`: validate Web UI credentials.
+
+</details>
+
+## Configuration
+
+<details>
+<summary>Click to expand common configuration items</summary>
+
+### AI and Runtime
+
+- `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`: required AI model settings.
+- `PROXY_URL`: dedicated HTTP/SOCKS5 proxy for AI requests.
+- `RUN_HEADLESS`: whether the scraper runs headless; keep it `true` in Docker.
+- `SERVER_PORT`: backend port, default `8000`.
+- `LOGIN_IS_EDGE`: use Edge instead of Chrome for login-state extraction.
+- `PCURL_TO_MOBILE`: convert desktop item URLs to mobile URLs.
+
+### Notifications
+
+- `NTFY_TOPIC_URL`
+- `GOTIFY_URL` / `GOTIFY_TOKEN`
+- `BARK_URL`
+- `WX_BOT_URL`
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID`
+- `WEBHOOK_*`
+
+### Proxy Rotation and Failure Guard
+
+- `PROXY_ROTATION_ENABLED`
+- `PROXY_ROTATION_MODE`
+- `PROXY_POOL`
+- `PROXY_ROTATION_RETRY_LIMIT`
+- `PROXY_BLACKLIST_TTL`
+- `TASK_FAILURE_THRESHOLD`
+- `TASK_FAILURE_PAUSE_SECONDS`
+- `TASK_FAILURE_GUARD_PATH`
+
+See `.env.example` for the full list.
+
+</details>
+
+## Web Authentication
+
+<details>
+<summary>Click to expand authentication notes</summary>
+
+- The Web UI uses a login page and validates credentials through `POST /auth/status`.
+- After login, the frontend stores local auth state for route guards and WebSocket startup.
+- The default credentials are `admin/admin123`; change them in production.
 
 </details>
 
 ## 🚀 Workflow
 
-The diagram below describes the core processing logic of a single monitoring task from start to finish. In practice, `src.app` serves as the main service, launching one or more task processes based on user operations or scheduled triggers.
+The diagram below shows the core processing flow of a monitoring task. The main service runs in `src.app` and launches one or more task processes based on user actions or schedule triggers.
 
 ```mermaid
 graph TD
@@ -137,52 +226,22 @@ graph TD
     M --> C;
 ```
 
-## Web Interface Authentication
+## FAQ
 
 <details>
-<summary>Click to expand authentication configuration details</summary>
+<summary>Click to expand FAQ</summary>
 
-### Authentication Configuration
+### Why does AI task creation take time?
 
-The Web interface is protected with Basic authentication, ensuring only authorized users can access the management interface and API.
+In AI mode, the system generates analysis criteria before the task itself is created. This now runs as a background job with a separate progress dialog instead of blocking the task form.
 
-#### Configuration Method
+### Why is the region filter optional by default?
 
-Set authentication credentials in the `.env` file:
+Region filtering can sharply reduce result volume. Leave it empty if you want a broader market scan first.
 
-```bash
-# Web service authentication configuration
-WEB_USERNAME=admin
-WEB_PASSWORD=admin123
-```
+### Why does the app say the frontend build artifacts are missing?
 
-#### Default Credentials
-
-If authentication credentials are not set in the `.env` file, the system will use these defaults:
-- Username: `admin`
-- Password: `admin123`
-
-**⚠️ Important: Please change the default password in production environments!**
-
-#### Authentication Scope
-
-- **Requires Authentication**: All API endpoints, Web interface, static resources
-- **No Authentication Required**: Health check endpoint (`/health`)
-
-#### Usage
-
-1. **Browser Access**: Authentication dialog appears when visiting the Web interface
-2. **API Calls**: Include Basic authentication in request headers
-3. **Frontend JavaScript**: Automatically handles authentication, no modification needed
-
-#### Security Recommendations
-
-1. Change default password to a strong password
-2. Use HTTPS protocol in production environments
-3. Regularly rotate authentication credentials
-4. Restrict access IP range through firewall
-
-For detailed configuration instructions, refer to [AUTH_README.md](AUTH_README.md).
+It means the repository root `dist/` directory is missing. Run `./start.sh`, or build the frontend in `web-ui/` and make sure the artifacts are copied to the root `dist/`.
 
 </details>
 
