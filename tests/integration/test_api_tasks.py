@@ -116,3 +116,47 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
     assert latest_job["task"]["ai_prompt_criteria_file"].endswith("_criteria.txt")
     assert latest_job["task"]["analyze_images"] is False
     assert api_context["scheduler_service"].reload_calls == 1
+
+
+def test_create_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
+    payload = dict(sample_task_payload)
+    payload["cron"] = "@daily"
+
+    response = api_client.post("/api/tasks/", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_update_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
+    create_response = api_client.post("/api/tasks/", json=sample_task_payload)
+    assert create_response.status_code == 200
+
+    response = api_client.patch("/api/tasks/0", json={"cron": "0 8 * * * *"})
+
+    assert response.status_code == 422
+
+    task_response = api_client.get("/api/tasks/0")
+    assert task_response.status_code == 200
+    assert task_response.json()["cron"] == sample_task_payload["cron"]
+
+
+def test_delete_task_stops_runtime_and_reindexes_process_state(
+    api_client,
+    api_context,
+    sample_task_payload,
+):
+    second_payload = dict(sample_task_payload)
+    second_payload["task_name"] = "Sony A7CR"
+    second_payload["keyword"] = "sony a7cr"
+    second_payload["ai_prompt_criteria_file"] = "prompts/sony_a7cr_criteria.txt"
+
+    assert api_client.post("/api/tasks/", json=sample_task_payload).status_code == 200
+    assert api_client.post("/api/tasks/", json=second_payload).status_code == 200
+    assert api_client.post("/api/tasks/start/0").status_code == 200
+
+    response = api_client.delete("/api/tasks/0")
+
+    assert response.status_code == 200
+    process_service = api_context["process_service"]
+    assert process_service.stopped == [0]
+    assert process_service.reindexed == [0]

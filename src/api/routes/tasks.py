@@ -20,8 +20,7 @@ from src.services.task_generation_runner import (
     build_task_create,
     run_ai_generation_job,
 )
-from src.domain.models.task import Task, TaskCreate, TaskUpdate, TaskGenerateRequest
-from src.api.routes.websocket import broadcast_message
+from src.domain.models.task import TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
 from src.utils import resolve_task_log_path
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -193,6 +192,7 @@ async def update_task(
 async def delete_task(
     task_id: int,
     service: TaskService = Depends(get_task_service),
+    process_service: ProcessService = Depends(get_process_service),
     scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """删除任务"""
@@ -200,9 +200,11 @@ async def delete_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务未找到")
 
+    await process_service.stop_task(task_id)
     success = await service.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail="任务未找到")
+    process_service.reindex_after_delete(task_id)
     await _reload_scheduler_if_needed(service, scheduler_service)
     try:
         keyword = (task.keyword or "").strip()
@@ -238,8 +240,6 @@ async def start_task(
     success = await process_service.start_task(task_id, task.task_name)
     if not success:
         raise HTTPException(status_code=500, detail="启动任务失败")
-    await task_service.update_task_status(task_id, True)
-    await broadcast_message("task_status_changed", {"id": task_id, "is_running": True})
     return {"message": f"任务 '{task.task_name}' 已启动"}
 @router.post("/stop/{task_id}", response_model=dict)
 async def stop_task(
@@ -252,6 +252,4 @@ async def stop_task(
     if not task:
         raise HTTPException(status_code=404, detail="任务未找到")
     await process_service.stop_task(task_id)
-    await task_service.update_task_status(task_id, False)
-    await broadcast_message("task_status_changed", {"id": task_id, "is_running": False})
     return {"message": f"任务ID {task_id} 已发送停止信号"}

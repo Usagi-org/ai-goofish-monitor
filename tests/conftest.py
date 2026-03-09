@@ -56,13 +56,27 @@ class FakeProcessService:
     def __init__(self):
         self.started = []
         self.stopped = []
+        self.reindexed = []
+        self._on_started = None
+        self._on_stopped = None
+
+    def set_lifecycle_hooks(self, *, on_started=None, on_stopped=None):
+        self._on_started = on_started
+        self._on_stopped = on_stopped
 
     async def start_task(self, task_id: int, task_name: str) -> bool:
         self.started.append((task_id, task_name))
+        if self._on_started:
+            await self._on_started(task_id)
         return True
 
     async def stop_task(self, task_id: int):
         self.stopped.append(task_id)
+        if self._on_stopped:
+            await self._on_stopped(task_id)
+
+    def reindex_after_delete(self, deleted_task_id: int):
+        self.reindexed.append(deleted_task_id)
 
 
 class FakeSchedulerService:
@@ -98,6 +112,16 @@ def api_context(tmp_path):
 
     def override_get_task_generation_service():
         return task_generation_service
+
+    async def mark_started(task_id: int):
+        await task_service.update_task_status(task_id, True)
+
+    async def mark_stopped(task_id: int):
+        task = await task_service.get_task(task_id)
+        if task:
+            await task_service.update_task_status(task_id, False)
+
+    process_service.set_lifecycle_hooks(on_started=mark_started, on_stopped=mark_stopped)
 
     app.dependency_overrides[deps.get_task_service] = override_get_task_service
     app.dependency_overrides[deps.get_process_service] = override_get_process_service

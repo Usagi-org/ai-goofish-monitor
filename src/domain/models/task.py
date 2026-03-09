@@ -6,6 +6,7 @@ import re
 from enum import Enum
 from typing import List, Literal, Optional
 
+from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, Field, root_validator, validator
 
 
@@ -72,6 +73,22 @@ def _normalize_payload_keywords(payload: dict) -> dict:
 
 def _has_keyword_rules(keyword_rules: List[str]) -> bool:
     return bool(keyword_rules and len(keyword_rules) > 0)
+
+
+def _normalize_optional_string(value):
+    if value == "" or value == "null" or value == "undefined" or value is None:
+        return None
+    return value
+
+
+def _validate_cron_expression(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        CronTrigger.from_crontab(value)
+    except ValueError as exc:
+        raise ValueError("Cron 表达式无效，必须是标准 5 段 crontab。") from exc
+    return value
 
 
 class Task(BaseModel):
@@ -154,11 +171,19 @@ class TaskCreate(BaseModel):
     @validator("min_price", "max_price", pre=True)
     def convert_price_to_str(cls, v):
         """将价格转换为字符串，处理空字符串和数字"""
-        if v == "" or v == "null" or v == "undefined" or v is None:
+        if _normalize_optional_string(v) is None:
             return None
         if isinstance(v, (int, float)):
             return str(v)
         return v
+
+    @validator("cron", pre=True)
+    def normalize_cron(cls, v):
+        return _normalize_optional_string(v)
+
+    @validator("cron")
+    def validate_cron(cls, v):
+        return _validate_cron_expression(v)
 
     @validator("keyword_rules", pre=True)
     def normalize_keyword_rules(cls, v):
@@ -209,11 +234,19 @@ class TaskUpdate(BaseModel):
     @validator("min_price", "max_price", pre=True)
     def convert_price_to_str(cls, v):
         """将价格转换为字符串，处理空字符串和数字"""
-        if v == "" or v == "null" or v == "undefined" or v is None:
+        if _normalize_optional_string(v) is None:
             return None
         if isinstance(v, (int, float)):
             return str(v)
         return v
+
+    @validator("cron", pre=True)
+    def normalize_cron(cls, v):
+        return _normalize_optional_string(v)
+
+    @validator("cron")
+    def validate_cron(cls, v):
+        return _validate_cron_expression(v)
 
     @validator("keyword_rules", pre=True)
     def normalize_keyword_rules(cls, v):
@@ -260,7 +293,7 @@ class TaskGenerateRequest(BaseModel):
     @validator("min_price", "max_price", pre=True)
     def convert_price_to_str(cls, v):
         """将价格转换为字符串，处理空字符串和数字"""
-        if v == "" or v == "null" or v == "undefined" or v is None:
+        if _normalize_optional_string(v) is None:
             return None
         if isinstance(v, (int, float)):
             return str(v)
@@ -269,21 +302,19 @@ class TaskGenerateRequest(BaseModel):
     @validator("cron", pre=True)
     def empty_str_to_none(cls, v):
         """将空字符串转换为 None"""
-        if v == "" or v == "null" or v == "undefined":
-            return None
-        return v
+        return _normalize_optional_string(v)
+
+    @validator("cron")
+    def validate_cron(cls, v):
+        return _validate_cron_expression(v)
 
     @validator("account_state_file", pre=True)
     def empty_account_to_none(cls, v):
-        if v == "" or v == "null" or v == "undefined":
-            return None
-        return v
+        return _normalize_optional_string(v)
 
     @validator("new_publish_option", "region", pre=True)
     def empty_str_to_none_for_strings(cls, v):
-        if v == "" or v == "null" or v == "undefined":
-            return None
-        return v
+        return _normalize_optional_string(v)
 
     @validator("keyword_rules", pre=True)
     def normalize_keyword_rules(cls, v):
