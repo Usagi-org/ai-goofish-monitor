@@ -34,6 +34,24 @@ process_service = ProcessService()
 scheduler_service = SchedulerService(process_service)
 task_generation_service = TaskGenerationService()
 
+
+async def _sync_task_runtime_status(task_id: int, is_running: bool) -> None:
+    task_service = TaskService(JsonTaskRepository())
+    task = await task_service.get_task(task_id)
+    if not task or task.is_running == is_running:
+        return
+    await task_service.update_task_status(task_id, is_running)
+    await websocket.broadcast_message(
+        "task_status_changed",
+        {"id": task_id, "is_running": is_running},
+    )
+
+
+process_service.set_lifecycle_hooks(
+    on_started=lambda task_id: _sync_task_runtime_status(task_id, True),
+    on_stopped=lambda task_id: _sync_task_runtime_status(task_id, False),
+)
+
 # 设置全局 ProcessService 实例供依赖注入使用
 set_process_service(process_service)
 set_scheduler_service(scheduler_service)
