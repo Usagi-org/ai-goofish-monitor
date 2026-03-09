@@ -16,6 +16,7 @@ from src.api import dependencies as deps
 from src.api.routes import tasks
 from src.infrastructure.persistence.json_task_repository import JsonTaskRepository
 from src.services.task_service import TaskService
+from src.services.task_generation_service import TaskGenerationService
 
 
 @pytest.fixture()
@@ -80,6 +81,7 @@ def api_context(tmp_path):
     task_service = TaskService(repository)
     process_service = FakeProcessService()
     scheduler_service = FakeSchedulerService()
+    task_generation_service = TaskGenerationService()
 
     app = FastAPI()
     app.include_router(tasks.router)
@@ -93,15 +95,20 @@ def api_context(tmp_path):
     def override_get_scheduler_service():
         return scheduler_service
 
+    def override_get_task_generation_service():
+        return task_generation_service
+
     app.dependency_overrides[deps.get_task_service] = override_get_task_service
     app.dependency_overrides[deps.get_process_service] = override_get_process_service
     app.dependency_overrides[deps.get_scheduler_service] = override_get_scheduler_service
+    app.dependency_overrides[deps.get_task_generation_service] = override_get_task_generation_service
 
     return {
         "app": app,
         "config_file": config_file,
         "process_service": process_service,
         "scheduler_service": scheduler_service,
+        "task_generation_service": task_generation_service,
     }
 
 

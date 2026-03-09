@@ -1,7 +1,7 @@
-import asyncio
 import json
 import os
 import sys
+from typing import Awaitable, Callable, Optional
 
 import aiofiles
 
@@ -33,8 +33,23 @@ META_PROMPT_TEMPLATE = """
 4.  思考并生成针对新商品类型的“一票否决硬性原则”和“危险信号清单”。
 """
 
+ProgressCallback = Callable[[str, str], Awaitable[None]]
 
-async def generate_criteria(user_description: str, reference_file_path: str) -> str:
+
+async def _report_progress(
+    progress_callback: Optional[ProgressCallback],
+    step_key: str,
+    message: str,
+) -> None:
+    if progress_callback:
+        await progress_callback(step_key, message)
+
+
+async def generate_criteria(
+    user_description: str,
+    reference_file_path: str,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> str:
     """
     Generates a new criteria file content using AI.
     """
@@ -44,6 +59,7 @@ async def generate_criteria(user_description: str, reference_file_path: str) -> 
     if not ai_client.is_available():
         raise RuntimeError("AI客户端未初始化，无法生成分析标准。请检查.env配置。")
 
+    await _report_progress(progress_callback, "reference", "正在读取参考文件。")
     print(f"正在读取参考文件: {reference_file_path}")
     try:
         with open(reference_file_path, 'r', encoding='utf-8') as f:
@@ -53,12 +69,14 @@ async def generate_criteria(user_description: str, reference_file_path: str) -> 
     except IOError as e:
         raise IOError(f"读取参考文件失败: {e}")
 
+    await _report_progress(progress_callback, "prompt", "正在构建发送给 AI 的指令。")
     print("正在构建发送给AI的指令...")
     prompt = META_PROMPT_TEMPLATE.format(
         reference_text=reference_text,
         user_description=user_description
     )
 
+    await _report_progress(progress_callback, "llm", "正在调用 AI 生成分析标准。")
     print("正在调用AI生成新的分析标准，请稍候...")
     try:
         request_params = {

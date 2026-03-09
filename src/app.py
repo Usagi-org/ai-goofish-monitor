@@ -17,20 +17,27 @@ from src.api.routes import (
     websocket,
     accounts,
 )
-from src.api.dependencies import set_process_service, set_scheduler_service
+from src.api.dependencies import (
+    set_process_service,
+    set_scheduler_service,
+    set_task_generation_service,
+)
 from src.services.task_service import TaskService
 from src.services.process_service import ProcessService
 from src.services.scheduler_service import SchedulerService
+from src.services.task_generation_service import TaskGenerationService
 from src.infrastructure.persistence.json_task_repository import JsonTaskRepository
 
 
 # 全局服务实例
 process_service = ProcessService()
 scheduler_service = SchedulerService(process_service)
+task_generation_service = TaskGenerationService()
 
 # 设置全局 ProcessService 实例供依赖注入使用
 set_process_service(process_service)
 set_scheduler_service(scheduler_service)
+set_task_generation_service(task_generation_service)
 
 
 @asynccontextmanager
