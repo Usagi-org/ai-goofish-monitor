@@ -22,6 +22,33 @@ export interface Task {
   is_running: boolean;
 }
 
+export type TaskGenerationStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type TaskGenerationStepStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface TaskGenerationStep {
+  key: string;
+  label: string;
+  status: TaskGenerationStepStatus;
+  message: string;
+}
+
+export interface TaskGenerationJob {
+  job_id: string;
+  task_name: string;
+  status: TaskGenerationStatus;
+  message: string;
+  current_step: string | null;
+  steps: TaskGenerationStep[];
+  task: Task | null;
+  error: string | null;
+}
+
+export interface TaskCreateResponse {
+  message: string;
+  task?: Task;
+  job?: TaskGenerationJob;
+}
+
 // For PATCH requests, all fields are optional
 export type TaskUpdate = Partial<Omit<Task, 'id'>>;
 

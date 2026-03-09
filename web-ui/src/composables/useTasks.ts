@@ -1,5 +1,10 @@
 import { ref, onMounted } from 'vue'
-import type { Task, TaskGenerateRequest, TaskUpdate } from '@/types/task.d.ts'
+import type {
+  Task,
+  TaskCreateResponse,
+  TaskGenerateRequest,
+  TaskUpdate,
+} from '@/types/task.d.ts'
 import * as taskApi from '@/api/tasks'
 import { useWebSocket } from '@/composables/useWebSocket'
 
@@ -37,20 +42,16 @@ export function useTasks() {
     }
   })
 
-  async function createTask(data: TaskGenerateRequest) {
-    // We can add a specific loading state for creation if needed
+  async function createTask(data: TaskGenerateRequest): Promise<TaskCreateResponse> {
     isLoading.value = true
     error.value = null
     try {
-      await taskApi.createTaskWithAI(data)
-      // Refresh the list to show the new task
-      await fetchTasks()
+      return await taskApi.createTaskWithAI(data)
     } catch (e) {
       if (e instanceof Error) {
         error.value = e
       }
       console.error(e)
-      // Re-throw the error so the UI layer can handle it (e.g., keep the modal open)
       throw e
     } finally {
       isLoading.value = false

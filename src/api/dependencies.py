@@ -8,6 +8,7 @@ from src.services.notification_service import NotificationService
 from src.services.ai_service import AIAnalysisService
 from src.services.process_service import ProcessService
 from src.services.scheduler_service import SchedulerService
+from src.services.task_generation_service import TaskGenerationService
 from src.infrastructure.persistence.json_task_repository import JsonTaskRepository
 from src.infrastructure.external.ai_client import AIClient
 from src.infrastructure.external.notification_clients.ntfy_client import NtfyClient
@@ -19,6 +20,7 @@ from src.infrastructure.config.settings import notification_settings
 # 全局 ProcessService 实例（将在 app.py 中设置）
 _process_service_instance = None
 _scheduler_service_instance = None
+_task_generation_service_instance = None
 
 
 def set_process_service(service: ProcessService):
@@ -31,6 +33,12 @@ def set_scheduler_service(service: SchedulerService):
     """设置全局 SchedulerService 实例"""
     global _scheduler_service_instance
     _scheduler_service_instance = service
+
+
+def set_task_generation_service(service: TaskGenerationService):
+    """设置全局 TaskGenerationService 实例"""
+    global _task_generation_service_instance
+    _task_generation_service_instance = service
 
 
 # 服务依赖注入
@@ -71,3 +79,10 @@ def get_scheduler_service() -> SchedulerService:
     if _scheduler_service_instance is None:
         raise RuntimeError("SchedulerService 未初始化")
     return _scheduler_service_instance
+
+
+def get_task_generation_service() -> TaskGenerationService:
+    """获取任务生成作业服务实例"""
+    if _task_generation_service_instance is None:
+        raise RuntimeError("TaskGenerationService 未初始化")
+    return _task_generation_service_instance

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, onMounted } from 'vue'
 import { useTasks } from '@/composables/useTasks'
-import type { Task, TaskGenerateRequest, TaskUpdate } from '@/types/task.d.ts'
+import type { Task, TaskUpdate } from '@/types/task.d.ts'
+import TaskCreateDialog from '@/components/tasks/TaskCreateDialog.vue'
 import TasksTable from '@/components/tasks/TasksTable.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import { listAccounts, type AccountItem } from '@/api/accounts'
@@ -16,15 +16,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 
 const {
   tasks,
   isLoading,
   error,
+  fetchTasks,
   removeTask,
-  createTask,
   updateTask,
   startTask,
   stopTask,
@@ -32,10 +31,9 @@ const {
 } = useTasks()
 
 // State for dialogs
-const isCreateDialogOpen = ref(false)
 const isEditDialogOpen = ref(false)
 const isCriteriaDialogOpen = ref(false)
-const isSubmitting = ref(false)
+const isEditSubmitting = ref(false)
 const selectedTask = ref<Task | null>(null)
 const criteriaTask = ref<Task | null>(null)
 const criteriaDescription = ref('')
@@ -43,8 +41,6 @@ const isCriteriaSubmitting = ref(false)
 const isDeleteDialogOpen = ref(false)
 const taskToDeleteId = ref<number | null>(null)
 const accountOptions = ref<AccountItem[]>([])
-const defaultAccountPath = ref<string>('')
-const route = useRoute()
 
 const taskToDelete = computed(() => {
   if (taskToDeleteId.value === null) return null
@@ -82,29 +78,9 @@ function handleEditTask(task: Task) {
   isEditDialogOpen.value = true
 }
 
-async function handleCreateTask(data: TaskGenerateRequest) {
-  isSubmitting.value = true
-  try {
-    await createTask(data)
-    isCreateDialogOpen.value = false
-    // 创建成功后刷新页面
-    window.location.reload()
-  }
-  catch (e) {
-    toast({
-      title: '创建任务失败',
-      description: (e as Error).message,
-      variant: 'destructive',
-    })
-  }
-  finally {
-    isSubmitting.value = false
-  }
-}
-
 async function handleUpdateTask(data: TaskUpdate) {
   if (!selectedTask.value) return
-  isSubmitting.value = true
+  isEditSubmitting.value = true
   try {
     await updateTask(selectedTask.value.id, data)
     isEditDialogOpen.value = false
@@ -117,7 +93,7 @@ async function handleUpdateTask(data: TaskUpdate) {
     })
   }
   finally {
-    isSubmitting.value = false
+    isEditSubmitting.value = false
   }
 }
 
@@ -205,27 +181,6 @@ async function fetchAccountOptions() {
 }
 
 onMounted(fetchAccountOptions)
-
-function resolveAccountPath(accountName: string) {
-  const match = accountOptions.value.find((account) => account.name === accountName)
-  return match ? match.path : ''
-}
-
-watch(
-  () => [route.query.account, route.query.create, accountOptions.value],
-  () => {
-    const accountName = typeof route.query.account === 'string' ? route.query.account : ''
-    if (accountName) {
-      defaultAccountPath.value = resolveAccountPath(accountName)
-    } else {
-      defaultAccountPath.value = ''
-    }
-    if (route.query.create === '1') {
-      isCreateDialogOpen.value = true
-    }
-  },
-  { immediate: true }
-)
 </script>
 
 <template>
@@ -234,32 +189,7 @@ watch(
       <h1 class="text-2xl font-bold text-gray-800">
         任务管理
       </h1>
-
-      <!-- Create Task Dialog -->
-      <Dialog v-model:open="isCreateDialogOpen">
-        <DialogTrigger as-child>
-          <Button>+ 创建新任务</Button>
-        </DialogTrigger>
-        <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>创建新监控任务（AI或KeyWord）</DialogTitle>
-            <DialogDescription>
-              请填写任务详情。可选择 AI 判断或关键词判断模式。
-            </DialogDescription>
-          </DialogHeader>
-          <TaskForm
-            mode="create"
-            :account-options="accountOptions"
-            :default-account="defaultAccountPath"
-            @submit="(data) => handleCreateTask(data as TaskGenerateRequest)"
-          />
-          <DialogFooter>
-            <Button type="submit" form="task-form" :disabled="isSubmitting">
-              {{ isSubmitting ? '创建中...' : '创建任务' }}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TaskCreateDialog :account-options="accountOptions" @created="fetchTasks" />
     </div>
 
     <!-- Edit Task Dialog -->
@@ -276,8 +206,8 @@ watch(
           @submit="(data) => handleUpdateTask(data as TaskUpdate)"
         />
         <DialogFooter>
-          <Button type="submit" form="task-form" :disabled="isSubmitting">
-            {{ isSubmitting ? '保存中...' : '保存更改' }}
+          <Button type="submit" form="task-form" :disabled="isEditSubmitting">
+            {{ isEditSubmitting ? '保存中...' : '保存更改' }}
           </Button>
         </DialogFooter>
       </DialogContent>
