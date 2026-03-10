@@ -25,6 +25,7 @@ from src.config import (
     LOGIN_IS_EDGE,
     RUN_HEADLESS,
     RUNNING_IN_DOCKER,
+    SKIP_AI_ANALYSIS,
     STATE_FILE,
 )
 from src.parsers import (
@@ -37,20 +38,24 @@ from src.parsers import (
 from src.utils import (
     format_registration_days,
     get_link_unique_key,
+    log_time,
     random_sleep,
     safe_get,
     save_to_jsonl,
-    log_time,
 )
 from src.rotation import RotationPool, load_state_files, parse_proxy_pool, RotationItem
-from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
 from src.failure_guard import FailureGuard
 from src.services.account_strategy_service import resolve_account_runtime_plan
+from src.services.item_analysis_dispatcher import (
+    ItemAnalysisDispatcher,
+    ItemAnalysisJob,
+)
 from src.services.price_history_service import (
     build_market_reference,
     load_price_snapshots,
     record_market_snapshots,
 )
+from src.services.seller_profile_cache import SellerProfileCache
 
 
 class RiskControlError(Exception):
@@ -208,6 +213,18 @@ def _get_rotation_settings(task_config: dict) -> dict:
         "proxy_retry_limit": max(1, proxy_retry_limit),
         "proxy_blacklist_ttl": max(0, proxy_blacklist_ttl),
     }
+
+
+def _get_ai_analysis_concurrency(task_config: dict) -> int:
+    configured = task_config.get("ai_analysis_concurrency")
+    default = _as_int(os.getenv("AI_ANALYSIS_CONCURRENCY"), 2)
+    return max(1, _as_int(configured, default))
+
+
+def _get_seller_profile_cache_ttl(task_config: dict) -> int:
+    configured = task_config.get("seller_profile_cache_ttl")
+    default = _as_int(os.getenv("SELLER_PROFILE_CACHE_TTL"), 1800)
+    return max(0, _as_int(configured, default))
 
 
 def _default_context_options() -> dict:
@@ -552,6 +569,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
             context_kwargs = _default_context_options()
             storage_state_arg = state_file
+            analysis_dispatcher: Optional[ItemAnalysisDispatcher] = None
 
             if isinstance(snapshot_data, dict):
                 # 新版扩展导出的增强快照，包含环境和Header
@@ -571,6 +589,21 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             context_kwargs = _clean_kwargs(context_kwargs)
             context = await browser.new_context(
                 storage_state=storage_state_arg, **context_kwargs
+            )
+            seller_profile_cache = SellerProfileCache(
+                ttl_seconds=_get_seller_profile_cache_ttl(task_config)
+            )
+            analysis_dispatcher = ItemAnalysisDispatcher(
+                concurrency=_get_ai_analysis_concurrency(task_config),
+                skip_ai_analysis=SKIP_AI_ANALYSIS,
+                seller_loader=lambda user_id: seller_profile_cache.get_or_load(
+                    str(user_id),
+                    lambda seller_key: scrape_user_profile(context, seller_key),
+                ),
+                image_downloader=download_all_images,
+                ai_analyzer=get_ai_analysis,
+                notifier=send_ntfy_notification,
+                saver=save_to_jsonl,
             )
 
             # 增强反检测脚本（模拟真实移动设备）
@@ -1045,20 +1078,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 )
                                 # ...[此处可添加更多从详情页解析出的商品信息]...
 
-                                # 调用核心函数采集卖家信息
-                                user_profile_data = {}
                                 user_id = await safe_get(seller_do, "sellerId")
-                                if user_id:
-                                    # 新的、高效的调用方式:
-                                    user_profile_data = await scrape_user_profile(
-                                        context, str(user_id)
-                                    )
-                                else:
-                                    print("   [警告] 未能从详情API中获取到卖家ID。")
-                                user_profile_data["卖家芝麻信用"] = zhima_credit_text
-                                user_profile_data["卖家注册时长"] = (
-                                    registration_duration_text
-                                )
 
                                 # 构建基础记录
                                 final_record = {
@@ -1068,7 +1088,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         "task_name", "Untitled Task"
                                     ),
                                     "商品信息": item_data,
-                                    "卖家信息": user_profile_data,
+                                    "卖家信息": {},
                                 }
                                 price_reference = build_market_reference(
                                     keyword=keyword,
@@ -1081,187 +1101,27 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     "本商品价格位置", {}
                                 )
 
-                                # --- START: Real-time Analysis & Notification ---
-                                ai_analysis_result = None
-                                if decision_mode == "keyword":
-                                    search_text = build_search_text(final_record)
-                                    ai_analysis_result = evaluate_keyword_rules(
-                                        keyword_rules, search_text
+                                analysis_dispatcher.submit(
+                                    ItemAnalysisJob(
+                                        keyword=keyword,
+                                        task_name=task_config.get(
+                                            "task_name", "Untitled Task"
+                                        ),
+                                        decision_mode=decision_mode,
+                                        analyze_images=analyze_images,
+                                        prompt_text=ai_prompt_text,
+                                        keyword_rules=tuple(keyword_rules or []),
+                                        final_record=final_record,
+                                        seller_id=str(user_id) if user_id else None,
+                                        zhima_credit_text=zhima_credit_text,
+                                        registration_duration_text=registration_duration_text,
                                     )
-                                    final_record["ai_analysis"] = ai_analysis_result
-                                    log_time(
-                                        f"关键词判断完成。推荐状态: {ai_analysis_result.get('is_recommended')}"
-                                    )
-
-                                    if ai_analysis_result.get("is_recommended"):
-                                        log_time("商品命中关键词规则，准备发送通知...")
-                                        await send_ntfy_notification(
-                                            item_data,
-                                            ai_analysis_result.get("reason", "无"),
-                                        )
-                                else:
-                                    from src.config import SKIP_AI_ANALYSIS
-
-                                    # 检查是否跳过AI分析并直接发送通知
-                                    if SKIP_AI_ANALYSIS:
-                                        log_time(
-                                            "环境变量 SKIP_AI_ANALYSIS 已设置，跳过AI分析并直接发送通知..."
-                                        )
-                                        downloaded_image_paths = []
-                                        if analyze_images:
-                                            image_urls = item_data.get("商品图片列表", [])
-                                            downloaded_image_paths = (
-                                                await download_all_images(
-                                                    item_data["商品ID"],
-                                                    image_urls,
-                                                    task_config.get("task_name", "default"),
-                                                )
-                                            )
-                                        else:
-                                            log_time(
-                                                "当前任务已关闭图片分析，跳过图片下载。"
-                                            )
-
-                                        # 删除下载的图片文件，节省空间
-                                        for img_path in downloaded_image_paths:
-                                            try:
-                                                if os.path.exists(img_path):
-                                                    os.remove(img_path)
-                                                    print(
-                                                        f"   [图片] 已删除临时图片文件: {img_path}"
-                                                    )
-                                            except Exception as e:
-                                                print(
-                                                    f"   [图片] 删除图片文件时出错: {e}"
-                                                )
-
-                                        ai_analysis_result = {
-                                            "analysis_source": "ai",
-                                            "is_recommended": True,
-                                            "reason": "商品已跳过AI分析，直接通知",
-                                            "keyword_hit_count": 0,
-                                        }
-                                        final_record["ai_analysis"] = ai_analysis_result
-
-                                        # 直接发送通知，将所有商品标记为推荐
-                                        log_time("商品已跳过AI分析，准备发送通知...")
-                                        await send_ntfy_notification(
-                                            item_data, ai_analysis_result["reason"]
-                                        )
-                                    else:
-                                        log_time(
-                                            f"开始对商品 #{item_data['商品ID']} 进行实时AI分析..."
-                                        )
-                                        downloaded_image_paths = []
-                                        if analyze_images:
-                                            image_urls = item_data.get("商品图片列表", [])
-                                            downloaded_image_paths = (
-                                                await download_all_images(
-                                                    item_data["商品ID"],
-                                                    image_urls,
-                                                    task_config.get("task_name", "default"),
-                                                )
-                                            )
-                                        else:
-                                            log_time(
-                                                "当前任务已关闭图片分析，跳过图片下载，仅分析商品文字和卖家资质。"
-                                            )
-
-                                        # 2. Get AI analysis
-                                        if ai_prompt_text:
-                                            try:
-                                                # 注意：这里我们将整个记录传给AI，让它拥有最全的上下文
-                                                ai_analysis_result = (
-                                                    await get_ai_analysis(
-                                                        final_record,
-                                                        downloaded_image_paths,
-                                                        prompt_text=ai_prompt_text,
-                                                    )
-                                                )
-                                                if ai_analysis_result:
-                                                    ai_analysis_result.setdefault(
-                                                        "analysis_source", "ai"
-                                                    )
-                                                    ai_analysis_result.setdefault(
-                                                        "keyword_hit_count", 0
-                                                    )
-                                                    final_record["ai_analysis"] = (
-                                                        ai_analysis_result
-                                                    )
-                                                    log_time(
-                                                        f"AI分析完成。推荐状态: {ai_analysis_result.get('is_recommended')}"
-                                                    )
-                                                else:
-                                                    ai_analysis_result = {
-                                                        "analysis_source": "ai",
-                                                        "is_recommended": False,
-                                                        "reason": "AI analysis returned None after retries.",
-                                                        "error": "AI analysis returned None after retries.",
-                                                        "keyword_hit_count": 0,
-                                                    }
-                                                    final_record["ai_analysis"] = (
-                                                        ai_analysis_result
-                                                    )
-                                            except Exception as e:
-                                                print(
-                                                    f"   -> AI分析过程中发生严重错误: {e}"
-                                                )
-                                                ai_analysis_result = {
-                                                    "analysis_source": "ai",
-                                                    "is_recommended": False,
-                                                    "reason": f"AI分析异常: {e}",
-                                                    "error": str(e),
-                                                    "keyword_hit_count": 0,
-                                                }
-                                                final_record["ai_analysis"] = (
-                                                    ai_analysis_result
-                                                )
-                                        else:
-                                            print(
-                                                "   -> 任务未配置AI prompt，跳过分析。"
-                                            )
-                                            ai_analysis_result = {
-                                                "analysis_source": "ai",
-                                                "is_recommended": False,
-                                                "reason": "任务未配置AI prompt，跳过分析。",
-                                                "keyword_hit_count": 0,
-                                            }
-                                            final_record["ai_analysis"] = (
-                                                ai_analysis_result
-                                            )
-
-                                        # 删除下载的图片文件，节省空间
-                                        for img_path in downloaded_image_paths:
-                                            try:
-                                                if os.path.exists(img_path):
-                                                    os.remove(img_path)
-                                                    print(
-                                                        f"   [图片] 已删除临时图片文件: {img_path}"
-                                                    )
-                                            except Exception as e:
-                                                print(
-                                                    f"   [图片] 删除图片文件时出错: {e}"
-                                                )
-
-                                        # 3. Send notification if recommended
-                                        if (
-                                            ai_analysis_result
-                                            and ai_analysis_result.get("is_recommended")
-                                        ):
-                                            log_time("商品被AI推荐，准备发送通知...")
-                                            await send_ntfy_notification(
-                                                item_data,
-                                                ai_analysis_result.get("reason", "无"),
-                                            )
-                                # --- END: Real-time Analysis & Notification ---
-
-                                # 4. 保存包含AI结果的完整记录
-                                await save_to_jsonl(final_record, keyword)
+                                )
 
                                 processed_links.add(unique_key)
                                 processed_item_count += 1
                                 log_time(
-                                    f"商品处理流程完毕。累计处理 {processed_item_count} 个新商品。"
+                                    f"商品已提交后台分析。累计处理 {processed_item_count} 个新商品。"
                                 )
 
                                 # --- 修改: 增加单个商品处理后的主要延迟 ---
@@ -1322,6 +1182,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 print(f"\n爬取过程中发生未知错误: {e}")
                 raise
             finally:
+                if analysis_dispatcher is not None:
+                    log_time("等待后台分析任务完成...")
+                    await analysis_dispatcher.join()
                 log_time("任务执行完毕，浏览器将在5秒后自动关闭...")
                 await asyncio.sleep(5)
                 if debug_limit:

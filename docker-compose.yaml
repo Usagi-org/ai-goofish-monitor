@@ -15,4 +15,5 @@ services:
       - ./jsonl:/app/jsonl
       - ./logs:/app/logs
       - ./images:/app/images
+      - ./price_history:/app/price_history
     restart: unless-stopped

@@ -12,6 +12,8 @@ from urllib.parse import quote
 from openai import APIStatusError
 from requests.exceptions import HTTPError
 
+_JSONL_FILE_LOCKS: dict[str, asyncio.Lock] = {}
+
 
 def retry_on_failure(retries=3, delay=5):
     """
@@ -122,9 +124,11 @@ async def save_to_jsonl(data_record: dict, keyword: str):
     output_dir = "jsonl"
     os.makedirs(output_dir, exist_ok=True)
     filename = os.path.join(output_dir, f"{keyword.replace(' ', '_')}_full_data.jsonl")
+    file_lock = _JSONL_FILE_LOCKS.setdefault(filename, asyncio.Lock())
     try:
-        with open(filename, "a", encoding="utf-8") as f:
-            f.write(json.dumps(data_record, ensure_ascii=False) + "\n")
+        async with file_lock:
+            with open(filename, "a", encoding="utf-8") as f:
+                f.write(json.dumps(data_record, ensure_ascii=False) + "\n")
         return True
     except IOError as e:
         print(f"写入文件 {filename} 出错: {e}")

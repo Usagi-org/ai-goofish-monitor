@@ -41,6 +41,7 @@ docker compose down
     - `jsonl/`  结果数据
     - `logs/`  运行日志
     - `images/`  商品图片
+    - `price_history/` 商品价格历史数据
 
 ### 最少配置
 

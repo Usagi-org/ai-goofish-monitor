@@ -46,6 +46,19 @@ from src.ai_message_builder import (
 from src.utils import convert_goofish_link, retry_on_failure
 
 
+def _positive_int(value, default: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+DEFAULT_IMAGE_DOWNLOAD_CONCURRENCY = max(
+    1,
+    _positive_int(os.getenv("IMAGE_DOWNLOAD_CONCURRENCY", "3"), 3),
+)
+
+
 def safe_print(text):
     """安全的打印函数，处理编码错误"""
     try:
@@ -75,7 +88,22 @@ async def _download_single_image(url, save_path):
     return save_path
 
 
-async def download_all_images(product_id, image_urls, task_name="default"):
+def _build_image_save_path(
+    product_id: str,
+    index: int,
+    url: str,
+    task_image_dir: str,
+) -> str:
+    clean_url = url.split('.heic')[0] if '.heic' in url else url
+    file_name_base = os.path.basename(clean_url).split('?')[0]
+    file_name = f"product_{product_id}_{index}_{file_name_base}"
+    file_name = re.sub(r'[\\/*?:"<>|]', "", file_name)
+    if not os.path.splitext(file_name)[1]:
+        file_name += ".jpg"
+    return os.path.join(task_image_dir, file_name)
+
+
+async def download_all_images(product_id, image_urls, task_name="default", concurrency=None):
     """异步下载一个商品的所有图片。如果图片已存在则跳过。支持任务隔离。"""
     if not image_urls:
         return []
@@ -88,28 +116,39 @@ async def download_all_images(product_id, image_urls, task_name="default"):
     if not urls:
         return []
 
-    saved_paths = []
+    max_concurrency = _positive_int(concurrency, DEFAULT_IMAGE_DOWNLOAD_CONCURRENCY)
+    semaphore = asyncio.Semaphore(max_concurrency)
     total_images = len(urls)
-    for i, url in enumerate(urls):
-        try:
-            clean_url = url.split('.heic')[0] if '.heic' in url else url
-            file_name_base = os.path.basename(clean_url).split('?')[0]
-            file_name = f"product_{product_id}_{i + 1}_{file_name_base}"
-            file_name = re.sub(r'[\\/*?:"<>|]', "", file_name)
-            if not os.path.splitext(file_name)[1]:
-                file_name += ".jpg"
 
-            save_path = os.path.join(task_image_dir, file_name)
-
-            if os.path.exists(save_path):
-                safe_print(f"   [图片] 图片 {i + 1}/{total_images} 已存在，跳过下载: {os.path.basename(save_path)}")
-                saved_paths.append(save_path)
-                continue
-
-            safe_print(f"   [图片] 正在下载图片 {i + 1}/{total_images}: {url}")
+    async def _download_one(index: int, url: str):
+        save_path = _build_image_save_path(product_id, index, url, task_image_dir)
+        if os.path.exists(save_path):
+            safe_print(
+                f"   [图片] 图片 {index}/{total_images} 已存在，跳过下载: {os.path.basename(save_path)}"
+            )
+            return save_path
+        async with semaphore:
+            safe_print(f"   [图片] 正在下载图片 {index}/{total_images}: {url}")
             if await _download_single_image(url, save_path):
-                safe_print(f"   [图片] 图片 {i + 1}/{total_images} 已成功下载到: {os.path.basename(save_path)}")
-                saved_paths.append(save_path)
+                safe_print(
+                    f"   [图片] 图片 {index}/{total_images} 已成功下载到: {os.path.basename(save_path)}"
+                )
+                return save_path
+        return None
+
+    tasks = [
+        asyncio.create_task(_download_one(index, url))
+        for index, url in enumerate(urls, start=1)
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    saved_paths = []
+    for url, result in zip(urls, results):
+        try:
+            if isinstance(result, Exception):
+                raise result
+            if result:
+                saved_paths.append(result)
         except Exception as e:
             safe_print(f"   [图片] 处理图片 {url} 时发生错误，已跳过此图: {e}")
 
