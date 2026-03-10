@@ -43,6 +43,11 @@ from src.ai_message_builder import (
     build_analysis_text_prompt,
     build_user_message_content,
 )
+from src.services.ai_response_parser import (
+    EmptyAIResponseError,
+    extract_ai_response_content,
+    parse_ai_response_json,
+)
 from src.utils import convert_goofish_link, retry_on_failure
 
 
@@ -552,7 +557,6 @@ async def send_ntfy_notification(product_data, reason):
             safe_print(f"   -> 发送 Webhook 通知时发生未知错误: {e}")
 
 
-@retry_on_failure(retries=3, delay=5)
 async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     """将完整的商品JSON数据和所有图片发送给 AI 进行分析（异步）。"""
     if not client:
@@ -650,13 +654,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
             response = await client.chat.completions.create(
                 **get_ai_request_params(**request_params)
             )
-
-            # 兼容不同API响应格式，检查response是否为字符串
-            if hasattr(response, 'choices'):
-                ai_response_content = response.choices[0].message.content
-            else:
-                # 如果response是字符串，则直接使用
-                ai_response_content = response
+            ai_response_content = extract_ai_response_content(response)
 
             if AI_DEBUG_MODE:
                 safe_print(f"\n--- [AI DEBUG] 第{attempt + 1}次尝试 ---")
@@ -664,68 +662,30 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 safe_print(ai_response_content)
                 safe_print("---------------------\n")
 
-            # 尝试直接解析JSON
             try:
-                parsed_response = json.loads(ai_response_content)
+                parsed_response = parse_ai_response_json(ai_response_content)
 
                 # 验证响应格式
                 if validate_ai_response_format(parsed_response):
                     safe_print(f"   [AI分析] 第{attempt + 1}次尝试成功，响应格式验证通过")
                     return parsed_response
-                else:
-                    safe_print(f"   [AI分析] 第{attempt + 1}次尝试格式验证失败")
-                    if attempt < max_retries - 1:
-                        safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                        continue
-                    else:
-                        safe_print("   [AI分析] 所有重试完成，使用最后一次结果")
-                        return parsed_response
-
-            except json.JSONDecodeError:
-                safe_print(f"   [AI分析] 第{attempt + 1}次尝试JSON解析失败，尝试清理响应内容...")
-
-                # 清理可能的Markdown代码块标记
-                cleaned_content = ai_response_content.strip()
-                if cleaned_content.startswith('```json'):
-                    cleaned_content = cleaned_content[7:]
-                if cleaned_content.startswith('```'):
-                    cleaned_content = cleaned_content[3:]
-                if cleaned_content.endswith('```'):
-                    cleaned_content = cleaned_content[:-3]
-                cleaned_content = cleaned_content.strip()
-
-                # 寻找JSON对象边界
-                json_start_index = cleaned_content.find('{')
-                json_end_index = cleaned_content.rfind('}')
-
-                if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
-                    json_str = cleaned_content[json_start_index:json_end_index + 1]
-                    try:
-                        parsed_response = json.loads(json_str)
-                        if validate_ai_response_format(parsed_response):
-                            safe_print(f"   [AI分析] 第{attempt + 1}次尝试清理后成功")
-                            return parsed_response
-                        else:
-                            if attempt < max_retries - 1:
-                                safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                                continue
-                            else:
-                                safe_print("   [AI分析] 所有重试完成，使用清理后的结果")
-                                return parsed_response
-                    except json.JSONDecodeError as e:
-                        safe_print(f"   [AI分析] 第{attempt + 1}次尝试清理后JSON解析仍然失败: {e}")
-                        if attempt < max_retries - 1:
-                            safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                            continue
-                        else:
-                            raise e
-                else:
-                    safe_print(f"   [AI分析] 第{attempt + 1}次尝试无法在响应中找到有效的JSON对象")
-                    if attempt < max_retries - 1:
-                        safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                        continue
-                    else:
-                        raise json.JSONDecodeError("No valid JSON object found", ai_response_content, 0)
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试格式验证失败")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise ValueError("AI响应格式缺少必需字段或字段类型不正确。")
+            except json.JSONDecodeError as e:
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试JSON解析失败: {e}")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise e
+            except EmptyAIResponseError as e:
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试返回空响应: {e}")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise e
 
         except Exception as e:
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
