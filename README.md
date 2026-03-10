@@ -21,19 +21,26 @@
 ![监控界面](static/img_1.png)
 ![通知示例](static/img_2.png)
 
-## 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- Node.js + npm（本地验证 `Node v20.18.3` 可完成前端构建）
-- Playwright 及 Chromium 依赖
+## 🐳 Docker 部署(推荐方式)
 
 ```bash
-git clone https://github.com/Usagi-org/ai-goofish-monitor
-cd ai-goofish-monitor
-cp .env.example .env
+git clone https://github.com/Usagi-org/ai-goofish-monitor && cd ai-goofish-monitor
+cp .env.example .env 
+vim .env # 填写相关配置项
+docker compose up -d
+docker compose logs -f app
+docker compose down
 ```
+
+- Web UI 地址：`http://127.0.0.1:8181`
+- 更新镜像：`docker compose pull && docker compose up -d`
+- `docker-compose.yaml` 默认已挂载并持久化以下数据：
+    - `state/`  登录状态cookie文件
+    - `config.json`  任务配置
+    - `prompts/`  任务的提示词
+    - `jsonl/`  结果数据
+    - `logs/`  运行日志
+    - `images/`  商品图片
 
 ### 最少配置
 
@@ -46,18 +53,10 @@ cp .env.example .env
 
 其余配置见下方“配置说明”。
 
-### 本地启动
-
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-`start.sh` 会自动完成环境检查、依赖安装、前端构建、构建产物复制和后端启动。
 
 ### 第一次使用
 
-1. 打开 `http://127.0.0.1:8000`，使用 Web UI 账号登录。
+1. 打开 Web UI 并登录。
 2. 进入“闲鱼账号管理”，使用 [Chrome 扩展](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) 导出并粘贴闲鱼登录态 JSON。
 3. 登录态文件会保存到 `state/` 目录，例如 `state/acc_1.json`。
 4. 回到“任务管理”，创建任务并绑定账号后即可运行。
@@ -66,25 +65,9 @@ chmod +x start.sh
 
 - `AI判断`：填写“详细需求”，提交后会弹出独立进度弹窗，后台异步生成分析标准。
 - `关键词判断`：填写关键词规则，任务会直接创建，不经过 AI 生成流程。
-- `区域筛选`：已改为省 / 市 / 区三级选择器，数据基于闲鱼页面抓取快照内置，不再要求手动输入。
+- `区域筛选`：已改为省 / 市 / 区三级选择器，数据基于闲鱼页面抓取快照内置。
 
-## 🐳 Docker 部署
 
-```bash
-docker compose up -d
-docker compose logs -f app
-docker compose down
-```
-
-- Web UI 地址：`http://127.0.0.1:8000`
-- 更新镜像：`docker compose pull && docker compose up -d`
-- `docker-compose.yaml` 默认已挂载并持久化以下数据：
-  - `state/`
-  - `config.json`
-  - `prompts/`
-  - `jsonl/`
-  - `logs/`
-  - `images/`
 
 ## 用户使用说明
 
@@ -95,7 +78,7 @@ docker compose down
 
 - 支持 AI 创建、关键词规则、价格范围、新发布范围、区域筛选、账号绑定、定时规则。
 - AI 任务创建是后台 job 流程，提交后会打开单独的进度弹窗。
-- 区域筛选会显著缩小结果集，默认留空更稳妥。
+- 区域筛选会显著缩小结果集，默认留空。
 
 ### 账号管理
 
@@ -113,9 +96,32 @@ docker compose down
 
 </details>
 
+
+
 ## 开发者开发
 
-### 本地开发
+### 环境要求
+
+- Python 3.10+
+- Node.js + npm（本地验证 `Node v20.18.3` 可完成前端构建）
+- Playwright 及 Chromium 依赖
+
+```bash
+git clone https://github.com/Usagi-org/ai-goofish-monitor
+cd ai-goofish-monitor
+cp .env.example .env
+```
+
+### 一键启动
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+`start.sh` 会自动完成环境检查、依赖安装、前端构建、构建产物复制和后端启动。
+
+### 手动启动
 
 ```bash
 # 后端
