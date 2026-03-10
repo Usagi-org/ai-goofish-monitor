@@ -8,6 +8,10 @@ from typing import List, Literal, Optional
 
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, Field, root_validator, validator
+from src.services.account_strategy_service import (
+    clean_account_state_file,
+    normalize_account_strategy,
+)
 
 
 class TaskStatus(str, Enum):
@@ -62,6 +66,11 @@ def _normalize_payload_keywords(payload: dict) -> dict:
     if payload is None:
         return {}
     values = dict(payload)
+    values["account_state_file"] = clean_account_state_file(values.get("account_state_file"))
+    values["account_strategy"] = normalize_account_strategy(
+        values.get("account_strategy"),
+        values.get("account_state_file"),
+    )
     if "keyword_rules" in values:
         keyword_rules = values.get("keyword_rules")
         values["keyword_rules"] = _normalize_keyword_values(keyword_rules)
@@ -107,6 +116,7 @@ class Task(BaseModel):
     ai_prompt_base_file: str
     ai_prompt_criteria_file: str
     account_state_file: Optional[str] = None
+    account_strategy: Literal["auto", "fixed", "rotate"] = "auto"
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
@@ -155,6 +165,7 @@ class TaskCreate(BaseModel):
     ai_prompt_base_file: str = "prompts/base_prompt.txt"
     ai_prompt_criteria_file: str = ""
     account_state_file: Optional[str] = None
+    account_strategy: Literal["auto", "fixed", "rotate"] = "auto"
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
@@ -181,6 +192,10 @@ class TaskCreate(BaseModel):
     def normalize_cron(cls, v):
         return _normalize_optional_string(v)
 
+    @validator("account_state_file", pre=True)
+    def normalize_account_state_file(cls, v):
+        return clean_account_state_file(v)
+
     @validator("cron")
     def validate_cron(cls, v):
         return _validate_cron_expression(v)
@@ -194,11 +209,18 @@ class TaskCreate(BaseModel):
         mode = (values.get("decision_mode") or "ai").lower()
         description = str(values.get("description") or "").strip()
         keyword_rules = values.get("keyword_rules") or []
+        account_strategy = normalize_account_strategy(
+            values.get("account_strategy"),
+            values.get("account_state_file"),
+        )
+        values["account_strategy"] = account_strategy
 
         if mode == "ai" and not description:
             raise ValueError("AI 判断模式下，详细需求(description)不能为空。")
         if mode == "keyword" and not _has_keyword_rules(keyword_rules):
             raise ValueError("关键词判断模式下，至少需要一个关键词。")
+        if account_strategy == "fixed" and not values.get("account_state_file"):
+            raise ValueError("固定账号模式下必须选择账号。")
         return values
 
 
@@ -217,6 +239,7 @@ class TaskUpdate(BaseModel):
     ai_prompt_base_file: Optional[str] = None
     ai_prompt_criteria_file: Optional[str] = None
     account_state_file: Optional[str] = None
+    account_strategy: Optional[Literal["auto", "fixed", "rotate"]] = None
     free_shipping: Optional[bool] = None
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
@@ -243,6 +266,10 @@ class TaskUpdate(BaseModel):
     @validator("cron", pre=True)
     def normalize_cron(cls, v):
         return _normalize_optional_string(v)
+
+    @validator("account_state_file", pre=True)
+    def normalize_account_state_file(cls, v):
+        return clean_account_state_file(v)
 
     @validator("cron")
     def validate_cron(cls, v):
@@ -277,6 +304,7 @@ class TaskGenerateRequest(BaseModel):
     max_pages: int = 3
     cron: Optional[str] = None
     account_state_file: Optional[str] = None
+    account_strategy: Literal["auto", "fixed", "rotate"] = "auto"
     free_shipping: bool = True
     new_publish_option: Optional[str] = None
     region: Optional[str] = None
@@ -325,9 +353,16 @@ class TaskGenerateRequest(BaseModel):
         mode = (values.get("decision_mode") or "ai").lower()
         description = str(values.get("description") or "").strip()
         keyword_rules = values.get("keyword_rules") or []
+        account_strategy = normalize_account_strategy(
+            values.get("account_strategy"),
+            values.get("account_state_file"),
+        )
+        values["account_strategy"] = account_strategy
 
         if mode == "ai" and not description:
             raise ValueError("AI 判断模式下，详细需求(description)不能为空。")
         if mode == "keyword" and not _has_keyword_rules(keyword_rules):
             raise ValueError("关键词判断模式下，至少需要一个关键词。")
+        if account_strategy == "fixed" and not values.get("account_state_file"):
+            raise ValueError("固定账号模式下必须选择账号。")
         return values

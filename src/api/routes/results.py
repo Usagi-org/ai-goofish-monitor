@@ -2,15 +2,36 @@
 结果文件管理路由
 """
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse
-from typing import List
+from fastapi.responses import FileResponse, Response
 import os
-import glob
-import json
-import aiofiles
+from urllib.parse import quote
+
+from src.services.price_history_service import build_price_history_insights
+from src.services.result_export_service import build_results_csv
+from src.services.result_file_service import (
+    enrich_records_with_price_insight,
+    filter_and_sort_records,
+    load_result_records,
+    validate_result_filename,
+)
 
 
 router = APIRouter(prefix="/api/results", tags=["results"])
+
+DEFAULT_EXPORT_FILENAME = "export.csv"
+
+
+def _build_download_headers(export_name: str) -> dict[str, str]:
+    ascii_name = export_name.encode("ascii", "ignore").decode("ascii")
+    if ascii_name != export_name or not ascii_name:
+        ascii_name = DEFAULT_EXPORT_FILENAME
+    encoded_name = quote(export_name, safe="")
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{ascii_name}"; '
+            f"filename*=UTF-8''{encoded_name}"
+        )
+    }
 
 
 @router.get("/files")
@@ -83,72 +104,33 @@ async def get_result_file_content(
     sort_order: str = Query("desc"),
 ):
     """读取指定的 .jsonl 文件内容，支持分页、筛选和排序"""
-    # 安全检查
-    if not filename.endswith(".jsonl") or "/" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="无效的文件名")
-
-    filepath = os.path.join("jsonl", filename)
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="结果文件未找到")
-
     if ai_recommended_only and keyword_recommended_only:
         raise HTTPException(status_code=400, detail="AI推荐筛选与关键词推荐筛选不能同时开启。")
 
-    # 兼容旧参数 recommended_only：映射到 ai_recommended_only
     if recommended_only and not ai_recommended_only and not keyword_recommended_only:
         ai_recommended_only = True
 
-    results = []
     try:
-        async with aiofiles.open(filepath, 'r', encoding='utf-8') as f:
-            async for line in f:
-                try:
-                    record = json.loads(line)
-                    ai_analysis = record.get("ai_analysis", {}) or {}
-                    is_recommended = ai_analysis.get("is_recommended") is True
-                    source = ai_analysis.get("analysis_source")
+        validate_result_filename(filename)
+        records = await load_result_records(filename)
+        results = filter_and_sort_records(
+            records,
+            ai_recommended_only=ai_recommended_only,
+            keyword_recommended_only=keyword_recommended_only,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"读取结果文件时出错: {exc}")
 
-                    if ai_recommended_only:
-                        if is_recommended and source == "ai":
-                            results.append(record)
-                    elif keyword_recommended_only:
-                        if is_recommended and source == "keyword":
-                            results.append(record)
-                    else:
-                        results.append(record)
-                except json.JSONDecodeError:
-                    continue
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取结果文件时出错: {e}")
-
-    # 排序逻辑
-    def get_sort_key(item):
-        info = item.get("商品信息", {})
-        if sort_by == "publish_time":
-            return info.get("发布时间", "0000-00-00 00:00")
-        elif sort_by == "price":
-            price_str = str(info.get("当前售价", "0")).replace("¥", "").replace(",", "").strip()
-            try:
-                return float(price_str)
-            except (ValueError, TypeError):
-                return 0.0
-        elif sort_by == "keyword_hit_count":
-            raw_count = item.get("ai_analysis", {}).get("keyword_hit_count", 0)
-            try:
-                return int(raw_count)
-            except (TypeError, ValueError):
-                return 0
-        else:  # default to crawl_time
-            return item.get("爬取时间", "")
-
-    is_reverse = (sort_order == "desc")
-    results.sort(key=get_sort_key, reverse=is_reverse)
-
-    # 分页
     total_items = len(results)
     start = (page - 1) * limit
     end = start + limit
-    paginated_results = results[start:end]
+    paginated_results = enrich_records_with_price_insight(results[start:end], filename)
 
     return {
         "total_items": total_items,
@@ -156,3 +138,52 @@ async def get_result_file_content(
         "limit": limit,
         "items": paginated_results
     }
+
+
+@router.get("/{filename}/insights")
+async def get_result_file_insights(filename: str):
+    try:
+        validate_result_filename(filename)
+        keyword = filename.replace("_full_data.jsonl", "")
+        return build_price_history_insights(keyword)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/{filename}/export")
+async def export_result_file_content(
+    filename: str,
+    recommended_only: bool = Query(False),
+    ai_recommended_only: bool = Query(False),
+    keyword_recommended_only: bool = Query(False),
+    sort_by: str = Query("crawl_time"),
+    sort_order: str = Query("desc"),
+):
+    if ai_recommended_only and keyword_recommended_only:
+        raise HTTPException(status_code=400, detail="AI推荐筛选与关键词推荐筛选不能同时开启。")
+    if recommended_only and not ai_recommended_only and not keyword_recommended_only:
+        ai_recommended_only = True
+
+    try:
+        validate_result_filename(filename)
+        records = await load_result_records(filename)
+        results = filter_and_sort_records(
+            records,
+            ai_recommended_only=ai_recommended_only,
+            keyword_recommended_only=keyword_recommended_only,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+        csv_text = build_results_csv(
+            enrich_records_with_price_insight(results, filename)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"导出结果文件时出错: {exc}")
+
+    export_name = filename.replace(".jsonl", ".csv")
+    headers = _build_download_headers(export_name)
+    return Response(content=csv_text, media_type="text/csv; charset=utf-8", headers=headers)

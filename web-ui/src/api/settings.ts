@@ -25,6 +25,11 @@ export interface AiSettings {
 }
 
 export interface RotationSettings {
+  ACCOUNT_ROTATION_ENABLED?: boolean
+  ACCOUNT_ROTATION_MODE?: string
+  ACCOUNT_ROTATION_RETRY_LIMIT?: number
+  ACCOUNT_BLACKLIST_TTL?: number
+  ACCOUNT_STATE_DIR?: string
   PROXY_ROTATION_ENABLED?: boolean
   PROXY_ROTATION_MODE?: string
   PROXY_POOL?: string

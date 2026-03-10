@@ -1,4 +1,4 @@
-import type { ResultItem } from '@/types/result.d.ts'
+import type { ResultInsights, ResultItem } from '@/types/result.d.ts'
 import { http } from '@/lib/http'
 
 export interface GetResultContentParams {
@@ -25,4 +25,29 @@ export async function getResultContent(
   params: GetResultContentParams = {}
 ): Promise<{ total_items: number; items: ResultItem[] }> {
   return await http(`/api/results/${filename}`, { params: params as Record<string, any> })
+}
+
+export async function getResultInsights(filename: string): Promise<ResultInsights> {
+  return await http(`/api/results/${filename}/insights`)
+}
+
+export function buildResultExportUrl(filename: string, params: GetResultContentParams = {}): string {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      searchParams.set(key, String(value))
+    }
+  })
+  const queryString = searchParams.toString()
+  return `/api/results/${encodeURIComponent(filename)}/export${queryString ? `?${queryString}` : ''}`
+}
+
+export function downloadResultExport(filename: string, params: GetResultContentParams = {}) {
+  const url = buildResultExportUrl(filename, params)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }

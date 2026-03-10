@@ -45,6 +45,12 @@ from src.utils import (
 from src.rotation import RotationPool, load_state_files, parse_proxy_pool, RotationItem
 from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
 from src.failure_guard import FailureGuard
+from src.services.account_strategy_service import resolve_account_runtime_plan
+from src.services.price_history_service import (
+    build_market_reference,
+    load_price_snapshots,
+    record_market_snapshots,
+)
 
 
 class RiskControlError(Exception):
@@ -424,6 +430,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     region_filter = (task_config.get("region") or "").strip()
 
     processed_links = set()
+    history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    history_seen_item_ids: set[str] = set()
+    historical_snapshots = load_price_snapshots(keyword)
     output_filename = os.path.join(
         "jsonl", f"{keyword.replace(' ', '_')}_full_data.jsonl"
     )
@@ -446,16 +455,21 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
         print(f"LOG: 输出文件 {output_filename} 不存在，将创建新文件。")
 
     rotation_settings = _get_rotation_settings(task_config)
-    forced_account = task_config.get("account_state_file") or None
-    if isinstance(forced_account, str) and not forced_account.strip():
-        forced_account = None
-    if forced_account:
-        rotation_settings["account_enabled"] = False
     account_items = load_state_files(rotation_settings["account_state_dir"])
-    if not forced_account and os.path.exists(STATE_FILE):
+    runtime_plan = resolve_account_runtime_plan(
+        strategy=task_config.get("account_strategy"),
+        account_state_file=task_config.get("account_state_file"),
+        has_root_state_file=os.path.exists(STATE_FILE),
+        available_account_files=account_items,
+    )
+    forced_account = runtime_plan["forced_account"]
+    if runtime_plan["prefer_root_state"]:
         account_items = [STATE_FILE]
-    if not forced_account and not os.path.exists(STATE_FILE) and account_items:
+        rotation_settings["account_enabled"] = False
+    elif runtime_plan["use_account_pool"]:
         rotation_settings["account_enabled"] = True
+    else:
+        rotation_settings["account_enabled"] = False
 
     account_pool = RotationPool(
         account_items, rotation_settings["account_blacklist_ttl"], "account"
@@ -912,6 +926,16 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     )
                     if not basic_items:
                         break
+                    historical_snapshots.extend(
+                        record_market_snapshots(
+                            keyword=keyword,
+                            task_name=task_config.get("task_name", "Untitled Task"),
+                            items=basic_items,
+                            run_id=history_run_id,
+                            snapshot_time=datetime.now().isoformat(),
+                            seen_item_ids=history_seen_item_ids,
+                        )
+                    )
 
                     total_items_on_page = len(basic_items)
                     for i, item_data in enumerate(basic_items, 1):
@@ -1046,6 +1070,16 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     "商品信息": item_data,
                                     "卖家信息": user_profile_data,
                                 }
+                                price_reference = build_market_reference(
+                                    keyword=keyword,
+                                    item=item_data,
+                                    current_market_items=basic_items,
+                                    historical_snapshots=historical_snapshots,
+                                )
+                                final_record["价格参考"] = price_reference
+                                final_record["price_insight"] = price_reference.get(
+                                    "本商品价格位置", {}
+                                )
 
                                 # --- START: Real-time Analysis & Notification ---
                                 ai_analysis_result = None

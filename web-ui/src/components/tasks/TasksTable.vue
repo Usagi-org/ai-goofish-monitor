@@ -23,6 +23,17 @@ const props = defineProps<Props>()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
 const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
 const keywordRuleCount = (task: Task) => task.keyword_rules?.length || 0
+const resolveAccountStrategyLabel = (task: Task) => {
+  if (task.account_strategy === 'rotate') return '账号轮换'
+  if (task.account_strategy === 'fixed') return '固定账号'
+  return '自动账号'
+}
+const resolveAccountName = (task: Task) => {
+  if (!task.account_state_file) return '系统选择'
+  const segments = task.account_state_file.split('/')
+  const filename = segments[segments.length - 1] || task.account_state_file
+  return filename.replace('.json', '')
+}
 
 const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
@@ -97,6 +108,12 @@ const emit = defineEmits<{
                 </div>
                 <div class="text-xs text-slate-500" v-if="task.description">
                   {{ task.description }}
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                  <Badge variant="outline" class="border-slate-200 bg-white text-slate-600">
+                    {{ resolveAccountStrategyLabel(task) }}
+                  </Badge>
+                  <span>{{ resolveAccountName(task) }}</span>
                 </div>
               </div>
             </TableCell>

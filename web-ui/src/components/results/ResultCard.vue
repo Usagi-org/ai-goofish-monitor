@@ -19,6 +19,7 @@ const props = defineProps<Props>()
 const info = props.item.商品信息
 const seller = props.item.卖家信息
 const ai = props.item.ai_analysis
+const priceInsight = props.item.price_insight
 
 const isRecommended = ai?.is_recommended === true
 const recommendationText = isRecommended ? '推荐' : (ai?.is_recommended === false ? '不推荐' : '待定')
@@ -30,6 +31,7 @@ const crawlTime = props.item.爬取时间
   ? new Date(props.item.爬取时间).toLocaleString('sv-SE')
   : '未知'
 const publishTime = info.发布时间 || '未知'
+const valueScore = ai?.value_score ?? priceInsight?.deal_score ?? null
 
 const expanded = ref(false)
 </script>
@@ -75,6 +77,32 @@ const expanded = ref(false)
         <p class="mt-1 text-gray-600" :class="{ 'line-clamp-3': !expanded }">
           原因: {{ ai?.reason || '无' }}
         </p>
+        <div v-if="priceInsight?.observation_count" class="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <div class="rounded-xl bg-white/80 px-3 py-2">
+            <p class="text-gray-500">性价比分</p>
+            <p class="mt-1 text-base font-semibold text-slate-900">
+              {{ valueScore ?? '—' }}
+            </p>
+          </div>
+          <div class="rounded-xl bg-white/80 px-3 py-2">
+            <p class="text-gray-500">历史观察</p>
+            <p class="mt-1 text-base font-semibold text-slate-900">
+              {{ priceInsight.observation_count }} 次
+            </p>
+          </div>
+          <div class="rounded-xl bg-white/80 px-3 py-2">
+            <p class="text-gray-500">历史低位</p>
+            <p class="mt-1 text-base font-semibold text-slate-900">
+              {{ priceInsight.min_price ? `¥${priceInsight.min_price}` : '—' }}
+            </p>
+          </div>
+          <div class="rounded-xl bg-white/80 px-3 py-2">
+            <p class="text-gray-500">市场均价</p>
+            <p class="mt-1 text-base font-semibold text-slate-900">
+              {{ priceInsight.market_avg_price ? `¥${priceInsight.market_avg_price}` : '—' }}
+            </p>
+          </div>
+        </div>
         <button
           v-if="ai?.reason"
           @click="expanded = !expanded"

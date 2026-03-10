@@ -12,3 +12,4 @@ dist/
 state/
 config.json
 prompts/
+.serena/

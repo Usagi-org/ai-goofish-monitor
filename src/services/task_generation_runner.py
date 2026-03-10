@@ -34,6 +34,7 @@ def build_task_create(req: TaskGenerateRequest, criteria_file: str) -> TaskCreat
         ai_prompt_base_file="prompts/base_prompt.txt",
         ai_prompt_criteria_file=criteria_file,
         account_state_file=req.account_state_file,
+        account_strategy=req.account_strategy,
         free_shipping=req.free_shipping,
         new_publish_option=req.new_publish_option,
         region=req.region,

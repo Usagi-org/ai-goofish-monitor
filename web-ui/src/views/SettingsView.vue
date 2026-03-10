@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
+import RotationSettingsPanel from '@/components/settings/RotationSettingsPanel.vue'
 
 const {
   notificationSettings,
@@ -221,57 +222,12 @@ watch(selectedPrompt, async (value) => {
 
       <!-- Rotation Tab -->
       <TabsContent value="rotation">
-        <Card>
-          <CardHeader>
-            <CardTitle>IP 代理轮换</CardTitle>
-            <CardDescription>配置代理池与轮换策略。</CardDescription>
-          </CardHeader>
-          <CardContent v-if="isReady" class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="font-medium">代理轮换</h3>
-                <p class="text-sm text-gray-500">使用代理池进行 IP 轮换。</p>
-              </div>
-              <Switch v-model:checked="rotationSettings.PROXY_ROTATION_ENABLED" />
-            </div>
-            <div class="grid gap-2">
-              <Label>轮换模式</Label>
-              <Select v-model="rotationSettings.PROXY_ROTATION_MODE">
-                <SelectTrigger>
-                  <SelectValue placeholder="请选择轮换模式" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="per_task">按任务固定</SelectItem>
-                  <SelectItem value="on_failure">失败后轮换</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div class="grid gap-2">
-              <Label>代理池 (逗号分隔)</Label>
-              <Textarea
-                v-model="rotationSettings.PROXY_POOL"
-                class="min-h-[120px]"
-                placeholder="http://127.0.0.1:7890,socks5://127.0.0.1:1080"
-              />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="grid gap-2">
-                <Label>重试上限</Label>
-                <Input v-model.number="rotationSettings.PROXY_ROTATION_RETRY_LIMIT" type="number" min="1" />
-              </div>
-              <div class="grid gap-2">
-                <Label>黑名单 TTL (秒)</Label>
-                <Input v-model.number="rotationSettings.PROXY_BLACKLIST_TTL" type="number" min="0" />
-              </div>
-            </div>
-          </CardContent>
-          <CardContent v-else class="py-8 text-sm text-gray-500">
-            正在加载轮换配置...
-          </CardContent>
-          <CardFooter v-if="isReady" class="flex gap-2">
-            <Button @click="handleSaveRotation" :disabled="isSaving">保存轮换设置</Button>
-          </CardFooter>
-        </Card>
+        <RotationSettingsPanel
+          :settings="rotationSettings"
+          :is-ready="isReady"
+          :is-saving="isSaving"
+          @save="handleSaveRotation"
+        />
       </TabsContent>
 
       <!-- Notifications Tab -->

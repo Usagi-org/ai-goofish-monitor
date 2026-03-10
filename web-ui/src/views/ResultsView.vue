@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useResults } from '@/composables/useResults'
 import ResultsFilterBar from '@/components/results/ResultsFilterBar.vue'
 import ResultsGrid from '@/components/results/ResultsGrid.vue'
+import ResultsInsightsPanel from '@/components/results/ResultsInsightsPanel.vue'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import {
@@ -18,10 +19,12 @@ const {
   files,
   selectedFile,
   results,
+  insights,
   filters,
   isLoading,
   error,
   refreshResults,
+  exportSelectedResults,
   deleteSelectedFile,
   fileOptions,
   isFileOptionsReady,
@@ -52,6 +55,17 @@ function openDeleteDialog() {
     return
   }
   isDeleteDialogOpen.value = true
+}
+
+function handleExportResults() {
+  if (!selectedFile.value) {
+    toast({
+      title: '暂无可导出的结果',
+      variant: 'destructive',
+    })
+    return
+  }
+  exportSelectedResults()
 }
 
 async function handleDeleteResults() {
@@ -93,8 +107,11 @@ async function handleDeleteResults() {
       v-model:sortOrder="filters.sort_order"
       :is-loading="isLoading"
       @refresh="refreshResults"
+      @export="handleExportResults"
       @delete="openDeleteDialog"
     />
+
+    <ResultsInsightsPanel :insights="insights" :selected-task-label="selectedTaskLabel" />
 
     <ResultsGrid :results="results" :is-loading="isLoading" />
 
