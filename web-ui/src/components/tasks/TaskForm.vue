@@ -18,6 +18,7 @@ const props = defineProps<{
   initialData?: Task | null
   accountOptions?: { name: string; path: string }[]
   defaultAccount?: string
+  defaultValues?: Partial<TaskGenerateRequest & Partial<Task>>
 }>()
 
 const emit = defineEmits<{
@@ -50,18 +51,27 @@ function parseKeywordText(text: string): string[] {
 }
 
 watchEffect(() => {
+  const defaultValues = props.defaultValues || {}
   if (props.mode === 'edit' && props.initialData) {
     form.value = {
       ...props.initialData,
-      account_strategy: props.initialData.account_strategy || (props.initialData.account_state_file ? 'fixed' : 'auto'),
-      account_state_file: props.initialData.account_state_file || AUTO_ACCOUNT_VALUE,
-      analyze_images: props.initialData.analyze_images ?? true,
-      free_shipping: props.initialData.free_shipping ?? true,
-      new_publish_option: props.initialData.new_publish_option || '__none__',
-      region: props.initialData.region || '',
-      decision_mode: props.initialData.decision_mode || 'ai',
+      ...defaultValues,
+      account_strategy:
+        defaultValues.account_strategy ||
+        props.initialData.account_strategy ||
+        (props.initialData.account_state_file ? 'fixed' : 'auto'),
+      account_state_file:
+        defaultValues.account_state_file ||
+        props.initialData.account_state_file ||
+        AUTO_ACCOUNT_VALUE,
+      analyze_images: defaultValues.analyze_images ?? props.initialData.analyze_images ?? true,
+      free_shipping: defaultValues.free_shipping ?? props.initialData.free_shipping ?? true,
+      new_publish_option:
+        defaultValues.new_publish_option || props.initialData.new_publish_option || '__none__',
+      region: defaultValues.region || props.initialData.region || '',
+      decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
     }
-    keywordRulesInput.value = (props.initialData.keyword_rules || []).join('\n')
+    keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
   } else {
     form.value = {
       task_name: '',
@@ -79,8 +89,21 @@ watchEffect(() => {
       new_publish_option: '__none__',
       region: '',
       decision_mode: 'ai',
+      ...defaultValues,
+    }
+    if (!form.value.account_strategy) {
+      form.value.account_strategy = props.defaultAccount ? 'fixed' : 'auto'
+    }
+    if (!form.value.account_state_file) {
+      form.value.account_state_file = props.defaultAccount || AUTO_ACCOUNT_VALUE
+    }
+    if (!form.value.new_publish_option) {
+      form.value.new_publish_option = '__none__'
     }
     keywordRulesInput.value = ''
+    if (defaultValues.keyword_rules && defaultValues.keyword_rules.length > 0) {
+      keywordRulesInput.value = defaultValues.keyword_rules.join('\n')
+    }
   }
 })
 

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { createTaskWithAI } from '@/api/tasks'
 import { useTaskGenerationJob } from '@/composables/useTaskGenerationJob'
 import type { TaskGenerateRequest } from '@/types/task.d.ts'
+import { parseTaskFormDefaults } from '@/lib/taskFormQuery'
 import TaskForm from '@/components/tasks/TaskForm.vue'
 import TaskGenerationDialog from '@/components/tasks/TaskGenerationDialog.vue'
 import { Button } from '@/components/ui/button'
@@ -30,6 +31,7 @@ const isFormOpen = ref(false)
 const isProgressOpen = ref(false)
 const isSubmitting = ref(false)
 const defaultAccountPath = ref('')
+const defaultValues = ref({})
 const {
   activeJob,
   pollingError,
@@ -71,10 +73,11 @@ async function handleCreateTask(data: TaskGenerateRequest) {
 }
 
 watch(
-  () => [route.query.account, route.query.create, props.accountOptions],
+  () => [route.query, props.accountOptions],
   () => {
     const accountName = typeof route.query.account === 'string' ? route.query.account : ''
     defaultAccountPath.value = accountName ? resolveAccountPath(accountName) : ''
+    defaultValues.value = parseTaskFormDefaults(route.query)
     if (route.query.create === '1') {
       isFormOpen.value = true
     }
@@ -129,6 +132,7 @@ watch(pollingError, (value) => {
         mode="create"
         :account-options="accountOptions"
         :default-account="defaultAccountPath"
+        :default-values="defaultValues"
         @submit="(data) => handleCreateTask(data as TaskGenerateRequest)"
       />
       <DialogFooter>

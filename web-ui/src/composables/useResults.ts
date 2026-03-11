@@ -1,4 +1,5 @@
 import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import type { ResultInsights, ResultItem } from '@/types/result.d.ts'
 import * as resultsApi from '@/api/results'
 import type { GetResultContentParams } from '@/api/results'
@@ -6,6 +7,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import * as tasksApi from '@/api/tasks'
 
 export function useResults() {
+  const route = useRoute()
   // State
   const files = ref<string[]>([])
   const selectedFile = ref<string | null>(null)
@@ -194,6 +196,16 @@ export function useResults() {
   watch(selectedFile, (value) => {
     if (value) localStorage.setItem('lastSelectedResultFile', value)
   })
+  watch(
+    [() => route.query.file, files],
+    ([routeFile, currentFiles]) => {
+      if (typeof routeFile !== 'string') return
+      if (currentFiles.includes(routeFile)) {
+        selectedFile.value = routeFile
+      }
+    },
+    { immediate: true }
+  )
 
   const fileOptions = computed(() =>
     files.value.map((file) => {

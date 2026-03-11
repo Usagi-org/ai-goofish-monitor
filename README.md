@@ -17,9 +17,10 @@
 
 ## 截图
 
-![任务管理](static/img.png)
-![监控界面](static/img_1.png)
-![通知示例](static/img_2.png)
+![监控概览](static/img.png)
+![任务管理](static/img_1.png)
+![结果查看](static/img_2.png)
+![通知推送](static/img_3.png)
 
 ## 🐳 Docker 部署(推荐方式)
 

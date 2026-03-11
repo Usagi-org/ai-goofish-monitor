@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.api.routes import (
+    dashboard,
     tasks,
     logs,
     settings,
@@ -98,6 +99,7 @@ app = FastAPI(
 
 # 注册路由
 app.include_router(tasks.router)
+app.include_router(dashboard.router)
 app.include_router(logs.router)
 app.include_router(settings.router)
 app.include_router(prompts.router)
