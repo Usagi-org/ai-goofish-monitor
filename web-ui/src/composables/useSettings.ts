@@ -1,6 +1,13 @@
 import { ref, onMounted } from 'vue'
 import * as settingsApi from '@/api/settings'
-import type { NotificationSettings, AiSettings, RotationSettings, SystemStatus } from '@/api/settings'
+import type {
+  NotificationSettings,
+  NotificationSettingsUpdate,
+  NotificationTestResponse,
+  AiSettings,
+  RotationSettings,
+  SystemStatus
+} from '@/api/settings'
 
 export function useSettings() {
   const notificationSettings = ref<NotificationSettings>({})
@@ -48,12 +55,31 @@ export function useSettings() {
     }
   }
 
-  async function saveNotificationSettings() {
+  async function saveNotificationSettings(payload: NotificationSettingsUpdate) {
     isSaving.value = true
     try {
-      await settingsApi.updateNotificationSettings(notificationSettings.value)
-      // Refresh status as env file changed
-      systemStatus.value = await settingsApi.getSystemStatus()
+      await settingsApi.updateNotificationSettings(payload)
+      const [notif, status] = await Promise.all([
+        settingsApi.getNotificationSettings(),
+        settingsApi.getSystemStatus()
+      ])
+      notificationSettings.value = notif
+      systemStatus.value = status
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  async function testNotification(payload: {
+    channel?: string
+    settings: NotificationSettingsUpdate
+  }): Promise<NotificationTestResponse> {
+    isSaving.value = true
+    try {
+      return await settingsApi.testNotificationSettings(payload)
     } catch (e) {
       if (e instanceof Error) error.value = e
       throw e
@@ -131,6 +157,7 @@ export function useSettings() {
     error,
     fetchAll,
     saveNotificationSettings,
+    testNotification,
     saveAiSettings,
     saveRotationSettings,
     testAiConnection,

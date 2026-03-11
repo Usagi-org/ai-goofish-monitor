@@ -2,9 +2,14 @@
 环境变量管理器
 负责读取和更新 .env 文件
 """
-import os
+import re
 from typing import Dict, List, Optional
 from pathlib import Path
+
+from dotenv import dotenv_values
+
+
+_PLAIN_ENV_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_./:-]+$")
 
 
 class EnvManager:
@@ -21,23 +26,15 @@ class EnvManager:
 
     def read_env(self) -> Dict[str, str]:
         """读取所有环境变量"""
-        env_vars = {}
         if not self.env_file.exists():
-            return env_vars
+            return {}
 
-        with open(self.env_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                # 跳过空行和注释
-                if not line or line.startswith('#'):
-                    continue
-
-                # 解析键值对
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    env_vars[key.strip()] = value.strip()
-
-        return env_vars
+        loaded = dotenv_values(self.env_file, encoding="utf-8")
+        return {
+            key: value
+            for key, value in loaded.items()
+            if key and value is not None
+        }
 
     def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """获取单个环境变量的值"""
@@ -46,14 +43,19 @@ class EnvManager:
 
     def update_values(self, updates: Dict[str, str]) -> bool:
         """批量更新环境变量"""
+        return self.apply_changes(updates=updates)
+
+    def apply_changes(
+        self,
+        updates: Dict[str, str],
+        deletions: List[str] | None = None,
+    ) -> bool:
+        """批量更新并删除环境变量"""
         try:
-            # 读取现有配置
             existing_vars = self.read_env()
-
-            # 更新值
             existing_vars.update(updates)
-
-            # 写回文件
+            for key in deletions or []:
+                existing_vars.pop(key, None)
             return self._write_env(existing_vars)
         except Exception as e:
             print(f"更新环境变量失败: {e}")
@@ -79,11 +81,20 @@ class EnvManager:
         try:
             with open(self.env_file, 'w', encoding='utf-8') as f:
                 for key, value in env_vars.items():
-                    f.write(f"{key}={value}\n")
+                    f.write(f"{key}={self._serialize_value(value)}\n")
             return True
         except Exception as e:
             print(f"写入 .env 文件失败: {e}")
             return False
+
+    def _serialize_value(self, value: str) -> str:
+        text = str(value)
+        if text == "":
+            return ""
+        if _PLAIN_ENV_VALUE_PATTERN.fullmatch(text):
+            return text
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'"{escaped}"'
 
 
 # 全局实例

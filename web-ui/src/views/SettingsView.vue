@@ -2,16 +2,17 @@
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSettings } from '@/composables/useSettings'
+import type { NotificationSettingsUpdate, NotificationTestResponse } from '@/api/settings'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
+import NotificationSettingsPanel from '@/components/settings/NotificationSettingsPanel.vue'
 import RotationSettingsPanel from '@/components/settings/RotationSettingsPanel.vue'
 
 const {
@@ -25,6 +26,7 @@ const {
   error,
   refreshStatus,
   saveNotificationSettings,
+  testNotification,
   saveAiSettings,
   saveRotationSettings,
   testAiConnection
@@ -49,12 +51,25 @@ function notifyError(title: string, description?: string) {
   toast({ title, description, variant: 'destructive' })
 }
 
-async function handleSaveNotifications() {
+async function handleSaveNotifications(payload: NotificationSettingsUpdate) {
   try {
-    await saveNotificationSettings()
+    await saveNotificationSettings(payload)
     notifySuccess('通知设置已保存')
   } catch (e) {
     notifyError('通知设置保存失败', (e as Error).message)
+  }
+}
+
+async function handleTestNotification(payload: {
+  channel?: string
+  settings: NotificationSettingsUpdate
+}): Promise<NotificationTestResponse> {
+  try {
+    const result = await testNotification(payload)
+    return result
+  } catch (e) {
+    notifyError('通知测试失败', (e as Error).message)
+    throw e
   }
 }
 
@@ -232,103 +247,13 @@ watch(selectedPrompt, async (value) => {
 
       <!-- Notifications Tab -->
       <TabsContent value="notifications">
-        <Card>
-          <CardHeader>
-            <CardTitle>通知推送设置</CardTitle>
-            <CardDescription>配置爬虫任务完成后的消息推送渠道。</CardDescription>
-          </CardHeader>
-          <CardContent class="space-y-4">
-            <div class="grid gap-2">
-              <Label>Bark URL (iOS)</Label>
-              <Input v-model="notificationSettings.BARK_URL" placeholder="https://api.day.app/YOUR_KEY/" />
-            </div>
-            <div class="grid gap-2">
-              <Label>Ntfy Topic URL</Label>
-              <Input v-model="notificationSettings.NTFY_TOPIC_URL" placeholder="https://ntfy.sh/topic" />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="grid gap-2">
-                <Label>Gotify URL</Label>
-                <Input v-model="notificationSettings.GOTIFY_URL" placeholder="https://gotify.example.com" />
-              </div>
-              <div class="grid gap-2">
-                <Label>Gotify Token</Label>
-                <Input v-model="notificationSettings.GOTIFY_TOKEN" placeholder="Token" />
-              </div>
-            </div>
-            <div class="grid gap-2">
-              <Label>企业微信 Bot URL</Label>
-              <Input v-model="notificationSettings.WX_BOT_URL" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="grid gap-2">
-                <Label>Telegram Bot Token</Label>
-                <Input v-model="notificationSettings.TELEGRAM_BOT_TOKEN" />
-              </div>
-              <div class="grid gap-2">
-                <Label>Telegram Chat ID</Label>
-                <Input v-model="notificationSettings.TELEGRAM_CHAT_ID" />
-              </div>
-            </div>
-            <div class="border-t pt-4 space-y-4">
-              <div class="grid gap-2">
-                <Label>通用 Webhook URL</Label>
-                <Input v-model="notificationSettings.WEBHOOK_URL" placeholder="https://your-webhook-url.com/endpoint" />
-              </div>
-              <div class="grid grid-cols-2 gap-4">
-                <div class="grid gap-2">
-                  <Label>Webhook 方法</Label>
-                  <Select
-                    :model-value="notificationSettings.WEBHOOK_METHOD || 'POST'"
-                    @update:model-value="(value) => notificationSettings.WEBHOOK_METHOD = value as string"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="POST">POST</SelectItem>
-                      <SelectItem value="GET">GET</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div class="grid gap-2">
-                  <Label>Webhook 内容类型</Label>
-                  <Select
-                    :model-value="notificationSettings.WEBHOOK_CONTENT_TYPE || 'JSON'"
-                    @update:model-value="(value) => notificationSettings.WEBHOOK_CONTENT_TYPE = value as string"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="JSON">JSON</SelectItem>
-                      <SelectItem value="FORM">FORM</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div class="grid gap-2">
-                <Label>Webhook 请求头 (JSON)</Label>
-                <Textarea v-model="notificationSettings.WEBHOOK_HEADERS" placeholder='例如: {"Authorization": "Bearer token"}' />
-              </div>
-              <div class="grid gap-2">
-                <Label>Webhook Query 参数 (JSON)</Label>
-                <Textarea v-model="notificationSettings.WEBHOOK_QUERY_PARAMETERS" placeholder='例如: {"param1": "value1"}' />
-              </div>
-              <div class="grid gap-2">
-                <Label>Webhook Body (支持变量)</Label>
-                <Textarea v-model="notificationSettings.WEBHOOK_BODY" placeholder='例如: {"message": "${content}"}' />
-              </div>
-            </div>
-             <div class="flex items-center space-x-2 mt-2">
-              <Switch id="pcurl" v-model="notificationSettings.PCURL_TO_MOBILE" />
-              <Label for="pcurl">将商品链接转换为手机端链接</Label>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button @click="handleSaveNotifications" :disabled="isSaving">保存通知设置</Button>
-          </CardFooter>
-        </Card>
+        <NotificationSettingsPanel
+          :settings="notificationSettings"
+          :is-ready="isReady"
+          :is-saving="isSaving"
+          :save-settings="handleSaveNotifications"
+          :test-settings="handleTestNotification"
+        />
       </TabsContent>
 
       <!-- Status Tab -->
@@ -375,19 +300,15 @@ watch(selectedPrompt, async (value) => {
                         </div>
                     </div>
                     
-                    <div class="p-3 border rounded-lg" :class="(systemStatus.env_file.ntfy_topic_url_set || systemStatus.env_file.gotify_url_set || systemStatus.env_file.bark_url_set) ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'">
+                    <div class="p-3 border rounded-lg" :class="systemStatus.configured_notification_channels?.length ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'">
                          <div class="flex justify-between items-center">
                             <span class="font-medium text-sm">通知渠道</span>
-                             <span class="text-xs font-bold" :class="(systemStatus.env_file.ntfy_topic_url_set || systemStatus.env_file.gotify_url_set || systemStatus.env_file.bark_url_set) ? 'text-green-700' : 'text-gray-500'">
-                                {{ (systemStatus.env_file.ntfy_topic_url_set || systemStatus.env_file.gotify_url_set || systemStatus.env_file.bark_url_set) ? '已配置' : '未配置' }}
+                             <span class="text-xs font-bold" :class="systemStatus.configured_notification_channels?.length ? 'text-green-700' : 'text-gray-500'">
+                                {{ systemStatus.configured_notification_channels?.length ? '已配置' : '未配置' }}
                             </span>
                         </div>
                          <div class="text-xs text-gray-500 mt-1">
-                            {{ [
-                                systemStatus.env_file.ntfy_topic_url_set ? 'Ntfy' : '',
-                                systemStatus.env_file.gotify_url_set ? 'Gotify' : '',
-                                systemStatus.env_file.bark_url_set ? 'Bark' : ''
-                            ].filter(Boolean).join(', ') || '无' }}
+                            {{ systemStatus.configured_notification_channels?.join(', ') || '无' }}
                         </div>
                     </div>
                 </div>

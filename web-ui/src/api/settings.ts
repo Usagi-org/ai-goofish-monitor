@@ -15,6 +15,39 @@ export interface NotificationSettings {
   WEBHOOK_QUERY_PARAMETERS?: string
   WEBHOOK_BODY?: string
   PCURL_TO_MOBILE?: boolean
+  BARK_URL_SET?: boolean
+  GOTIFY_TOKEN_SET?: boolean
+  WX_BOT_URL_SET?: boolean
+  TELEGRAM_BOT_TOKEN_SET?: boolean
+  WEBHOOK_URL_SET?: boolean
+  WEBHOOK_HEADERS_SET?: boolean
+  CONFIGURED_CHANNELS?: string[]
+}
+
+export interface NotificationSettingsUpdate {
+  NTFY_TOPIC_URL?: string | null
+  GOTIFY_URL?: string | null
+  GOTIFY_TOKEN?: string | null
+  BARK_URL?: string | null
+  WX_BOT_URL?: string | null
+  TELEGRAM_BOT_TOKEN?: string | null
+  TELEGRAM_CHAT_ID?: string | null
+  WEBHOOK_URL?: string | null
+  WEBHOOK_METHOD?: string | null
+  WEBHOOK_HEADERS?: string | null
+  WEBHOOK_CONTENT_TYPE?: string | null
+  WEBHOOK_QUERY_PARAMETERS?: string | null
+  WEBHOOK_BODY?: string | null
+  PCURL_TO_MOBILE?: boolean
+}
+
+export interface NotificationTestResponse {
+  message: string
+  results: Record<string, {
+    label: string
+    success: boolean
+    message: string
+  }>
 }
 
 export interface AiSettings {
@@ -57,18 +90,34 @@ export interface SystemStatus {
     gotify_url_set: boolean
     gotify_token_set: boolean
     bark_url_set: boolean
+    wx_bot_url_set: boolean
+    telegram_bot_token_set: boolean
+    telegram_chat_id_set: boolean
+    webhook_url_set: boolean
+    webhook_headers_set: boolean
   }
+  configured_notification_channels?: string[]
 }
 
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   return await http('/api/settings/notifications')
 }
 
-export async function updateNotificationSettings(settings: NotificationSettings): Promise<void> {
-  await http('/api/settings/notifications', {
+export async function updateNotificationSettings(settings: NotificationSettingsUpdate): Promise<{ message: string; configured_channels: string[] }> {
+  return await http('/api/settings/notifications', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings)
+  })
+}
+
+export async function testNotificationSettings(
+  payload: { channel?: string; settings: NotificationSettingsUpdate }
+): Promise<NotificationTestResponse> {
+  return await http('/api/settings/notifications/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   })
 }
 

@@ -10,35 +10,31 @@ from .base import NotificationClient
 class NtfyClient(NotificationClient):
     """Ntfy 通知客户端"""
 
-    def __init__(self, topic_url: str = None):
-        super().__init__(enabled=bool(topic_url))
+    channel_key = "ntfy"
+    display_name = "Ntfy"
+
+    def __init__(self, topic_url: str = None, pcurl_to_mobile: bool = True):
+        super().__init__(enabled=bool(topic_url), pcurl_to_mobile=pcurl_to_mobile)
         self.topic_url = topic_url
 
-    async def send(self, product_data: Dict, reason: str) -> bool:
+    async def send(self, product_data: Dict, reason: str) -> None:
         """发送 Ntfy 通知"""
         if not self.is_enabled():
-            return False
+            raise RuntimeError("Ntfy 未启用")
 
-        try:
-            msg_data = self._format_message(product_data, reason)
-            message = f"价格: {msg_data['price']}\n原因: {msg_data['reason']}\n链接: {msg_data['link']}"
-            title = f"🚨 新推荐! {msg_data['title'][:30]}..."
-
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    self.topic_url,
-                    data=message.encode('utf-8'),
-                    headers={
-                        "Title": title.encode('utf-8'),
-                        "Priority": "urgent",
-                        "Tags": "bell,vibration"
-                    },
-                    timeout=10
-                )
+        message = self._build_message(product_data, reason)
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: requests.post(
+                self.topic_url,
+                data=message.content.encode('utf-8'),
+                headers={
+                    "Title": message.notification_title.encode('utf-8'),
+                    "Priority": "urgent",
+                    "Tags": "bell,vibration"
+                },
+                timeout=10
             )
-            return True
-        except Exception as e:
-            print(f"Ntfy 通知发送失败: {e}")
-            return False
+        )
+        response.raise_for_status()

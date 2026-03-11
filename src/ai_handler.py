@@ -22,20 +22,6 @@ from src.config import (
     IMAGE_SAVE_DIR,
     TASK_IMAGE_DIR_PREFIX,
     MODEL_NAME,
-    NTFY_TOPIC_URL,
-    GOTIFY_URL,
-    GOTIFY_TOKEN,
-    BARK_URL,
-    PCURL_TO_MOBILE,
-    WX_BOT_URL,
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID,
-    WEBHOOK_URL,
-    WEBHOOK_METHOD,
-    WEBHOOK_HEADERS,
-    WEBHOOK_CONTENT_TYPE,
-    WEBHOOK_QUERY_PARAMETERS,
-    WEBHOOK_BODY,
     ENABLE_RESPONSE_FORMAT,
     client,
 )
@@ -52,6 +38,7 @@ from src.services.ai_request_compat import (
     add_json_response_format,
     is_response_format_unsupported_error,
 )
+from src.services.notification_service import build_notification_service
 from src.utils import convert_goofish_link, retry_on_failure
 
 
@@ -246,319 +233,21 @@ def validate_ai_response_format(parsed_response):
 
 @retry_on_failure(retries=3, delay=5)
 async def send_ntfy_notification(product_data, reason):
-    """当发现推荐商品时，异步发送一个高优先级的 ntfy.sh 通知。"""
-    if not NTFY_TOPIC_URL and not WX_BOT_URL and not (GOTIFY_URL and GOTIFY_TOKEN) and not BARK_URL and not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID) and not WEBHOOK_URL:
-        safe_print("警告：未在 .env 文件中配置任何通知服务 (NTFY_TOPIC_URL, WX_BOT_URL, GOTIFY_URL/TOKEN, BARK_URL, TELEGRAM_BOT_TOKEN/CHAT_ID, WEBHOOK_URL)，跳过通知。")
-        return
+    """兼容旧调用名，内部统一走 NotificationService。"""
+    service = build_notification_service()
+    if not service.clients:
+        safe_print(
+            "警告：未在 .env 文件中配置任何通知服务，跳过通知。"
+        )
+        return {}
 
-    title = product_data.get('商品标题', 'N/A')
-    price = product_data.get('当前售价', 'N/A')
-    link = product_data.get('商品链接', '#')
-    if PCURL_TO_MOBILE:
-        mobile_link = convert_goofish_link(link)
-        message = f"价格: {price}\n原因: {reason}\n手机端链接: {mobile_link}\n电脑端链接: {link}"
-    else:
-        message = f"价格: {price}\n原因: {reason}\n链接: {link}"
-
-    notification_title = f"🚨 新推荐! {title[:30]}..."
-
-    # --- 发送 ntfy 通知 ---
-    if NTFY_TOPIC_URL:
-        try:
-            safe_print(f"   -> 正在发送 ntfy 通知到: {NTFY_TOPIC_URL}")
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    NTFY_TOPIC_URL,
-                    data=message.encode('utf-8'),
-                    headers={
-                        "Title": notification_title.encode('utf-8'),
-                        "Priority": "urgent",
-                        "Tags": "bell,vibration"
-                    },
-                    timeout=10
-                )
-            )
-            safe_print("   -> ntfy 通知发送成功。")
-        except Exception as e:
-            safe_print(f"   -> 发送 ntfy 通知失败: {e}")
-
-    # --- 发送 Gotify 通知 ---
-    if GOTIFY_URL and GOTIFY_TOKEN:
-        try:
-            safe_print(f"   -> 正在发送 Gotify 通知到: {GOTIFY_URL}")
-            # Gotify uses multipart/form-data
-            payload = {
-                'title': (None, notification_title),
-                'message': (None, message),
-                'priority': (None, '5')
-            }
-
-            gotify_url_with_token = f"{GOTIFY_URL}/message?token={GOTIFY_TOKEN}"
-
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    gotify_url_with_token,
-                    files=payload,
-                    timeout=10
-                )
-            )
-            response.raise_for_status()
-            safe_print("   -> Gotify 通知发送成功。")
-        except requests.exceptions.RequestException as e:
-            safe_print(f"   -> 发送 Gotify 通知失败: {e}")
-        except Exception as e:
-            safe_print(f"   -> 发送 Gotify 通知时发生未知错误: {e}")
-
-    # --- 发送 Bark 通知 ---
-    if BARK_URL:
-        try:
-            safe_print(f"   -> 正在发送 Bark 通知...")
-
-            bark_payload = {
-                "title": notification_title,
-                "body": message,
-                "level": "timeSensitive",
-                "group": "闲鱼监控"
-            }
-
-            link_to_use = convert_goofish_link(link) if PCURL_TO_MOBILE else link
-            bark_payload["url"] = link_to_use
-
-            # Add icon if available
-            main_image = product_data.get('商品主图链接')
-            if not main_image:
-                # Fallback to image list if main image not present
-                image_list = product_data.get('商品图片列表', [])
-                if image_list:
-                    main_image = image_list[0]
-
-            if main_image:
-                bark_payload['icon'] = main_image
-
-            headers = { "Content-Type": "application/json; charset=utf-8" }
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    BARK_URL,
-                    json=bark_payload,
-                    headers=headers,
-                    timeout=10
-                )
-            )
-            response.raise_for_status()
-            safe_print("   -> Bark 通知发送成功。")
-        except requests.exceptions.RequestException as e:
-            safe_print(f"   -> 发送 Bark 通知失败: {e}")
-        except Exception as e:
-            safe_print(f"   -> 发送 Bark 通知时发生未知错误: {e}")
-
-    # --- 发送企业微信机器人通知 ---
-    if WX_BOT_URL:
-        # 将消息转换为Markdown格式，使链接可点击
-        lines = message.split('\n')
-        markdown_content = f"## {notification_title}\n\n"
-
-        for line in lines:
-            if line.startswith('手机端链接:') or line.startswith('电脑端链接:') or line.startswith('链接:'):
-                # 提取链接部分并转换为Markdown超链接
-                if ':' in line:
-                    label, url = line.split(':', 1)
-                    url = url.strip()
-                    if url and url != '#':
-                        markdown_content += f"- **{label}:** [{url}]({url})\n"
-                    else:
-                        markdown_content += f"- **{label}:** 暂无链接\n"
-                else:
-                    markdown_content += f"- {line}\n"
-            else:
-                # 其他行保持原样
-                if line:
-                    markdown_content += f"- {line}\n"
-                else:
-                    markdown_content += "\n"
-
-        payload = {
-            "msgtype": "markdown",
-            "markdown": {
-                "content": markdown_content
-            }
-        }
-
-        try:
-            safe_print(f"   -> 正在发送企业微信通知到: {WX_BOT_URL}")
-            headers = { "Content-Type": "application/json" }
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    WX_BOT_URL,
-                    json=payload,
-                    headers=headers,
-                    timeout=10
-                )
-            )
-            response.raise_for_status()
-            result = response.json()
-            safe_print(f"   -> 企业微信通知发送成功。响应: {result}")
-        except requests.exceptions.RequestException as e:
-            safe_print(f"   -> 发送企业微信通知失败: {e}")
-        except Exception as e:
-            safe_print(f"   -> 发送企业微信通知时发生未知错误: {e}")
-
-    # --- 发送 Telegram 机器人通知 ---
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        try:
-            safe_print(f"   -> 正在发送 Telegram 通知...")
-            
-            # 构建 Telegram API URL
-            telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            
-            # 格式化消息内容
-            telegram_message = f"🚨 <b>新推荐!</b>\n\n"
-            telegram_message += f"<b>{title[:50]}...</b>\n\n"
-            telegram_message += f"💰 价格: {price}\n"
-            telegram_message += f"📝 原因: {reason}\n"
-            
-            # 添加链接
-            if PCURL_TO_MOBILE:
-                mobile_link = convert_goofish_link(link)
-                telegram_message += f"📱 <a href='{mobile_link}'>手机端链接</a>\n"
-            telegram_message += f"💻 <a href='{link}'>电脑端链接</a>"
-            
-            # 构建请求负载
-            telegram_payload = {
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": telegram_message,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": False
-            }
-            
-            headers = {"Content-Type": "application/json"}
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.post(
-                    telegram_api_url,
-                    json=telegram_payload,
-                    headers=headers,
-                    timeout=10
-                )
-            )
-            response.raise_for_status()
-            result = response.json()
-            if result.get("ok"):
-                safe_print("   -> Telegram 通知发送成功。")
-            else:
-                safe_print(f"   -> Telegram 通知发送失败: {result.get('description', '未知错误')}")
-        except requests.exceptions.RequestException as e:
-            safe_print(f"   -> 发送 Telegram 通知失败: {e}")
-        except Exception as e:
-            safe_print(f"   -> 发送 Telegram 通知时发生未知错误: {e}")
-
-    # --- 发送通用 Webhook 通知 ---
-    if WEBHOOK_URL:
-        try:
-            safe_print(f"   -> 正在发送通用 Webhook 通知到: {WEBHOOK_URL}")
-
-            # 替换占位符
-            def replace_placeholders(template_str):
-                if not template_str:
-                    return ""
-                # 对内容进行JSON转义，避免换行符和特殊字符破坏JSON格式
-                safe_title = json.dumps(notification_title, ensure_ascii=False)[1:-1]  # 去掉外层引号
-                safe_content = json.dumps(message, ensure_ascii=False)[1:-1]  # 去掉外层引号
-                # 同时支持旧的${title}${content}和新的{{title}}{{content}}格式
-                return template_str.replace("${title}", safe_title).replace("${content}", safe_content).replace("{{title}}", safe_title).replace("{{content}}", safe_content)
-
-            # 准备请求头
-            headers = {}
-            if WEBHOOK_HEADERS:
-                try:
-                    headers = json.loads(WEBHOOK_HEADERS)
-                except json.JSONDecodeError:
-                    safe_print(f"   -> [警告] Webhook 请求头格式错误，请检查 .env 中的 WEBHOOK_HEADERS。")
-
-            loop = asyncio.get_running_loop()
-
-            if WEBHOOK_METHOD == "GET":
-                # 准备查询参数
-                final_url = WEBHOOK_URL
-                if WEBHOOK_QUERY_PARAMETERS:
-                    try:
-                        params_str = replace_placeholders(WEBHOOK_QUERY_PARAMETERS)
-                        params = json.loads(params_str)
-
-                        # 解析原始URL并追加新参数
-                        url_parts = list(urlparse(final_url))
-                        query = dict(parse_qsl(url_parts[4]))
-                        query.update(params)
-                        url_parts[4] = urlencode(query)
-                        final_url = urlunparse(url_parts)
-                    except json.JSONDecodeError:
-                        safe_print(f"   -> [警告] Webhook 查询参数格式错误，请检查 .env 中的 WEBHOOK_QUERY_PARAMETERS。")
-
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: requests.get(final_url, headers=headers, timeout=15)
-                )
-
-            elif WEBHOOK_METHOD == "POST":
-                # 准备URL（处理查询参数）
-                final_url = WEBHOOK_URL
-                if WEBHOOK_QUERY_PARAMETERS:
-                    try:
-                        params_str = replace_placeholders(WEBHOOK_QUERY_PARAMETERS)
-                        params = json.loads(params_str)
-
-                        # 解析原始URL并追加新参数
-                        url_parts = list(urlparse(final_url))
-                        query = dict(parse_qsl(url_parts[4]))
-                        query.update(params)
-                        url_parts[4] = urlencode(query)
-                        final_url = urlunparse(url_parts)
-                    except json.JSONDecodeError:
-                        safe_print(f"   -> [警告] Webhook 查询参数格式错误，请检查 .env 中的 WEBHOOK_QUERY_PARAMETERS。")
-
-                # 准备请求体
-                data = None
-                json_payload = None
-
-                if WEBHOOK_BODY:
-                    body_str = replace_placeholders(WEBHOOK_BODY)
-                    try:
-                        if WEBHOOK_CONTENT_TYPE == "JSON":
-                            json_payload = json.loads(body_str)
-                            if 'Content-Type' not in headers and 'content-type' not in headers:
-                                headers['Content-Type'] = 'application/json; charset=utf-8'
-                        elif WEBHOOK_CONTENT_TYPE == "FORM":
-                            data = json.loads(body_str)  # requests会处理url-encoding
-                            if 'Content-Type' not in headers and 'content-type' not in headers:
-                                headers['Content-Type'] = 'application/x-www-form-urlencoded'
-                        else:
-                            safe_print(f"   -> [警告] 不支持的 WEBHOOK_CONTENT_TYPE: {WEBHOOK_CONTENT_TYPE}。")
-                    except json.JSONDecodeError:
-                        safe_print(f"   -> [警告] Webhook 请求体格式错误，请检查 .env 中的 WEBHOOK_BODY。")
-
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: requests.post(final_url, headers=headers, json=json_payload, data=data, timeout=15)
-                )
-            else:
-                safe_print(f"   -> [警告] 不支持的 WEBHOOK_METHOD: {WEBHOOK_METHOD}。")
-                return
-
-            response.raise_for_status()
-            safe_print(f"   -> Webhook 通知发送成功。状态码: {response.status_code}")
-
-        except requests.exceptions.RequestException as e:
-            safe_print(f"   -> 发送 Webhook 通知失败: {e}")
-        except Exception as e:
-            safe_print(f"   -> 发送 Webhook 通知时发生未知错误: {e}")
+    results = await service.send_notification(product_data, reason)
+    for channel, result in results.items():
+        if result["success"]:
+            safe_print(f"   -> {channel} 通知发送成功。")
+            continue
+        safe_print(f"   -> {channel} 通知发送失败: {result['message']}")
+    return results
 
 
 async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
