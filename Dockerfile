@@ -60,8 +60,8 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制前端构建产物到 /app/dist
-COPY --from=frontend-builder /web-ui/dist /app/dist
+# Vite 输出到仓库根目录 /dist，而不是 /web-ui/dist
+COPY --from=frontend-builder /dist /app/dist
 
 # 复制应用代码
 # .dockerignore 文件会处理排除项-m
