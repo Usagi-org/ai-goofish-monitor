@@ -15,6 +15,10 @@ from src.ai_message_builder import (
 )
 from src.infrastructure.config.settings import AISettings
 from src.infrastructure.config.env_manager import env_manager
+from src.services.ai_request_compat import (
+    add_json_response_format,
+    is_response_format_unsupported_error,
+)
 
 
 class AIClient:
@@ -117,26 +121,39 @@ class AIClient:
 
     async def _call_ai(self, messages: List[Dict]) -> str:
         """调用 AI API"""
-        request_params = {
-            "model": self.settings.model_name,
-            "messages": messages,
-            "temperature": 0.1,
-            "max_tokens": 4000
-        }
+        use_response_format = self.settings.enable_response_format
+        max_attempts = 2 if use_response_format else 1
 
-        # 根据配置添加可选参数
-        if self.settings.enable_response_format:
-            request_params["response_format"] = {"type": "json_object"}
+        for attempt in range(max_attempts):
+            request_params = {
+                "model": self.settings.model_name,
+                "messages": messages,
+                "temperature": 0.1,
+                "max_tokens": 4000
+            }
+            request_params = add_json_response_format(
+                request_params,
+                use_response_format,
+            )
 
-        if self.settings.enable_thinking:
-            request_params["extra_body"] = {"enable_thinking": False}
+            if self.settings.enable_thinking:
+                request_params["extra_body"] = {"enable_thinking": False}
 
-        response = await self.client.chat.completions.create(**request_params)
+            try:
+                response = await self.client.chat.completions.create(**request_params)
+            except Exception as exc:
+                if use_response_format and is_response_format_unsupported_error(exc):
+                    use_response_format = False
+                    print("当前模型不支持 response_format，正在自动重试并移除该参数")
+                    if attempt < max_attempts - 1:
+                        continue
+                raise
 
-        # 兼容不同 API 响应格式
-        if hasattr(response, 'choices'):
-            return response.choices[0].message.content
-        return response
+            if hasattr(response, 'choices'):
+                return response.choices[0].message.content
+            return response
+
+        raise RuntimeError("AI 调用在兼容性重试后仍未返回结果")
 
     def _parse_response(self, response_text: str) -> Optional[Dict]:
         """解析 AI 响应"""

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useTasks } from '@/composables/useTasks'
 import type { Task, TaskUpdate } from '@/types/task.d.ts'
+import { parseTaskFormDefaults } from '@/lib/taskFormQuery'
 import TaskCreateDialog from '@/components/tasks/TaskCreateDialog.vue'
 import TasksTable from '@/components/tasks/TasksTable.vue'
 import TaskForm from '@/components/tasks/TaskForm.vue'
@@ -29,6 +31,7 @@ const {
   stopTask,
   stoppingTaskIds,
 } = useTasks()
+const route = useRoute()
 
 // State for dialogs
 const isEditDialogOpen = ref(false)
@@ -46,6 +49,7 @@ const taskToDelete = computed(() => {
   if (taskToDeleteId.value === null) return null
   return tasks.value.find((task) => task.id === taskToDeleteId.value) || null
 })
+const editDefaults = computed(() => parseTaskFormDefaults(route.query))
 
 function handleDeleteTask(taskId: number) {
   taskToDeleteId.value = taskId
@@ -77,6 +81,19 @@ function handleEditTask(task: Task) {
   selectedTask.value = task
   isEditDialogOpen.value = true
 }
+
+watch(
+  () => [route.query.edit, tasks.value],
+  () => {
+    const editTaskId = typeof route.query.edit === 'string' ? Number(route.query.edit) : NaN
+    if (!Number.isFinite(editTaskId)) return
+    const match = tasks.value.find((task) => task.id === editTaskId)
+    if (!match) return
+    selectedTask.value = match
+    isEditDialogOpen.value = true
+  },
+  { immediate: true }
+)
 
 async function handleUpdateTask(data: TaskUpdate) {
   if (!selectedTask.value) return
@@ -203,6 +220,7 @@ onMounted(fetchAccountOptions)
           mode="edit"
           :initial-data="selectedTask"
           :account-options="accountOptions"
+          :default-values="editDefaults"
           @submit="(data) => handleUpdateTask(data as TaskUpdate)"
         />
         <DialogFooter>

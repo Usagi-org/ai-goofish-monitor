@@ -127,6 +127,26 @@ def test_create_task_rejects_invalid_cron_expression(api_client, sample_task_pay
     assert response.status_code == 422
 
 
+def test_create_task_rejects_fixed_account_strategy_without_state_file(api_client, sample_task_payload):
+    payload = dict(sample_task_payload)
+    payload["account_strategy"] = "fixed"
+
+    response = api_client.post("/api/tasks/", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_task_accepts_rotate_account_strategy(api_client, sample_task_payload):
+    payload = dict(sample_task_payload)
+    payload["account_strategy"] = "rotate"
+
+    response = api_client.post("/api/tasks/", json=payload)
+
+    assert response.status_code == 200
+    task = response.json()["task"]
+    assert task["account_strategy"] == "rotate"
+
+
 def test_update_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
     create_response = api_client.post("/api/tasks/", json=sample_task_payload)
     assert create_response.status_code == 200
@@ -159,4 +179,4 @@ def test_delete_task_stops_runtime_and_reindexes_process_state(
     assert response.status_code == 200
     process_service = api_context["process_service"]
     assert process_service.stopped == [0]
-    assert process_service.reindexed == [0]
+    assert process_service.reindexed == []

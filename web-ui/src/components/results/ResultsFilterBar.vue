@@ -66,6 +66,7 @@ const emit = defineEmits<{
   (e: 'update:sortBy', value: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'): void
   (e: 'update:sortOrder', value: 'asc' | 'desc'): void
   (e: 'refresh'): void
+  (e: 'export'): void
   (e: 'delete'): void
 }>()
 
@@ -150,6 +151,14 @@ function handleToggleKeywordRecommended(value: boolean) {
 
     <Button @click="emit('refresh')" :disabled="props.isLoading">
       刷新
+    </Button>
+
+    <Button
+      variant="outline"
+      @click="emit('export')"
+      :disabled="props.isLoading || !props.selectedFile"
+    >
+      导出 CSV
     </Button>
 
     <Button

@@ -1,15 +1,18 @@
 import { ref, reactive, watch, onMounted, computed } from 'vue'
-import type { ResultItem } from '@/types/result.d.ts'
+import { useRoute } from 'vue-router'
+import type { ResultInsights, ResultItem } from '@/types/result.d.ts'
 import * as resultsApi from '@/api/results'
 import type { GetResultContentParams } from '@/api/results'
 import { useWebSocket } from '@/composables/useWebSocket'
 import * as tasksApi from '@/api/tasks'
 
 export function useResults() {
+  const route = useRoute()
   // State
   const files = ref<string[]>([])
   const selectedFile = ref<string | null>(null)
   const results = ref<ResultItem[]>([])
+  const insights = ref<ResultInsights | null>(null)
   const totalItems = ref(0)
   const page = ref(1)
   const limit = ref(100)
@@ -92,6 +95,20 @@ export function useResults() {
     }
   }
 
+  async function fetchInsights() {
+    if (!selectedFile.value) {
+      insights.value = null
+      return
+    }
+
+    try {
+      insights.value = await resultsApi.getResultInsights(selectedFile.value)
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      insights.value = null
+    }
+  }
+
   async function fetchTaskNameMap() {
     try {
       const tasks = await tasksApi.getAllTasks()
@@ -127,6 +144,7 @@ export function useResults() {
     // If it changed (e.g. from null to new file), the watcher will handle it.
     if (selectedFile.value && selectedFile.value === oldFile) {
       fetchResults()
+      fetchInsights()
     }
   })
 
@@ -139,7 +157,13 @@ export function useResults() {
     await fetchFiles()
     if (selectedFile.value && selectedFile.value === current) {
       await fetchResults()
+      await fetchInsights()
     }
+  }
+
+  function exportSelectedResults() {
+    if (!selectedFile.value) return
+    resultsApi.downloadResultExport(selectedFile.value, { ...filters })
   }
 
   async function deleteSelectedFile(filename?: string) {
@@ -166,9 +190,22 @@ export function useResults() {
 
   // Watchers
   watch([selectedFile, filters], fetchResults, { deep: true })
+  watch(selectedFile, () => {
+    fetchInsights()
+  })
   watch(selectedFile, (value) => {
     if (value) localStorage.setItem('lastSelectedResultFile', value)
   })
+  watch(
+    [() => route.query.file, files],
+    ([routeFile, currentFiles]) => {
+      if (typeof routeFile !== 'string') return
+      if (currentFiles.includes(routeFile)) {
+        selectedFile.value = routeFile
+      }
+    },
+    { immediate: true }
+  )
 
   const fileOptions = computed(() =>
     files.value.map((file) => {
@@ -191,12 +228,14 @@ export function useResults() {
     files,
     selectedFile,
     results,
+    insights,
     totalItems,
     filters,
     isLoading,
     error,
     fetchFiles, // Expose to allow manual refresh
     refreshResults,
+    exportSelectedResults,
     deleteSelectedFile,
     fileOptions,
     isFileOptionsReady,

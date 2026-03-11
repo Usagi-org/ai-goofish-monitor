@@ -14,7 +14,7 @@ sys.path.insert(0, str(repo_root))
 
 from src.api import dependencies as deps
 from src.api.routes import tasks
-from src.infrastructure.persistence.json_task_repository import JsonTaskRepository
+from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
 from src.services.task_service import TaskService
 from src.services.task_generation_service import TaskGenerationService
 
@@ -91,8 +91,12 @@ class FakeSchedulerService:
 def api_context(tmp_path):
     config_file = tmp_path / "config.json"
     config_file.write_text("[]", encoding="utf-8")
+    db_path = tmp_path / "app.sqlite3"
 
-    repository = JsonTaskRepository(config_file=str(config_file))
+    repository = SqliteTaskRepository(
+        db_path=str(db_path),
+        legacy_config_file=None,
+    )
     task_service = TaskService(repository)
     process_service = FakeProcessService()
     scheduler_service = FakeSchedulerService()
@@ -131,6 +135,7 @@ def api_context(tmp_path):
     return {
         "app": app,
         "config_file": config_file,
+        "db_path": db_path,
         "process_service": process_service,
         "scheduler_service": scheduler_service,
         "task_generation_service": task_generation_service,

@@ -12,8 +12,14 @@ const routes = [
   {
     path: '/',
     component: MainLayout,
-    redirect: '/tasks',
+    redirect: '/dashboard',
     children: [
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('@/views/DashboardView.vue'),
+        meta: { title: '监控概览', requiresAuth: true },
+      },
       {
         path: 'tasks',
         name: 'Tasks',
@@ -67,7 +73,7 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
   } else if (to.name === 'Login' && isAuthenticated.value) {
-    next({ name: 'Tasks' })
+    next({ name: 'Dashboard' })
   } else {
     next()
   }

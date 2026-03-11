@@ -74,6 +74,11 @@ class AISettingsModel(BaseModel):
 
 
 class RotationSettingsModel(BaseModel):
+    ACCOUNT_ROTATION_ENABLED: Optional[bool] = None
+    ACCOUNT_ROTATION_MODE: Optional[str] = None
+    ACCOUNT_ROTATION_RETRY_LIMIT: Optional[int] = None
+    ACCOUNT_BLACKLIST_TTL: Optional[int] = None
+    ACCOUNT_STATE_DIR: Optional[str] = None
     PROXY_ROTATION_ENABLED: Optional[bool] = None
     PROXY_ROTATION_MODE: Optional[str] = None
     PROXY_POOL: Optional[str] = None
@@ -123,6 +128,11 @@ async def update_notification_settings(
 @router.get("/rotation")
 async def get_rotation_settings():
     return {
+        "ACCOUNT_ROTATION_ENABLED": _env_bool("ACCOUNT_ROTATION_ENABLED", False),
+        "ACCOUNT_ROTATION_MODE": env_manager.get_value("ACCOUNT_ROTATION_MODE", "per_task"),
+        "ACCOUNT_ROTATION_RETRY_LIMIT": _env_int("ACCOUNT_ROTATION_RETRY_LIMIT", 2),
+        "ACCOUNT_BLACKLIST_TTL": _env_int("ACCOUNT_BLACKLIST_TTL", 300),
+        "ACCOUNT_STATE_DIR": env_manager.get_value("ACCOUNT_STATE_DIR", "state"),
         "PROXY_ROTATION_ENABLED": _env_bool("PROXY_ROTATION_ENABLED", False),
         "PROXY_ROTATION_MODE": env_manager.get_value("PROXY_ROTATION_MODE", "per_task"),
         "PROXY_POOL": env_manager.get_value("PROXY_POOL", ""),

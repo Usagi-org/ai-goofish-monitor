@@ -8,6 +8,7 @@ import contextlib
 import re
 
 from src.config import STATE_FILE
+from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
 from src.scraper import scrape_xianyu
 
 
@@ -28,18 +29,22 @@ async def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--debug-limit", type=int, default=0, help="调试模式：每个任务仅处理前 N 个新商品（0 表示无限制）")
-    parser.add_argument("--config", type=str, default="config.json", help="指定任务配置文件路径（默认为 config.json）")
+    parser.add_argument("--config", type=str, help="指定任务配置文件路径（传入时优先读取 JSON）")
     parser.add_argument("--task-name", type=str, help="只运行指定名称的单个任务 (用于定时任务调度)")
     args = parser.parse_args()
 
-    if not os.path.exists(args.config):
-        sys.exit(f"错误: 配置文件 '{args.config}' 不存在。")
-
-    try:
-        with open(args.config, 'r', encoding='utf-8') as f:
-            tasks_config = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
-        sys.exit(f"错误: 读取或解析配置文件 '{args.config}' 失败: {e}")
+    if args.config:
+        if not os.path.exists(args.config):
+            sys.exit(f"错误: 配置文件 '{args.config}' 不存在。")
+        try:
+            with open(args.config, 'r', encoding='utf-8') as f:
+                tasks_config = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            sys.exit(f"错误: 读取或解析配置文件 '{args.config}' 失败: {e}")
+    else:
+        repository = SqliteTaskRepository()
+        tasks = await repository.find_all()
+        tasks_config = [task.dict() for task in tasks]
 
     def normalize_keywords(value):
         if value is None:

@@ -12,6 +12,8 @@ from urllib.parse import quote
 from openai import APIStatusError
 from requests.exceptions import HTTPError
 
+from src.services.result_storage_service import save_result_record
+
 
 def retry_on_failure(retries=3, delay=5):
     """
@@ -118,16 +120,11 @@ def get_link_unique_key(link: str) -> str:
 
 
 async def save_to_jsonl(data_record: dict, keyword: str):
-    """将一个包含商品和卖家信息的完整记录追加保存到 .jsonl 文件。"""
-    output_dir = "jsonl"
-    os.makedirs(output_dir, exist_ok=True)
-    filename = os.path.join(output_dir, f"{keyword.replace(' ', '_')}_full_data.jsonl")
+    """兼容旧调用名，实际将结果写入 SQLite。"""
     try:
-        with open(filename, "a", encoding="utf-8") as f:
-            f.write(json.dumps(data_record, ensure_ascii=False) + "\n")
-        return True
-    except IOError as e:
-        print(f"写入文件 {filename} 出错: {e}")
+        return await save_result_record(data_record, keyword)
+    except Exception as e:
+        print(f"写入 SQLite 结果记录出错: {e}")
         return False
 
 

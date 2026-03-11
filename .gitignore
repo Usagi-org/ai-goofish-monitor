@@ -12,3 +12,6 @@ dist/
 state/
 config.json
 prompts/
+.serena/
+price_history/
+data/

@@ -18,6 +18,7 @@ const props = defineProps<{
   initialData?: Task | null
   accountOptions?: { name: string; path: string }[]
   defaultAccount?: string
+  defaultValues?: Partial<TaskGenerateRequest & Partial<Task>>
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +27,11 @@ const emit = defineEmits<{
 
 const form = ref<any>({})
 const keywordRulesInput = ref('')
+const accountStrategyOptions = [
+  { value: 'auto', label: '自动选择', description: '优先使用默认登录态；无默认时使用账号池。' },
+  { value: 'fixed', label: '固定账号', description: '当前任务始终绑定一个指定账号。' },
+  { value: 'rotate', label: '轮换账号', description: '当前任务强制使用账号池轮换。' },
+]
 
 function parseKeywordText(text: string): string[] {
   const values = String(text || '')
@@ -45,17 +51,27 @@ function parseKeywordText(text: string): string[] {
 }
 
 watchEffect(() => {
+  const defaultValues = props.defaultValues || {}
   if (props.mode === 'edit' && props.initialData) {
     form.value = {
       ...props.initialData,
-      account_state_file: props.initialData.account_state_file || AUTO_ACCOUNT_VALUE,
-      analyze_images: props.initialData.analyze_images ?? true,
-      free_shipping: props.initialData.free_shipping ?? true,
-      new_publish_option: props.initialData.new_publish_option || '__none__',
-      region: props.initialData.region || '',
-      decision_mode: props.initialData.decision_mode || 'ai',
+      ...defaultValues,
+      account_strategy:
+        defaultValues.account_strategy ||
+        props.initialData.account_strategy ||
+        (props.initialData.account_state_file ? 'fixed' : 'auto'),
+      account_state_file:
+        defaultValues.account_state_file ||
+        props.initialData.account_state_file ||
+        AUTO_ACCOUNT_VALUE,
+      analyze_images: defaultValues.analyze_images ?? props.initialData.analyze_images ?? true,
+      free_shipping: defaultValues.free_shipping ?? props.initialData.free_shipping ?? true,
+      new_publish_option:
+        defaultValues.new_publish_option || props.initialData.new_publish_option || '__none__',
+      region: defaultValues.region || props.initialData.region || '',
+      decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
     }
-    keywordRulesInput.value = (props.initialData.keyword_rules || []).join('\n')
+    keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
   } else {
     form.value = {
       task_name: '',
@@ -67,13 +83,27 @@ watchEffect(() => {
       min_price: undefined,
       max_price: undefined,
       cron: '',
+      account_strategy: props.defaultAccount ? 'fixed' : 'auto',
       account_state_file: props.defaultAccount || AUTO_ACCOUNT_VALUE,
       free_shipping: true,
       new_publish_option: '__none__',
       region: '',
       decision_mode: 'ai',
+      ...defaultValues,
+    }
+    if (!form.value.account_strategy) {
+      form.value.account_strategy = props.defaultAccount ? 'fixed' : 'auto'
+    }
+    if (!form.value.account_state_file) {
+      form.value.account_state_file = props.defaultAccount || AUTO_ACCOUNT_VALUE
+    }
+    if (!form.value.new_publish_option) {
+      form.value.new_publish_option = '__none__'
     }
     keywordRulesInput.value = ''
+    if (defaultValues.keyword_rules && defaultValues.keyword_rules.length > 0) {
+      keywordRulesInput.value = defaultValues.keyword_rules.join('\n')
+    }
   }
 })
 
@@ -109,8 +139,17 @@ function handleSubmit() {
 
   // Filter out fields that shouldn't be sent in update requests
   const { id, is_running, ...submitData } = form.value as any
-
-  if (submitData.account_state_file === AUTO_ACCOUNT_VALUE) {
+  const accountStrategy = submitData.account_strategy || 'auto'
+  if (accountStrategy === 'fixed') {
+    if (!submitData.account_state_file || submitData.account_state_file === AUTO_ACCOUNT_VALUE) {
+      toast({
+        title: '账号策略不完整',
+        description: '固定账号模式下必须选择一个账号。',
+        variant: 'destructive',
+      })
+      return
+    }
+  } else {
     submitData.account_state_file = null
   }
 
@@ -129,6 +168,7 @@ function handleSubmit() {
   }
 
   submitData.decision_mode = decisionMode
+  submitData.account_strategy = accountStrategy
   submitData.analyze_images = submitData.analyze_images !== false
   submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
   if (decisionMode === 'keyword' && !submitData.description) {
@@ -218,14 +258,31 @@ function handleSubmit() {
         <Input id="cron" v-model="form.cron as any" class="col-span-3" placeholder="分 时 日 月 周 (例如: 0 8 * * *)" />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">绑定账号</Label>
+        <Label class="text-right">账号策略</Label>
+        <div class="col-span-3 space-y-2">
+          <Select v-model="form.account_strategy">
+            <SelectTrigger>
+              <SelectValue placeholder="请选择账号策略" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="option in accountStrategyOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-gray-500">
+            {{ accountStrategyOptions.find((option) => option.value === form.account_strategy)?.description }}
+          </p>
+        </div>
+      </div>
+      <div v-if="form.account_strategy === 'fixed'" class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">指定账号</Label>
         <div class="col-span-3">
           <Select v-model="form.account_state_file">
             <SelectTrigger>
-              <SelectValue placeholder="未绑定（自动选择）" />
+              <SelectValue placeholder="请选择账号" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem :value="AUTO_ACCOUNT_VALUE">未绑定（自动选择）</SelectItem>
               <SelectItem v-for="account in accountOptions || []" :key="account.path" :value="account.path">
                 {{ account.name }}
               </SelectItem>

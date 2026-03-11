@@ -23,6 +23,10 @@ from src.services.task_generation_runner import (
 from src.domain.models.task import TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
 from src.utils import resolve_task_log_path
+from src.services.account_strategy_service import normalize_account_strategy
+from src.infrastructure.persistence.storage_names import build_result_filename
+from src.services.price_history_service import delete_price_snapshots
+from src.services.result_storage_service import delete_result_file_records
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 async def _reload_scheduler_if_needed(
@@ -35,6 +39,21 @@ async def _reload_scheduler_if_needed(
 
 def _has_keyword_rules(rules) -> bool:
     return bool(rules and len(rules) > 0)
+
+
+def _validate_final_account_strategy(existing_task, task_update: TaskUpdate) -> None:
+    account_state_file = (
+        task_update.account_state_file
+        if task_update.account_state_file is not None
+        else existing_task.account_state_file
+    )
+    account_strategy = normalize_account_strategy(
+        task_update.account_strategy,
+        account_state_file,
+    )
+    task_update.account_strategy = account_strategy
+    if account_strategy == "fixed" and not account_state_file:
+        raise HTTPException(status_code=400, detail="固定账号模式下必须选择账号。")
 @router.get("", response_model=List[dict])
 async def get_tasks(
     service: TaskService = Depends(get_task_service),
@@ -127,6 +146,7 @@ async def update_task(
         existing_task = await service.get_task(task_id)
         if not existing_task:
             raise HTTPException(status_code=404, detail="任务未找到")
+        _validate_final_account_strategy(existing_task, task_update)
 
         current_mode = getattr(existing_task, "decision_mode", "ai") or "ai"
         target_mode = task_update.decision_mode or current_mode
@@ -204,15 +224,18 @@ async def delete_task(
     success = await service.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail="任务未找到")
-    process_service.reindex_after_delete(task_id)
     await _reload_scheduler_if_needed(service, scheduler_service)
     try:
         keyword = (task.keyword or "").strip()
         if keyword:
-            filename = f"{keyword.replace(' ', '_')}_full_data.jsonl"
-            file_path = os.path.join("jsonl", filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            remaining_tasks = await service.get_all_tasks()
+            keyword_still_in_use = any(
+                (remaining_task.keyword or "").strip() == keyword
+                for remaining_task in remaining_tasks
+            )
+            if not keyword_still_in_use:
+                await delete_result_file_records(build_result_filename(keyword))
+                delete_price_snapshots(keyword)
     except Exception as e:
         print(f"删除任务结果文件时出错: {e}")
 

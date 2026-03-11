@@ -9,6 +9,7 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 - **Web Visual Management**: Task management, account management, AI criteria editing, run logs, results browsing
 - **AI-Driven**: Natural language task creation, multimodal model for in-depth product analysis
 - **Multi-Task Concurrency**: Independent configuration for keywords, prices, filters, and AI prompts
+- **SQLite as Primary Storage**: Tasks, results, and price history are persisted in one embedded database instead of repeatedly scanning `jsonl`
 - **Advanced Filtering**: Free shipping, new listing time range, province/city/district filtering
 - **Instant Notifications**: Supports ntfy.sh, WeChat Work (企业微信), Bark, Telegram, Webhook
 - **Scheduled Tasks**: Cron expression configuration for periodic tasks
@@ -17,9 +18,10 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 
 ## Screenshots
 
-![Task Management](static/img.png)
-![Monitoring Interface](static/img_1.png)
-![Notification Example](static/img_2.png)
+![Monitoring Overview](static/img.png)
+![Task Management](static/img_1.png)
+![Result Viewer](static/img_2.png)
+![Notification Settings](static/img_3.png)
 
 ## Quick Start
 
@@ -27,7 +29,8 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 
 - Python 3.10+
 - Node.js + npm (`Node v20.18.3` has been verified to complete the frontend build)
-- Playwright and Chromium dependencies
+- Playwright CLI and Chromium. Before the first local run, install them with `python3 -m pip install playwright && python3 -m playwright install chromium`
+- Chrome or Edge on desktop systems. On Linux, Chromium also works. `start.sh` checks this prerequisite before continuing
 
 ```bash
 git clone https://github.com/Usagi-org/ai-goofish-monitor
@@ -53,11 +56,11 @@ chmod +x start.sh
 ./start.sh
 ```
 
-`start.sh` handles dependency checks, installs, frontend build, artifact copy, and backend startup.
+`start.sh` first validates the Playwright CLI and browser prerequisites. Once they are available, it installs project dependencies, builds the frontend, copies the artifacts, and starts the backend.
 
 ### First-Time Setup
 
-1. Open `http://127.0.0.1:8000` and sign in to the Web UI.
+1. Open the default Web UI at `http://127.0.0.1:8000` and sign in.
 2. Go to "Xianyu Account Management" and use the [Chrome Extension](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) to export and paste the Xianyu login-state JSON.
 3. Login-state files are stored in `state/`, for example `state/acc_1.json`.
 4. Go back to "Task Management", create a task, bind an account if needed, and run it.
@@ -66,25 +69,40 @@ chmod +x start.sh
 
 - `AI mode`: fill in the requirement description. Submission opens a separate progress dialog while the criteria are generated asynchronously.
 - `Keyword mode`: provide keyword rules and the task is created immediately.
-- `Region filter`: now uses a structured province / city / district selector backed by a built-in snapshot from Goofish, not manual text input.
+- `Region filter`: now uses a province / city / district selector backed by an embedded Xianyu page snapshot instead of manual text input.
 
-## 🐳 Docker Deployment
+## 🐳 Docker Deployment (Recommended)
 
 ```bash
+git clone https://github.com/Usagi-org/ai-goofish-monitor && cd ai-goofish-monitor
+cp .env.example .env
+vim .env # fill in the required values
 docker compose up -d
 docker compose logs -f app
 docker compose down
 ```
 
-- Web UI: `http://127.0.0.1:8000`
+- Default Web UI: `http://127.0.0.1:8000`
+- The published Docker image already includes Chromium, so no extra browser install is required on the host.
 - Update image: `docker compose pull && docker compose up -d`
-- `docker-compose.yaml` already persists these paths by default:
-  - `state/`
-  - `config.json`
-  - `prompts/`
-  - `jsonl/`
-  - `logs/`
-  - `images/`
+- If you change `SERVER_PORT` in `.env`, update the `ports` mapping in `docker-compose.yaml` as well.
+- `docker-compose.yaml` now mounts the primary SQLite database directory as `./data:/app/data`, with the default database file at `data/app.sqlite3`
+- These paths are persisted by default:
+  - `data/` for the SQLite primary store (tasks, results, price history)
+  - `state/` for login-state cookie files
+  - `prompts/` for task prompt files
+  - `logs/` for runtime logs
+  - `images/` for downloaded product images and per-task temporary image folders
+  - `config.json`, `jsonl/`, and `price_history/` as legacy sources for the first SQLite migration
+
+### Storage and Migration
+
+- SQLite is now the online primary storage, with the default path `data/app.sqlite3`
+- You can override the database path with `APP_DATABASE_FILE`; Docker sets it to `/app/data/app.sqlite3`
+- On startup, the app initializes the schema and tries to import existing data once from legacy `config.json`, `jsonl/`, and `price_history/`
+- `state/`, `prompts/`, `logs/`, and `images/` remain filesystem-based and are not stored in SQLite
+- Product images are temporarily downloaded to `images/task_images_<task_name>/` and are normally cleaned up when the task finishes
+- After the first upgrade and after verifying the database contents in `data/app.sqlite3`, you can decide whether to keep the legacy `config.json`, `jsonl/`, and `price_history/` mounts
 
 ## User Guide
 
@@ -104,7 +122,7 @@ docker compose down
 
 ### Results and Logs
 
-- The results page shows matched items and details.
+- The results page and export endpoints now query SQLite instead of directly scanning `jsonl` files.
 - The logs page is the first place to inspect login-state expiry, anti-bot issues, or AI call failures.
 
 ### System Settings
@@ -129,9 +147,13 @@ npm install
 npm run dev
 ```
 
+- FastAPI initializes SQLite on startup and performs the one-time legacy import from `config.json/jsonl/price_history` when needed
+- `spider_v2.py` now loads tasks from SQLite by default; JSON config is only used when `--config <path>` is passed explicitly
+- The default local database path is `data/app.sqlite3`
 - The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:8000`.
 - `npm run build` writes `web-ui/dist/`, and `start.sh` copies it to the repository root `dist/`.
 - FastAPI serves `dist/index.html` and `dist/assets/` from the repository root.
+- `./start.sh` prints the default app URL `http://localhost:8000` and API docs URL `http://localhost:8000/docs`.
 
 ### Validation
 
@@ -216,7 +238,7 @@ graph TD
     F --> G[Call AI for Analysis];
     G --> H{AI Recommended?};
     H -- Yes --> I[Send Notification];
-    H -- No --> J[Save Record to JSONL];
+    H -- No --> J[Save Record to SQLite];
     I --> J;
     D -- No --> K[Next Page/Wait];
     K --> C;
@@ -243,6 +265,10 @@ Region filtering can sharply reduce result volume. Leave it empty if you want a 
 
 It means the repository root `dist/` directory is missing. Run `./start.sh`, or build the frontend in `web-ui/` and make sure the artifacts are copied to the root `dist/`.
 
+### Why does `./start.sh` complain about missing Playwright or a browser?
+
+The script performs a prerequisite check before installing project dependencies. Install the Playwright CLI and Chromium first, then make sure Chrome, Edge, or Chromium is available on the system and rerun `./start.sh`.
+
 </details>
 
 ## Acknowledgments
@@ -264,18 +290,6 @@ Also thanks to ClaudeCode/Gemini/Codex and other model tools for freeing our han
 
 </details>
 
-## Reflections
-
-<details>
-<summary>Click to expand project reflections</summary>
-
-Over 90% of this project's code was generated by AI, including PRs related to issues.
-
-The scary thing about Vibe Coding is that if you don't participate much in the project development, don't carefully review AI-generated code, don't think about why AI wrote it this way, and blindly verify functionality by running test cases, the project will become a black box.
-
-Similarly, when using AI to review AI-generated code, it's like using AI to verify if another AI's answer is AI-generated, falling into a self-proving dilemma. So AI can assist with analysis, but shouldn't become the arbiter of truth.
-
-</details>
 
 ## Notices
 

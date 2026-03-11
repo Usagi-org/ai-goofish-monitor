@@ -39,11 +39,58 @@ export interface AiAnalysis {
   reason: string;
   analysis_source?: 'ai' | 'keyword';
   keyword_hit_count?: number;
+  value_score?: number;
+  value_summary?: string;
   prompt_version?: string;
   risk_tags?: string[];
   criteria_analysis?: Record<string, any>;
   matched_keywords?: string[];
   error?: string;
+}
+
+export interface PriceInsight {
+  observation_count: number;
+  current_price?: number | null;
+  avg_price?: number | null;
+  median_price?: number | null;
+  min_price?: number | null;
+  max_price?: number | null;
+  market_avg_price?: number | null;
+  market_median_price?: number | null;
+  price_change_amount?: number | null;
+  price_change_percent?: number | null;
+  deal_score?: number | null;
+  deal_label?: string;
+  first_seen_at?: string | null;
+  last_seen_at?: string | null;
+}
+
+export interface ResultInsights {
+  market_summary: {
+    sample_count: number;
+    avg_price: number | null;
+    median_price: number | null;
+    min_price: number | null;
+    max_price: number | null;
+    snapshot_time?: string | null;
+  };
+  history_summary: {
+    unique_items: number;
+    sample_count: number;
+    avg_price: number | null;
+    median_price: number | null;
+    min_price: number | null;
+    max_price: number | null;
+  };
+  daily_trend: Array<{
+    day: string;
+    sample_count: number;
+    avg_price: number | null;
+    median_price: number | null;
+    min_price: number | null;
+    max_price: number | null;
+  }>;
+  latest_snapshot_at?: string | null;
 }
 
 export interface ResultItem {
@@ -53,4 +100,5 @@ export interface ResultItem {
   "商品信息": ProductInfo;
   "卖家信息": SellerInfo;
   ai_analysis: AiAnalysis;
+  price_insight?: PriceInsight;
 }

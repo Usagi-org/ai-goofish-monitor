@@ -43,7 +43,29 @@ from src.ai_message_builder import (
     build_analysis_text_prompt,
     build_user_message_content,
 )
+from src.services.ai_response_parser import (
+    EmptyAIResponseError,
+    extract_ai_response_content,
+    parse_ai_response_json,
+)
+from src.services.ai_request_compat import (
+    add_json_response_format,
+    is_response_format_unsupported_error,
+)
 from src.utils import convert_goofish_link, retry_on_failure
+
+
+def _positive_int(value, default: int) -> int:
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+DEFAULT_IMAGE_DOWNLOAD_CONCURRENCY = max(
+    1,
+    _positive_int(os.getenv("IMAGE_DOWNLOAD_CONCURRENCY", "3"), 3),
+)
 
 
 def safe_print(text):
@@ -75,7 +97,22 @@ async def _download_single_image(url, save_path):
     return save_path
 
 
-async def download_all_images(product_id, image_urls, task_name="default"):
+def _build_image_save_path(
+    product_id: str,
+    index: int,
+    url: str,
+    task_image_dir: str,
+) -> str:
+    clean_url = url.split('.heic')[0] if '.heic' in url else url
+    file_name_base = os.path.basename(clean_url).split('?')[0]
+    file_name = f"product_{product_id}_{index}_{file_name_base}"
+    file_name = re.sub(r'[\\/*?:"<>|]', "", file_name)
+    if not os.path.splitext(file_name)[1]:
+        file_name += ".jpg"
+    return os.path.join(task_image_dir, file_name)
+
+
+async def download_all_images(product_id, image_urls, task_name="default", concurrency=None):
     """异步下载一个商品的所有图片。如果图片已存在则跳过。支持任务隔离。"""
     if not image_urls:
         return []
@@ -88,28 +125,39 @@ async def download_all_images(product_id, image_urls, task_name="default"):
     if not urls:
         return []
 
-    saved_paths = []
+    max_concurrency = _positive_int(concurrency, DEFAULT_IMAGE_DOWNLOAD_CONCURRENCY)
+    semaphore = asyncio.Semaphore(max_concurrency)
     total_images = len(urls)
-    for i, url in enumerate(urls):
-        try:
-            clean_url = url.split('.heic')[0] if '.heic' in url else url
-            file_name_base = os.path.basename(clean_url).split('?')[0]
-            file_name = f"product_{product_id}_{i + 1}_{file_name_base}"
-            file_name = re.sub(r'[\\/*?:"<>|]', "", file_name)
-            if not os.path.splitext(file_name)[1]:
-                file_name += ".jpg"
 
-            save_path = os.path.join(task_image_dir, file_name)
-
-            if os.path.exists(save_path):
-                safe_print(f"   [图片] 图片 {i + 1}/{total_images} 已存在，跳过下载: {os.path.basename(save_path)}")
-                saved_paths.append(save_path)
-                continue
-
-            safe_print(f"   [图片] 正在下载图片 {i + 1}/{total_images}: {url}")
+    async def _download_one(index: int, url: str):
+        save_path = _build_image_save_path(product_id, index, url, task_image_dir)
+        if os.path.exists(save_path):
+            safe_print(
+                f"   [图片] 图片 {index}/{total_images} 已存在，跳过下载: {os.path.basename(save_path)}"
+            )
+            return save_path
+        async with semaphore:
+            safe_print(f"   [图片] 正在下载图片 {index}/{total_images}: {url}")
             if await _download_single_image(url, save_path):
-                safe_print(f"   [图片] 图片 {i + 1}/{total_images} 已成功下载到: {os.path.basename(save_path)}")
-                saved_paths.append(save_path)
+                safe_print(
+                    f"   [图片] 图片 {index}/{total_images} 已成功下载到: {os.path.basename(save_path)}"
+                )
+                return save_path
+        return None
+
+    tasks = [
+        asyncio.create_task(_download_one(index, url))
+        for index, url in enumerate(urls, start=1)
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    saved_paths = []
+    for url, result in zip(urls, results):
+        try:
+            if isinstance(result, Exception):
+                raise result
+            if result:
+                saved_paths.append(result)
         except Exception as e:
             safe_print(f"   [图片] 处理图片 {url} 时发生错误，已跳过此图: {e}")
 
@@ -513,7 +561,6 @@ async def send_ntfy_notification(product_data, reason):
             safe_print(f"   -> 发送 Webhook 通知时发生未知错误: {e}")
 
 
-@retry_on_failure(retries=3, delay=5)
 async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     """将完整的商品JSON数据和所有图片发送给 AI 进行分析（异步）。"""
     if not client:
@@ -589,6 +636,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
 
     # 增强的AI调用，包含更严格的格式控制和重试机制
     max_retries = 3
+    use_response_format = ENABLE_RESPONSE_FORMAT
     for attempt in range(max_retries):
         try:
             # 根据重试次数调整参数
@@ -603,21 +651,15 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 "temperature": current_temperature,
                 "max_tokens": 4000
             }
-            
-            # 只有启用response_format时才添加该参数
-            if ENABLE_RESPONSE_FORMAT:
-                request_params["response_format"] = {"type": "json_object"}
+            request_params = add_json_response_format(
+                request_params,
+                use_response_format,
+            )
             
             response = await client.chat.completions.create(
                 **get_ai_request_params(**request_params)
             )
-
-            # 兼容不同API响应格式，检查response是否为字符串
-            if hasattr(response, 'choices'):
-                ai_response_content = response.choices[0].message.content
-            else:
-                # 如果response是字符串，则直接使用
-                ai_response_content = response
+            ai_response_content = extract_ai_response_content(response)
 
             if AI_DEBUG_MODE:
                 safe_print(f"\n--- [AI DEBUG] 第{attempt + 1}次尝试 ---")
@@ -625,70 +667,37 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 safe_print(ai_response_content)
                 safe_print("---------------------\n")
 
-            # 尝试直接解析JSON
             try:
-                parsed_response = json.loads(ai_response_content)
+                parsed_response = parse_ai_response_json(ai_response_content)
 
                 # 验证响应格式
                 if validate_ai_response_format(parsed_response):
                     safe_print(f"   [AI分析] 第{attempt + 1}次尝试成功，响应格式验证通过")
                     return parsed_response
-                else:
-                    safe_print(f"   [AI分析] 第{attempt + 1}次尝试格式验证失败")
-                    if attempt < max_retries - 1:
-                        safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                        continue
-                    else:
-                        safe_print("   [AI分析] 所有重试完成，使用最后一次结果")
-                        return parsed_response
-
-            except json.JSONDecodeError:
-                safe_print(f"   [AI分析] 第{attempt + 1}次尝试JSON解析失败，尝试清理响应内容...")
-
-                # 清理可能的Markdown代码块标记
-                cleaned_content = ai_response_content.strip()
-                if cleaned_content.startswith('```json'):
-                    cleaned_content = cleaned_content[7:]
-                if cleaned_content.startswith('```'):
-                    cleaned_content = cleaned_content[3:]
-                if cleaned_content.endswith('```'):
-                    cleaned_content = cleaned_content[:-3]
-                cleaned_content = cleaned_content.strip()
-
-                # 寻找JSON对象边界
-                json_start_index = cleaned_content.find('{')
-                json_end_index = cleaned_content.rfind('}')
-
-                if json_start_index != -1 and json_end_index != -1 and json_end_index > json_start_index:
-                    json_str = cleaned_content[json_start_index:json_end_index + 1]
-                    try:
-                        parsed_response = json.loads(json_str)
-                        if validate_ai_response_format(parsed_response):
-                            safe_print(f"   [AI分析] 第{attempt + 1}次尝试清理后成功")
-                            return parsed_response
-                        else:
-                            if attempt < max_retries - 1:
-                                safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                                continue
-                            else:
-                                safe_print("   [AI分析] 所有重试完成，使用清理后的结果")
-                                return parsed_response
-                    except json.JSONDecodeError as e:
-                        safe_print(f"   [AI分析] 第{attempt + 1}次尝试清理后JSON解析仍然失败: {e}")
-                        if attempt < max_retries - 1:
-                            safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                            continue
-                        else:
-                            raise e
-                else:
-                    safe_print(f"   [AI分析] 第{attempt + 1}次尝试无法在响应中找到有效的JSON对象")
-                    if attempt < max_retries - 1:
-                        safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
-                        continue
-                    else:
-                        raise json.JSONDecodeError("No valid JSON object found", ai_response_content, 0)
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试格式验证失败")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise ValueError("AI响应格式缺少必需字段或字段类型不正确。")
+            except json.JSONDecodeError as e:
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试JSON解析失败: {e}")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise e
+            except EmptyAIResponseError as e:
+                safe_print(f"   [AI分析] 第{attempt + 1}次尝试返回空响应: {e}")
+                if attempt < max_retries - 1:
+                    safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
+                    continue
+                raise e
 
         except Exception as e:
+            if use_response_format and is_response_format_unsupported_error(e):
+                use_response_format = False
+                safe_print(
+                    "   [AI分析] 当前模型不支持 response_format，后续重试将自动禁用该参数。"
+                )
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
             if attempt < max_retries - 1:
                 safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")
