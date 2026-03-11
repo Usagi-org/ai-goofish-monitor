@@ -17,9 +17,10 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 
 ## Screenshots
 
-![Task Management](static/img.png)
-![Monitoring Interface](static/img_1.png)
-![Notification Example](static/img_2.png)
+![Monitoring Overview](static/img.png)
+![Task Management](static/img_1.png)
+![Result Viewer](static/img_2.png)
+![Notification Settings](static/img_3.png)
 
 ## Quick Start
 
@@ -27,7 +28,8 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 
 - Python 3.10+
 - Node.js + npm (`Node v20.18.3` has been verified to complete the frontend build)
-- Playwright and Chromium dependencies
+- Playwright CLI and Chromium. Before the first local run, install them with `python3 -m pip install playwright && python3 -m playwright install chromium`
+- Chrome or Edge on desktop systems. On Linux, Chromium also works. `start.sh` checks this prerequisite before continuing
 
 ```bash
 git clone https://github.com/Usagi-org/ai-goofish-monitor
@@ -53,11 +55,11 @@ chmod +x start.sh
 ./start.sh
 ```
 
-`start.sh` handles dependency checks, installs, frontend build, artifact copy, and backend startup.
+`start.sh` first validates the Playwright CLI and browser prerequisites. Once they are available, it installs project dependencies, builds the frontend, copies the artifacts, and starts the backend.
 
 ### First-Time Setup
 
-1. Open `http://127.0.0.1:8000` and sign in to the Web UI.
+1. Open the default Web UI at `http://127.0.0.1:8000` and sign in.
 2. Go to "Xianyu Account Management" and use the [Chrome Extension](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) to export and paste the Xianyu login-state JSON.
 3. Login-state files are stored in `state/`, for example `state/acc_1.json`.
 4. Go back to "Task Management", create a task, bind an account if needed, and run it.
@@ -66,18 +68,23 @@ chmod +x start.sh
 
 - `AI mode`: fill in the requirement description. Submission opens a separate progress dialog while the criteria are generated asynchronously.
 - `Keyword mode`: provide keyword rules and the task is created immediately.
-- `Region filter`: now uses a structured province / city / district selector backed by a built-in snapshot from Goofish, not manual text input.
+- `Region filter`: now uses a province / city / district selector backed by an embedded Xianyu page snapshot instead of manual text input.
 
-## 🐳 Docker Deployment
+## 🐳 Docker Deployment (Recommended)
 
 ```bash
+git clone https://github.com/Usagi-org/ai-goofish-monitor && cd ai-goofish-monitor
+cp .env.example .env
+vim .env # fill in the required values
 docker compose up -d
 docker compose logs -f app
 docker compose down
 ```
 
-- Web UI: `http://127.0.0.1:8000`
+- Default Web UI: `http://127.0.0.1:8000`
+- The published Docker image already includes Chromium, so no extra browser install is required on the host.
 - Update image: `docker compose pull && docker compose up -d`
+- If you change `SERVER_PORT` in `.env`, update the `ports` mapping in `docker-compose.yaml` as well.
 - `docker-compose.yaml` already persists these paths by default:
   - `state/`
   - `config.json`
@@ -85,6 +92,7 @@ docker compose down
   - `jsonl/`
   - `logs/`
   - `images/`
+  - `price_history/`
 
 ## User Guide
 
@@ -132,6 +140,7 @@ npm run dev
 - The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:8000`.
 - `npm run build` writes `web-ui/dist/`, and `start.sh` copies it to the repository root `dist/`.
 - FastAPI serves `dist/index.html` and `dist/assets/` from the repository root.
+- `./start.sh` prints the default app URL `http://localhost:8000` and API docs URL `http://localhost:8000/docs`.
 
 ### Validation
 
@@ -242,6 +251,10 @@ Region filtering can sharply reduce result volume. Leave it empty if you want a 
 ### Why does the app say the frontend build artifacts are missing?
 
 It means the repository root `dist/` directory is missing. Run `./start.sh`, or build the frontend in `web-ui/` and make sure the artifacts are copied to the root `dist/`.
+
+### Why does `./start.sh` complain about missing Playwright or a browser?
+
+The script performs a prerequisite check before installing project dependencies. Install the Playwright CLI and Chromium first, then make sure Chrome, Edge, or Chromium is available on the system and rerun `./start.sh`.
 
 </details>
 
