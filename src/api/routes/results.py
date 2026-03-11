@@ -2,17 +2,22 @@
 结果文件管理路由
 """
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, Response
-import os
+from fastapi.responses import Response
 from urllib.parse import quote
 
 from src.services.price_history_service import build_price_history_insights
 from src.services.result_export_service import build_results_csv
 from src.services.result_file_service import (
     enrich_records_with_price_insight,
-    filter_and_sort_records,
-    load_result_records,
     validate_result_filename,
+)
+from src.services.result_storage_service import (
+    build_result_ndjson,
+    delete_result_file_records,
+    list_result_filenames,
+    load_all_result_records,
+    query_result_records,
+    result_file_exists,
 )
 
 
@@ -37,59 +42,34 @@ def _build_download_headers(export_name: str) -> dict[str, str]:
 @router.get("/files")
 async def get_result_files():
     """获取所有结果文件列表"""
-    # 主要从 jsonl 目录获取文件
-    jsonl_dir = "jsonl"
-    files = []
-
-    if os.path.isdir(jsonl_dir):
-        files = [f for f in os.listdir(jsonl_dir) if f.endswith(".jsonl")]
-
-    # 返回格式与前端期望一致
-    return {"files": files}
+    return {"files": await list_result_filenames()}
 
 
 @router.get("/files/{filename:path}")
 async def download_result_file(filename: str):
     """下载指定的结果文件"""
-    # 安全检查：防止路径遍历攻击
     if ".." in filename or filename.startswith("/"):
         return {"error": "非法的文件路径"}
-
-    # 文件在 jsonl 目录中
-    file_path = os.path.join("jsonl", filename)
-
-    if not os.path.exists(file_path) or not filename.endswith(".jsonl"):
+    if not filename.endswith(".jsonl") or not await result_file_exists(filename):
         return {"error": "文件不存在"}
-
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type="application/x-ndjson"
+    return Response(
+        content=await build_result_ndjson(filename),
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @router.delete("/files/{filename:path}")
 async def delete_result_file(filename: str):
     """删除指定的结果文件"""
-    # 安全检查：防止路径遍历攻击
     if ".." in filename or filename.startswith("/"):
         raise HTTPException(status_code=400, detail="非法的文件路径")
-
-    # 只允许删除 .jsonl 文件
     if not filename.endswith(".jsonl"):
         raise HTTPException(status_code=400, detail="只能删除 .jsonl 文件")
-
-    # 文件在 jsonl 目录中
-    file_path = os.path.join("jsonl", filename)
-
-    if not os.path.exists(file_path):
+    deleted_rows = await delete_result_file_records(filename)
+    if deleted_rows <= 0:
         raise HTTPException(status_code=404, detail="文件不存在")
-
-    try:
-        os.remove(file_path)
-        return {"message": f"文件 {filename} 已成功删除"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除文件时出错: {str(e)}")
+    return {"message": f"文件 {filename} 已成功删除"}
 
 
 @router.get("/{filename}")
@@ -112,25 +92,22 @@ async def get_result_file_content(
 
     try:
         validate_result_filename(filename)
-        records = await load_result_records(filename)
-        results = filter_and_sort_records(
-            records,
+        total_items, items = await query_result_records(
+            filename,
             ai_recommended_only=ai_recommended_only,
             keyword_recommended_only=keyword_recommended_only,
             sort_by=sort_by,
             sort_order=sort_order,
+            page=page,
+            limit=limit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"读取结果文件时出错: {exc}")
-
-    total_items = len(results)
-    start = (page - 1) * limit
-    end = start + limit
-    paginated_results = enrich_records_with_price_insight(results[start:end], filename)
+    if total_items <= 0 and not await result_file_exists(filename):
+        raise HTTPException(status_code=404, detail="结果文件未找到")
+    paginated_results = enrich_records_with_price_insight(items, filename)
 
     return {
         "total_items": total_items,
@@ -166,9 +143,8 @@ async def export_result_file_content(
 
     try:
         validate_result_filename(filename)
-        records = await load_result_records(filename)
-        results = filter_and_sort_records(
-            records,
+        results = await load_all_result_records(
+            filename,
             ai_recommended_only=ai_recommended_only,
             keyword_recommended_only=keyword_recommended_only,
             sort_by=sort_by,
@@ -179,10 +155,10 @@ async def export_result_file_content(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"导出结果文件时出错: {exc}")
+    if not results and not await result_file_exists(filename):
+        raise HTTPException(status_code=404, detail="结果文件未找到")
 
     export_name = filename.replace(".jsonl", ".csv")
     headers = _build_download_headers(export_name)

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from src.api import dependencies as deps
 from src.api.routes import dashboard
 from src.domain.models.task import TaskCreate
-from src.infrastructure.persistence.json_task_repository import JsonTaskRepository
+from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
 from src.services.task_service import TaskService
 
 
@@ -19,12 +19,13 @@ def _write_jsonl(path, records):
 def test_dashboard_summary_aggregates_tasks_and_results(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    config_file = tmp_path / "config.json"
-    config_file.write_text("[]", encoding="utf-8")
     jsonl_dir = tmp_path / "jsonl"
     jsonl_dir.mkdir(parents=True, exist_ok=True)
 
-    repository = JsonTaskRepository(config_file=str(config_file))
+    repository = SqliteTaskRepository(
+        db_path=str(tmp_path / "app.sqlite3"),
+        legacy_config_file=None,
+    )
     task_service = TaskService(repository)
     app = FastAPI()
     app.include_router(dashboard.router)

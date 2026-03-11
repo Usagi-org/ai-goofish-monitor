@@ -46,6 +46,7 @@ from src.utils import (
 from src.rotation import RotationPool, load_state_files, parse_proxy_pool, RotationItem
 from src.failure_guard import FailureGuard
 from src.services.account_strategy_service import resolve_account_runtime_plan
+from src.infrastructure.persistence.storage_names import build_result_filename
 from src.services.item_analysis_dispatcher import (
     ItemAnalysisDispatcher,
     ItemAnalysisJob,
@@ -55,6 +56,7 @@ from src.services.price_history_service import (
     load_price_snapshots,
     record_market_snapshots,
 )
+from src.services.result_storage_service import load_processed_link_keys
 from src.services.seller_profile_cache import SellerProfileCache
 
 
@@ -450,26 +452,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
     history_seen_item_ids: set[str] = set()
     historical_snapshots = load_price_snapshots(keyword)
-    output_filename = os.path.join(
-        "jsonl", f"{keyword.replace(' ', '_')}_full_data.jsonl"
-    )
-    if os.path.exists(output_filename):
-        print(f"LOG: 发现已存在文件 {output_filename}，正在加载历史记录以去重...")
-        try:
-            with open(output_filename, "r", encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        record = json.loads(line)
-                        link = record.get("商品信息", {}).get("商品链接", "")
-                        if link:
-                            processed_links.add(get_link_unique_key(link))
-                    except json.JSONDecodeError:
-                        print(f"   [警告] 文件中有一行无法解析为JSON，已跳过。")
-            print(f"LOG: 加载完成，已记录 {len(processed_links)} 个已处理过的商品。")
-        except IOError as e:
-            print(f"   [警告] 读取历史文件时发生错误: {e}")
+    result_filename = build_result_filename(keyword)
+    processed_links = load_processed_link_keys(keyword)
+    if processed_links:
+        print(f"LOG: 发现已存在结果集 {result_filename}，已加载 {len(processed_links)} 个历史商品用于去重。")
     else:
-        print(f"LOG: 输出文件 {output_filename} 不存在，将创建新文件。")
+        print(f"LOG: 结果集 {result_filename} 当前为空，将写入新记录。")
 
     rotation_settings = _get_rotation_settings(task_config)
     account_items = load_state_files(rotation_settings["account_state_dir"])

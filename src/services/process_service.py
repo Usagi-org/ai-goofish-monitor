@@ -5,7 +5,6 @@
 
 import asyncio
 import contextlib
-import json
 import os
 import signal
 import sys
@@ -15,6 +14,7 @@ from typing import Awaitable, Callable, Dict, TextIO
 from src.ai_handler import send_ntfy_notification
 from src.config import STATE_FILE
 from src.failure_guard import FailureGuard
+from src.infrastructure.persistence.sqlite_task_repository import find_task_by_name_sync
 from src.utils import build_task_log_path
 
 STOP_TIMEOUT_SECONDS = 20
@@ -53,18 +53,9 @@ class ProcessService:
     def _resolve_cookie_path(self, task_name: str) -> str | None:
         """Best-effort cookie/state path for a task."""
         try:
-            if os.path.exists("config.json"):
-                with open("config.json", "r", encoding="utf-8") as f:
-                    tasks = json.load(f)
-                if isinstance(tasks, list):
-                    for task in tasks:
-                        if not isinstance(task, dict):
-                            continue
-                        if task.get("task_name") != task_name:
-                            continue
-                        state_file = task.get("account_state_file")
-                        if isinstance(state_file, str) and state_file.strip():
-                            return state_file.strip()
+            task = find_task_by_name_sync(task_name)
+            if task and isinstance(task.account_state_file, str) and task.account_state_file.strip():
+                return task.account_state_file.strip()
         except Exception:
             pass
 

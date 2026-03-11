@@ -4,8 +4,6 @@ Dashboard 聚合服务
 """
 from __future__ import annotations
 
-from os import listdir
-from os.path import isdir
 from typing import Any
 
 from src.domain.models.task import Task
@@ -18,17 +16,9 @@ from src.services.dashboard_payloads import (
     sort_key_by_latest_time,
     summarize_result_file,
 )
+from src.services.result_storage_service import list_result_filenames
 
 MAX_RECENT_ACTIVITIES = 8
-
-
-def _list_result_filenames() -> list[str]:
-    if not isdir("jsonl"):
-        return []
-    return sorted(
-        [name for name in listdir("jsonl") if name.endswith(".jsonl")],
-        reverse=True,
-    )
 
 
 def _build_summary_metrics(tasks: list[Task], summary_list: list[dict[str, Any]], last_updated_at: Any) -> dict[str, Any]:
@@ -52,7 +42,7 @@ async def build_dashboard_snapshot(tasks: list[Task]) -> dict[str, Any]:
     recent_activities = build_task_state_activities(tasks)
     latest_updated_at = None
 
-    for filename in _list_result_filenames():
+    for filename in await list_result_filenames():
         summary, activities, file_latest_time = await summarize_result_file(filename, task_lookup)
         if summary:
             task_summaries[summary["task_name"]] = summary

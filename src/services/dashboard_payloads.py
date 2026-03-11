@@ -9,9 +9,9 @@ from typing import Any
 from src.domain.models.task import Task
 from src.services.price_history_service import parse_price_value
 from src.services.result_file_service import (
-    load_result_records,
     normalize_keyword_from_filename,
 )
+from src.services.result_storage_service import load_result_summary
 
 
 def normalize_text(value: str | None) -> str:
@@ -228,12 +228,12 @@ async def summarize_result_file(
     filename: str,
     task_lookup: dict[str, Task],
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], datetime | None]:
-    records = await load_result_records(filename)
-    if not records:
+    metrics = await load_result_summary(filename)
+    if not metrics:
         return None, [], None
 
-    metrics = _collect_record_metrics(records)
     latest_record = metrics["latest_record"]
+    latest_crawl_time = parse_timestamp(metrics["latest_crawl_time"])
     keyword = str((latest_record or {}).get("搜索关键字") or "") or normalize_keyword_from_filename(filename)
     task = _resolve_task(task_lookup, latest_record, keyword)
     task_name = task.task_name if task else str((latest_record or {}).get("任务名称") or keyword)
@@ -254,7 +254,7 @@ async def summarize_result_file(
         task_name=task_name,
         keyword=keyword,
         latest_record=latest_record,
-        total_items=len(records),
+        total_items=metrics["total_items"],
     )
     if scan_activity:
         activities.append(scan_activity)
@@ -262,16 +262,16 @@ async def summarize_result_file(
     summary.update(
         {
             "filename": filename,
-            "total_items": len(records),
+            "total_items": metrics["total_items"],
             "recommended_items": metrics["recommended_items"],
             "ai_recommended_items": metrics["ai_recommended_items"],
             "keyword_recommended_items": metrics["keyword_recommended_items"],
-            "latest_crawl_time": serialize_timestamp(metrics["latest_crawl_time"]),
+            "latest_crawl_time": serialize_timestamp(latest_crawl_time),
             "latest_recommended_title": title,
             "latest_recommended_price": price,
         }
     )
-    return summary, activities, metrics["latest_crawl_time"]
+    return summary, activities, latest_crawl_time
 
 
 def build_task_state_activities(tasks: list[Task]) -> list[dict[str, Any]]:

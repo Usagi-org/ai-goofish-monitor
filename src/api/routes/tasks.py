@@ -24,7 +24,9 @@ from src.domain.models.task import TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
 from src.utils import resolve_task_log_path
 from src.services.account_strategy_service import normalize_account_strategy
-from src.services.price_history_service import build_price_history_path
+from src.infrastructure.persistence.storage_names import build_result_filename
+from src.services.price_history_service import delete_price_snapshots
+from src.services.result_storage_service import delete_result_file_records
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 async def _reload_scheduler_if_needed(
@@ -222,7 +224,6 @@ async def delete_task(
     success = await service.delete_task(task_id)
     if not success:
         raise HTTPException(status_code=404, detail="任务未找到")
-    process_service.reindex_after_delete(task_id)
     await _reload_scheduler_if_needed(service, scheduler_service)
     try:
         keyword = (task.keyword or "").strip()
@@ -233,13 +234,8 @@ async def delete_task(
                 for remaining_task in remaining_tasks
             )
             if not keyword_still_in_use:
-                filename = f"{keyword.replace(' ', '_')}_full_data.jsonl"
-                file_path = os.path.join("jsonl", filename)
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                history_path = build_price_history_path(keyword)
-                if os.path.exists(history_path):
-                    os.remove(history_path)
+                await delete_result_file_records(build_result_filename(keyword))
+                delete_price_snapshots(keyword)
     except Exception as e:
         print(f"删除任务结果文件时出错: {e}")
 

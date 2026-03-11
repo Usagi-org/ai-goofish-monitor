@@ -179,4 +179,4 @@ def test_delete_task_stops_runtime_and_reindexes_process_state(
     assert response.status_code == 200
     process_service = api_context["process_service"]
     assert process_service.stopped == [0]
-    assert process_service.reindexed == [0]
+    assert process_service.reindexed == []

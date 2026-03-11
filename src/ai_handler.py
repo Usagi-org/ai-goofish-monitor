@@ -48,6 +48,10 @@ from src.services.ai_response_parser import (
     extract_ai_response_content,
     parse_ai_response_json,
 )
+from src.services.ai_request_compat import (
+    add_json_response_format,
+    is_response_format_unsupported_error,
+)
 from src.utils import convert_goofish_link, retry_on_failure
 
 
@@ -632,6 +636,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
 
     # 增强的AI调用，包含更严格的格式控制和重试机制
     max_retries = 3
+    use_response_format = ENABLE_RESPONSE_FORMAT
     for attempt in range(max_retries):
         try:
             # 根据重试次数调整参数
@@ -646,10 +651,10 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 "temperature": current_temperature,
                 "max_tokens": 4000
             }
-            
-            # 只有启用response_format时才添加该参数
-            if ENABLE_RESPONSE_FORMAT:
-                request_params["response_format"] = {"type": "json_object"}
+            request_params = add_json_response_format(
+                request_params,
+                use_response_format,
+            )
             
             response = await client.chat.completions.create(
                 **get_ai_request_params(**request_params)
@@ -688,6 +693,11 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 raise e
 
         except Exception as e:
+            if use_response_format and is_response_format_unsupported_error(e):
+                use_response_format = False
+                safe_print(
+                    "   [AI分析] 当前模型不支持 response_format，后续重试将自动禁用该参数。"
+                )
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
             if attempt < max_retries - 1:
                 safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")

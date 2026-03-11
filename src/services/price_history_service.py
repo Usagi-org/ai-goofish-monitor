@@ -11,6 +11,8 @@ from datetime import datetime
 from statistics import median
 from typing import Any, Iterable, Optional
 
+from src.infrastructure.persistence.sqlite_bootstrap import bootstrap_sqlite_storage
+from src.infrastructure.persistence.sqlite_connection import sqlite_connection
 
 PRICE_HISTORY_DIR = "price_history"
 DEFAULT_HISTORY_WINDOW_DAYS = 30
@@ -120,30 +122,84 @@ def record_market_snapshots(
     if not records:
         return []
 
-    os.makedirs(PRICE_HISTORY_DIR, exist_ok=True)
-    filepath = build_price_history_path(keyword)
-    with open(filepath, "a", encoding="utf-8") as f:
+    bootstrap_sqlite_storage()
+    keyword_slug = normalize_keyword_slug(keyword)
+    with sqlite_connection() as conn:
         for record in records:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO price_snapshots (
+                    keyword_slug, keyword, task_name, snapshot_time, snapshot_day,
+                    run_id, item_id, title, price, price_display, tags_json, region,
+                    seller, publish_time, link
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    keyword_slug,
+                    record.get("keyword", keyword),
+                    record.get("task_name", task_name),
+                    record.get("snapshot_time", snapshot_time),
+                    record.get("snapshot_day", _to_day(snapshot_time)),
+                    record.get("run_id", run_id),
+                    record.get("item_id", ""),
+                    record.get("title", ""),
+                    record.get("price"),
+                    record.get("price_display", ""),
+                    json.dumps(record.get("tags") or [], ensure_ascii=False),
+                    record.get("region", ""),
+                    record.get("seller", ""),
+                    record.get("publish_time", ""),
+                    record.get("link", ""),
+                ),
+            )
+        conn.commit()
     return records
 
 
 def load_price_snapshots(keyword: str) -> list[dict]:
-    filepath = build_price_history_path(keyword)
-    if not os.path.exists(filepath):
-        return []
-
+    bootstrap_sqlite_storage()
+    with sqlite_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM price_snapshots
+            WHERE keyword_slug = ?
+            ORDER BY snapshot_time ASC, id ASC
+            """,
+            (normalize_keyword_slug(keyword),),
+        ).fetchall()
     snapshots: list[dict] = []
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                snapshots.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for row in rows:
+        snapshots.append(
+            {
+                "snapshot_time": row["snapshot_time"],
+                "snapshot_day": row["snapshot_day"],
+                "run_id": row["run_id"],
+                "task_name": row["task_name"],
+                "keyword": row["keyword"],
+                "item_id": row["item_id"],
+                "title": row["title"],
+                "price": row["price"],
+                "price_display": row["price_display"],
+                "tags": json.loads(row["tags_json"] or "[]"),
+                "region": row["region"],
+                "seller": row["seller"],
+                "publish_time": row["publish_time"],
+                "link": row["link"],
+            }
+        )
     return snapshots
+
+
+def delete_price_snapshots(keyword: str) -> int:
+    bootstrap_sqlite_storage()
+    with sqlite_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM price_snapshots WHERE keyword_slug = ?",
+            (normalize_keyword_slug(keyword),),
+        )
+        conn.commit()
+    return int(cursor.rowcount or 0)
 
 
 def _dedupe_latest(records: Iterable[dict], group_key: str) -> list[dict]:
