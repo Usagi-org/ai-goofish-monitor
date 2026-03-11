@@ -324,18 +324,18 @@ fi
 echo "正在构建前端..."
 npm run build
 
+cd "$SCRIPT_DIR"
+
 if [ ! -d "dist" ]; then
     echo -e "${RED}✗ 错误: 前端构建失败，dist 目录未生成${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ 前端构建完成${NC}"
+echo -e "${GREEN}✓ 前端构建完成，产物已输出到项目根目录 dist/${NC}"
 
-# 4. 复制构建产物到项目根目录
-echo -e "\n${YELLOW}[5/6] 复制构建产物...${NC}"
-cd "$SCRIPT_DIR"
-cp -r web-ui/dist ./
-echo -e "${GREEN}✓ 构建产物已复制到项目根目录${NC}"
+# 4. 校验构建产物
+echo -e "\n${YELLOW}[5/6] 校验构建产物...${NC}"
+echo -e "${GREEN}✓ 已确认构建产物位于项目根目录 dist/${NC}"
 
 # 5. 启动后端服务
 echo -e "\n${YELLOW}[6/6] 启动后端服务...${NC}"
