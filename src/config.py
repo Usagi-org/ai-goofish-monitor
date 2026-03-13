@@ -93,8 +93,15 @@ def get_ai_request_params(**kwargs):
     if ENABLE_THINKING:
         kwargs["extra_body"] = {"enable_thinking": False}
     
-    # 如果禁用response_format，则移除该参数
-    if not ENABLE_RESPONSE_FORMAT and "response_format" in kwargs:
-        del kwargs["response_format"]
+    # 如果禁用结构化输出，则移除 text.format 配置
+    if not ENABLE_RESPONSE_FORMAT and "text" in kwargs:
+        text_config = kwargs.get("text")
+        if isinstance(text_config, dict):
+            text_config = dict(text_config)
+            text_config.pop("format", None)
+            if text_config:
+                kwargs["text"] = text_config
+            else:
+                del kwargs["text"]
     
     return kwargs

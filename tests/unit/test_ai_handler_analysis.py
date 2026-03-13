@@ -8,9 +8,8 @@ import src.config as app_config
 
 
 def _build_fake_client(create_impl):
-    completions = SimpleNamespace(create=create_impl)
-    chat = SimpleNamespace(completions=completions)
-    return SimpleNamespace(chat=chat)
+    responses = SimpleNamespace(create=create_impl)
+    return SimpleNamespace(responses=responses)
 
 
 def test_get_ai_analysis_stops_after_internal_retries_when_content_is_none(
@@ -21,9 +20,7 @@ def test_get_ai_analysis_stops_after_internal_retries_when_content_is_none(
 
     async def fake_create(**_kwargs):
         call_count["value"] += 1
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=None))]
-        )
+        return SimpleNamespace(output_text="")
 
     monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
     monkeypatch.setattr(ai_handler, "MODEL_NAME", "fake-model")
@@ -49,16 +46,10 @@ def test_get_ai_analysis_returns_parsed_json(monkeypatch, tmp_path):
     async def fake_create(**_kwargs):
         call_count["value"] += 1
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"prompt_version":"v1","is_recommended":true,'
-                            '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
-                        )
-                    )
-                )
-            ]
+            output_text=(
+                '{"prompt_version":"v1","is_recommended":true,'
+                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+            )
         )
 
     monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
@@ -78,7 +69,7 @@ def test_get_ai_analysis_returns_parsed_json(monkeypatch, tmp_path):
     assert call_count["value"] == 1
 
 
-def test_get_ai_analysis_retries_without_response_format_when_model_rejects_it(
+def test_get_ai_analysis_retries_without_structured_output_when_model_rejects_it(
     monkeypatch, tmp_path
 ):
     monkeypatch.chdir(tmp_path)
@@ -89,21 +80,15 @@ def test_get_ai_analysis_retries_without_response_format_when_model_rejects_it(
         if len(request_history) == 1:
             raise Exception(
                 "Error code: 400 - {'error': {'code': 'InvalidParameter', "
-                "'message': 'The parameter `response_format.type` specified in "
+                "'message': 'The parameter `text.format.type` specified in "
                 "the request are not valid: `json_object` is not supported by "
-                "this model.', 'param': 'response_format.type'}}"
+                "this model.', 'param': 'text.format.type'}}"
             )
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"prompt_version":"v1","is_recommended":true,'
-                            '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
-                        )
-                    )
-                )
-            ]
+            output_text=(
+                '{"prompt_version":"v1","is_recommended":true,'
+                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+            )
         )
 
     monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
@@ -120,6 +105,7 @@ def test_get_ai_analysis_retries_without_response_format_when_model_rejects_it(
     )
 
     assert result["reason"] == "ok"
-    assert "response_format" in request_history[0]
-    assert "response_format" not in request_history[1]
+    assert request_history[0]["input"][0]["content"][0]["type"] == "input_text"
+    assert request_history[0]["text"]["format"]["type"] == "json_object"
+    assert "text" not in request_history[1]
     assert ai_handler.ENABLE_RESPONSE_FORMAT is True
