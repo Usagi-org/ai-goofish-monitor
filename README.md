@@ -188,7 +188,7 @@ cd web-ui && npm run build
 - `PROXY_URL`：为 AI 请求单独指定 HTTP/SOCKS5 代理。
 - `RUN_HEADLESS`：是否以无头模式运行爬虫；Docker 中应保持 `true`。
 - `SERVER_PORT`：后端监听端口，默认 `8000`。
-- `LOGIN_IS_EDGE`：切换登录态提取时使用 Edge 内核。
+- `LOGIN_IS_EDGE`：本地环境可切换为 Edge 内核；Docker 镜像未内置 Edge，容器内会固定使用 Chromium。
 - `PCURL_TO_MOBILE`：是否将 PC 商品链接转换为移动端链接。
 
 ### 通知
