@@ -2,9 +2,15 @@ __pycache__
 *.pyc
 .env
 .venv
+venv
+.idea
+.claude
+.serena
+.pytest_cache
 logs/
 jsonl/
 web-ui/node_modules
+web-ui/dist
 dist/
 .git
 .DS_Store
@@ -12,5 +18,7 @@ task_images/
 images/
 archive/
 tests/
+data/
+price_history/
 *.md
 !README.md

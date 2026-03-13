@@ -551,8 +551,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             if LOGIN_IS_EDGE:
                 launch_kwargs["channel"] = "msedge"
             else:
-                if not RUNNING_IN_DOCKER:
-                    launch_kwargs["channel"] = "chrome"
+                launch_kwargs["channel"] = "chromium" if RUNNING_IN_DOCKER else "chrome"
 
             browser = await p.chromium.launch(**launch_kwargs)
 
