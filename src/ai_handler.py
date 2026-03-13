@@ -38,6 +38,8 @@ from src.services.ai_request_compat import (
     add_json_text_format,
     build_responses_input,
     is_json_output_unsupported_error,
+    is_temperature_unsupported_error,
+    remove_temperature_param,
 )
 from src.services.notification_service import build_notification_service
 from src.utils import convert_goofish_link, retry_on_failure
@@ -327,6 +329,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     # 增强的AI调用，包含更严格的结构化输出控制和重试机制
     max_retries = 3
     use_response_format = ENABLE_RESPONSE_FORMAT
+    use_temperature = True
     for attempt in range(max_retries):
         try:
             # 根据重试次数调整参数
@@ -341,6 +344,8 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 "temperature": current_temperature,
                 "max_output_tokens": 4000,
             }
+            if not use_temperature:
+                request_params = remove_temperature_param(request_params)
             request_params = add_json_text_format(
                 request_params,
                 use_response_format,
@@ -387,6 +392,11 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 use_response_format = False
                 safe_print(
                     "   [AI分析] 当前模型不支持结构化 JSON 输出，后续重试将自动禁用该参数。"
+                )
+            if use_temperature and is_temperature_unsupported_error(e):
+                use_temperature = False
+                safe_print(
+                    "   [AI分析] 当前模型不支持 temperature 参数，后续重试将自动禁用该参数。"
                 )
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
             if attempt < max_retries - 1:

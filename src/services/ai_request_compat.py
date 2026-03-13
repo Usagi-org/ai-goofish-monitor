@@ -14,6 +14,10 @@ UNSUPPORTED_JSON_OUTPUT_MARKERS = (
     "text.format",
     "response_format.type",
 )
+UNSUPPORTED_TEMPERATURE_MARKERS = (
+    "temperature",
+    "sampling temperature",
+)
 
 
 def build_responses_input(messages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -52,6 +56,24 @@ def is_json_output_unsupported_error(error: Exception) -> bool:
         "not supported" in message.lower()
         and any(marker in message for marker in UNSUPPORTED_JSON_OUTPUT_MARKERS)
     )
+
+
+def is_temperature_unsupported_error(error: Exception) -> bool:
+    """识别模型或中转站不支持 temperature 参数的错误。"""
+    message = str(error).lower()
+    return (
+        "not supported" in message
+        or "unsupported" in message
+        or "invalid" in message
+        or "参数错误" in message
+    ) and any(marker in message for marker in UNSUPPORTED_TEMPERATURE_MARKERS)
+
+
+def remove_temperature_param(request_params: Dict[str, Any]) -> Dict[str, Any]:
+    """移除 temperature 参数，适配不支持采样温度的模型网关。"""
+    next_params = dict(request_params)
+    next_params.pop("temperature", None)
+    return next_params
 
 
 def _build_input_content(content: Any) -> List[Dict[str, Any]]:

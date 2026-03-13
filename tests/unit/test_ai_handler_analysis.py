@@ -109,3 +109,38 @@ def test_get_ai_analysis_retries_without_structured_output_when_model_rejects_it
     assert request_history[0]["text"]["format"]["type"] == "json_object"
     assert "text" not in request_history[1]
     assert ai_handler.ENABLE_RESPONSE_FORMAT is True
+
+
+def test_get_ai_analysis_retries_without_temperature_when_gateway_rejects_it(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    request_history = []
+
+    async def fake_create(**kwargs):
+        request_history.append(kwargs)
+        if len(request_history) == 1:
+            raise Exception("temperature is unsupported for this model")
+        return SimpleNamespace(
+            output_text=(
+                '{"prompt_version":"v1","is_recommended":true,'
+                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+            )
+        )
+
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
+    monkeypatch.setattr(ai_handler, "MODEL_NAME", "fake-model")
+    monkeypatch.setattr(ai_handler, "ENABLE_RESPONSE_FORMAT", True)
+    monkeypatch.setattr(app_config, "ENABLE_RESPONSE_FORMAT", True)
+
+    result = asyncio.run(
+        ai_handler.get_ai_analysis(
+            {"商品信息": {"商品ID": "4", "商品标题": "测试商品4"}},
+            image_paths=[],
+            prompt_text="请输出 JSON",
+        )
+    )
+
+    assert result["reason"] == "ok"
+    assert request_history[0]["temperature"] == 0.1
+    assert "temperature" not in request_history[1]
