@@ -2,12 +2,12 @@ import asyncio
 from types import SimpleNamespace
 
 from src.infrastructure.external.ai_client import AIClient
+from src.services.ai_request_compat import build_responses_input
 
 
 def _build_fake_client(create_impl):
-    completions = SimpleNamespace(create=create_impl)
-    chat = SimpleNamespace(completions=completions)
-    return SimpleNamespace(chat=chat)
+    responses = SimpleNamespace(create=create_impl)
+    return SimpleNamespace(responses=responses)
 
 
 def test_build_messages_without_images_uses_text_only_content():
@@ -41,7 +41,35 @@ def test_build_messages_with_images_uses_multimodal_content(monkeypatch):
     assert content[-1]["type"] == "text"
 
 
-def test_call_ai_retries_without_response_format_when_model_rejects_it():
+def test_build_responses_input_converts_multimodal_messages():
+    result = build_responses_input(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,ZmFrZQ=="}},
+                    {"type": "text", "text": "hello"},
+                ],
+            }
+        ]
+    )
+
+    assert result == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/jpeg;base64,ZmFrZQ==",
+                    "detail": "auto",
+                },
+                {"type": "input_text", "text": "hello"},
+            ],
+        }
+    ]
+
+
+def test_call_ai_retries_without_structured_output_when_model_rejects_it():
     client = AIClient.__new__(AIClient)
     client.settings = SimpleNamespace(
         model_name="fake-model",
@@ -55,18 +83,17 @@ def test_call_ai_retries_without_response_format_when_model_rejects_it():
         if len(request_history) == 1:
             raise Exception(
                 "Error code: 400 - {'error': {'code': 'InvalidParameter', "
-                "'message': 'The parameter `response_format.type` specified in "
+                "'message': 'The parameter `text.format.type` specified in "
                 "the request are not valid: `json_object` is not supported by "
-                "this model.', 'param': 'response_format.type'}}"
+                "this model.', 'param': 'text.format.type'}}"
             )
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok":true}'))]
-        )
+        return SimpleNamespace(output_text='{"ok":true}')
 
     client.client = _build_fake_client(fake_create)
 
     response = asyncio.run(client._call_ai([{"role": "user", "content": "hi"}]))
 
     assert response == '{"ok":true}'
-    assert "response_format" in request_history[0]
-    assert "response_format" not in request_history[1]
+    assert request_history[0]["input"][0]["content"][0]["type"] == "input_text"
+    assert request_history[0]["text"]["format"]["type"] == "json_object"
+    assert "text" not in request_history[1]

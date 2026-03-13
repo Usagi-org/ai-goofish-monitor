@@ -6,6 +6,8 @@ from typing import Awaitable, Callable, Optional
 import aiofiles
 
 from src.infrastructure.external.ai_client import AIClient
+from src.services.ai_request_compat import build_responses_input
+from src.services.ai_response_parser import extract_ai_response_content
 
 # The meta-prompt to instruct the AI
 META_PROMPT_TEMPLATE = """
@@ -81,19 +83,14 @@ async def generate_criteria(
     try:
         request_params = {
             "model": ai_client.settings.model_name,
-            "messages": [{"role": "user", "content": prompt}],
+            "input": build_responses_input([{"role": "user", "content": prompt}]),
             "temperature": 0.5,
         }
         if ai_client.settings.enable_thinking:
             request_params["extra_body"] = {"enable_thinking": False}
 
-        response = await ai_client.client.chat.completions.create(**request_params)
-        # 兼容不同API响应格式，检查response是否为字符串
-        if hasattr(response, 'choices'):
-            generated_text = response.choices[0].message.content
-        else:
-            # 如果response是字符串，则直接使用
-            generated_text = response
+        response = await ai_client.client.responses.create(**request_params)
+        generated_text = extract_ai_response_content(response)
         print("AI已成功生成内容。")
         
         # 处理content可能为None或空字符串的情况

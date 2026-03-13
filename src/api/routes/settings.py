@@ -15,6 +15,8 @@ from src.infrastructure.config.settings import (
     reload_settings,
     scraper_settings,
 )
+from src.services.ai_request_compat import build_responses_input
+from src.services.ai_response_parser import extract_ai_response_content
 from src.services.notification_config_service import (
     NotificationSettingsValidationError,
     build_configured_channels,
@@ -29,6 +31,8 @@ from src.services.process_service import ProcessService
 
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+AI_TEST_PROMPT = "Reply with OK only."
+AI_TEST_MAX_OUTPUT_TOKENS = 32
 
 
 def _reload_env() -> None:
@@ -287,18 +291,18 @@ async def test_ai_settings(settings: dict):
 
         model_name = settings.get("OPENAI_MODEL_NAME", "")
         client = OpenAI(**client_params)
-        response = client.chat.completions.create(
+        response = client.responses.create(
             model=model_name,
-            messages=[
-                {"role": "user", "content": "Hello, this is a test message."}
-            ],
-            max_tokens=10,
+            input=build_responses_input(
+                [{"role": "user", "content": AI_TEST_PROMPT}]
+            ),
+            max_output_tokens=AI_TEST_MAX_OUTPUT_TOKENS,
         )
 
         return {
             "success": True,
             "message": "AI模型连接测试成功！",
-            "response": response.choices[0].message.content if response.choices else "No response",
+            "response": extract_ai_response_content(response),
         }
     except Exception as exc:
         return {

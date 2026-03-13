@@ -35,8 +35,9 @@ from src.services.ai_response_parser import (
     parse_ai_response_json,
 )
 from src.services.ai_request_compat import (
-    add_json_response_format,
-    is_response_format_unsupported_error,
+    add_json_text_format,
+    build_responses_input,
+    is_json_output_unsupported_error,
 )
 from src.services.notification_service import build_notification_service
 from src.utils import convert_goofish_link, retry_on_failure
@@ -323,7 +324,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     except Exception as e:
         safe_print(f"   [日志] 保存AI分析日志时出错: {e}")
 
-    # 增强的AI调用，包含更严格的格式控制和重试机制
+    # 增强的AI调用，包含更严格的结构化输出控制和重试机制
     max_retries = 3
     use_response_format = ENABLE_RESPONSE_FORMAT
     for attempt in range(max_retries):
@@ -333,19 +334,19 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
 
             from src.config import get_ai_request_params
             
-            # 构建请求参数，根据ENABLE_RESPONSE_FORMAT决定是否使用response_format
+            # 构建请求参数，根据ENABLE_RESPONSE_FORMAT决定是否启用结构化 JSON 输出
             request_params = {
                 "model": MODEL_NAME,
-                "messages": messages,
+                "input": build_responses_input(messages),
                 "temperature": current_temperature,
-                "max_tokens": 4000
+                "max_output_tokens": 4000,
             }
-            request_params = add_json_response_format(
+            request_params = add_json_text_format(
                 request_params,
                 use_response_format,
             )
             
-            response = await client.chat.completions.create(
+            response = await client.responses.create(
                 **get_ai_request_params(**request_params)
             )
             ai_response_content = extract_ai_response_content(response)
@@ -382,10 +383,10 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 raise e
 
         except Exception as e:
-            if use_response_format and is_response_format_unsupported_error(e):
+            if use_response_format and is_json_output_unsupported_error(e):
                 use_response_format = False
                 safe_print(
-                    "   [AI分析] 当前模型不支持 response_format，后续重试将自动禁用该参数。"
+                    "   [AI分析] 当前模型不支持结构化 JSON 输出，后续重试将自动禁用该参数。"
                 )
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
             if attempt < max_retries - 1:
