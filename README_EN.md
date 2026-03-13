@@ -186,7 +186,7 @@ cd web-ui && npm run build
 - `PROXY_URL`: dedicated HTTP/SOCKS5 proxy for AI requests.
 - `RUN_HEADLESS`: whether the scraper runs headless; keep it `true` in Docker.
 - `SERVER_PORT`: backend port, default `8000`.
-- `LOGIN_IS_EDGE`: use Edge instead of Chrome for login-state extraction.
+- `LOGIN_IS_EDGE`: use Edge instead of Chrome locally; Docker images do not bundle Edge and always run with Chromium.
 - `PCURL_TO_MOBILE`: convert desktop item URLs to mobile URLs.
 
 ### Notifications

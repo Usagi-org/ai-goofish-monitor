@@ -70,6 +70,7 @@ class LoginRequiredError(Exception):
 
 
 FAILURE_GUARD = FailureGuard()
+EDGE_DOCKER_WARNING_PRINTED = False
 
 
 def _is_login_url(url: str) -> bool:
@@ -77,6 +78,19 @@ def _is_login_url(url: str) -> bool:
         return False
     lowered = url.lower()
     return "passport.goofish.com" in lowered or "mini_login" in lowered
+
+
+def _resolve_browser_channel() -> str:
+    global EDGE_DOCKER_WARNING_PRINTED
+    if RUNNING_IN_DOCKER:
+        if LOGIN_IS_EDGE and not EDGE_DOCKER_WARNING_PRINTED:
+            print(
+                "检测到 LOGIN_IS_EDGE=true，但 Docker 镜像未内置 Edge，"
+                "任务运行时将改用 Chromium。"
+            )
+            EDGE_DOCKER_WARNING_PRINTED = True
+        return "chromium"
+    return "msedge" if LOGIN_IS_EDGE else "chrome"
 
 
 def _should_analyze_images(task_config: dict) -> bool:
@@ -548,10 +562,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             if proxy_server:
                 launch_kwargs["proxy"] = {"server": proxy_server}
 
-            if LOGIN_IS_EDGE:
-                launch_kwargs["channel"] = "msedge"
-            else:
-                launch_kwargs["channel"] = "chromium" if RUNNING_IN_DOCKER else "chrome"
+            launch_kwargs["channel"] = _resolve_browser_channel()
 
             browser = await p.chromium.launch(**launch_kwargs)
 
