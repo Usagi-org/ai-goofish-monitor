@@ -19,6 +19,8 @@ from src.services.ai_request_compat import (
     add_json_text_format,
     build_responses_input,
     is_json_output_unsupported_error,
+    is_temperature_unsupported_error,
+    remove_temperature_param,
 )
 from src.services.ai_response_parser import extract_ai_response_content
 
@@ -124,7 +126,8 @@ class AIClient:
     async def _call_ai(self, messages: List[Dict]) -> str:
         """调用 AI API"""
         use_response_format = self.settings.enable_response_format
-        max_attempts = 2 if use_response_format else 1
+        use_temperature = True
+        max_attempts = 3
 
         for attempt in range(max_attempts):
             request_params = {
@@ -133,6 +136,8 @@ class AIClient:
                 "temperature": 0.1,
                 "max_output_tokens": 4000,
             }
+            if not use_temperature:
+                request_params = remove_temperature_param(request_params)
             request_params = add_json_text_format(
                 request_params,
                 use_response_format,
@@ -144,11 +149,17 @@ class AIClient:
             try:
                 response = await self.client.responses.create(**request_params)
             except Exception as exc:
+                changed = False
                 if use_response_format and is_json_output_unsupported_error(exc):
                     use_response_format = False
+                    changed = True
                     print("当前模型不支持结构化 JSON 输出，正在自动重试并移除该参数")
-                    if attempt < max_attempts - 1:
-                        continue
+                if use_temperature and is_temperature_unsupported_error(exc):
+                    use_temperature = False
+                    changed = True
+                    print("当前模型不支持 temperature 参数，正在自动重试并移除该参数")
+                if changed and attempt < max_attempts - 1:
+                    continue
                 raise
 
             return extract_ai_response_content(response)
