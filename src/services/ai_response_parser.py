@@ -38,18 +38,11 @@ def extract_ai_response_content(response: Any) -> str:
 
 def parse_ai_response_json(content: str) -> dict:
     """解析 AI 文本响应中的 JSON。"""
+    cleaned = _strip_code_fences(content)
     try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        cleaned = _strip_code_fences(content)
-        json_start_index = cleaned.find("{")
-        json_end_index = cleaned.rfind("}")
-        if json_start_index == -1 or json_end_index == -1:
-            raise
-        if json_end_index <= json_start_index:
-            raise
-        json_str = cleaned[json_start_index : json_end_index + 1]
-        return json.loads(json_str)
+        return json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        return _extract_first_json_value(cleaned, exc)
 
 
 def _coerce_content_parts(content: Any) -> str:
@@ -94,3 +87,24 @@ def _strip_code_fences(content: str) -> str:
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     return cleaned.strip()
+
+
+def _extract_first_json_value(
+    content: str,
+    fallback_error: json.JSONDecodeError,
+):
+    decoder = json.JSONDecoder()
+    last_error: json.JSONDecodeError | None = None
+
+    for start_index, char in enumerate(content):
+        if char not in "{[":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(content[start_index:])
+            return parsed
+        except json.JSONDecodeError as exc:
+            last_error = exc
+
+    if last_error is not None:
+        raise last_error
+    raise fallback_error
