@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/usagi-org/ai-goofish:latest
+    image: ${APP_IMAGE:-ghcr.io/usagi-org/ai-goofish:latest}
     container_name: ai-goofish-monitor-app
     pull_policy: always
     init: true
