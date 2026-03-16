@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import shutil
+import traceback
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
@@ -35,9 +36,12 @@ from src.services.ai_response_parser import (
     parse_ai_response_json,
 )
 from src.services.ai_request_compat import (
-    add_json_text_format,
-    build_responses_input,
+    CHAT_COMPLETIONS_API_MODE,
+    RESPONSES_API_MODE,
+    build_ai_request_params,
+    create_ai_response_async,
     is_json_output_unsupported_error,
+    is_responses_api_unsupported_error,
     is_temperature_unsupported_error,
     remove_temperature_param,
 )
@@ -69,6 +73,43 @@ def safe_print(text):
         except:
             # 如果还是失败，打印一个简化的消息
             print("[输出包含无法显示的字符]")
+
+
+def _build_debug_request_summary(api_mode: str, request_params: dict) -> dict:
+    summary = {
+        "api_mode": api_mode,
+        "model": request_params.get("model"),
+    }
+    if "temperature" in request_params:
+        summary["temperature"] = request_params["temperature"]
+    if "max_output_tokens" in request_params:
+        summary["max_output_tokens"] = request_params["max_output_tokens"]
+    if "max_tokens" in request_params:
+        summary["max_tokens"] = request_params["max_tokens"]
+    if "text" in request_params:
+        summary["text"] = request_params["text"]
+    if "response_format" in request_params:
+        summary["response_format"] = request_params["response_format"]
+    if "input" in request_params:
+        summary["input_content_types"] = [
+            [item.get("type") for item in message.get("content", [])]
+            for message in request_params["input"]
+        ]
+    if "messages" in request_params:
+        summary["message_content_types"] = [
+            _extract_message_content_types(message)
+            for message in request_params["messages"]
+        ]
+    return summary
+
+
+def _extract_message_content_types(message: dict) -> list[str]:
+    content = message.get("content")
+    if isinstance(content, str):
+        return ["text"]
+    if not isinstance(content, list):
+        return [type(content).__name__]
+    return [str(item.get("type")) for item in content if isinstance(item, dict)]
 
 
 @retry_on_failure(retries=2, delay=3)
@@ -327,7 +368,8 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
         safe_print(f"   [日志] 保存AI分析日志时出错: {e}")
 
     # 增强的AI调用，包含更严格的结构化输出控制和重试机制
-    max_retries = 3
+    max_retries = 4
+    api_mode = RESPONSES_API_MODE
     use_response_format = ENABLE_RESPONSE_FORMAT
     use_temperature = True
     for attempt in range(max_retries):
@@ -336,23 +378,35 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
             current_temperature = 0.1 if attempt == 0 else 0.05  # 重试时使用更低的温度
 
             from src.config import get_ai_request_params
-            
-            # 构建请求参数，根据ENABLE_RESPONSE_FORMAT决定是否启用结构化 JSON 输出
-            request_params = {
-                "model": MODEL_NAME,
-                "input": build_responses_input(messages),
-                "temperature": current_temperature,
-                "max_output_tokens": 4000,
-            }
+
+            request_params = build_ai_request_params(
+                api_mode,
+                model=MODEL_NAME,
+                messages=messages,
+                temperature=current_temperature,
+                max_output_tokens=4000,
+                enable_json_output=use_response_format,
+            )
             if not use_temperature:
                 request_params = remove_temperature_param(request_params)
-            request_params = add_json_text_format(
+
+            request_params = get_ai_request_params(**request_params)
+
+            if AI_DEBUG_MODE:
+                safe_print(f"\n--- [AI DEBUG] 第{attempt + 1}次尝试 REQUEST ---")
+                safe_print(
+                    json.dumps(
+                        _build_debug_request_summary(api_mode, request_params),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+                safe_print("-----------------------------------\n")
+
+            response = await create_ai_response_async(
+                client,
+                api_mode,
                 request_params,
-                use_response_format,
-            )
-            
-            response = await client.responses.create(
-                **get_ai_request_params(**request_params)
             )
             ai_response_content = extract_ai_response_content(response)
 
@@ -388,6 +442,11 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 raise e
 
         except Exception as e:
+            if api_mode == RESPONSES_API_MODE and is_responses_api_unsupported_error(e):
+                api_mode = CHAT_COMPLETIONS_API_MODE
+                safe_print(
+                    "   [AI分析] 当前服务未实现 Responses API，后续重试将自动回退到 Chat Completions API。"
+                )
             if use_response_format and is_json_output_unsupported_error(e):
                 use_response_format = False
                 safe_print(
@@ -398,6 +457,11 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 safe_print(
                     "   [AI分析] 当前模型不支持 temperature 参数，后续重试将自动禁用该参数。"
                 )
+            if AI_DEBUG_MODE:
+                safe_print(f"\n--- [AI DEBUG] 第{attempt + 1}次尝试 EXCEPTION ---")
+                safe_print(repr(e))
+                safe_print(traceback.format_exc())
+                safe_print("-------------------------------------\n")
             safe_print(f"   [AI分析] 第{attempt + 1}次尝试AI调用失败: {e}")
             if attempt < max_retries - 1:
                 safe_print(f"   [AI分析] 准备第{attempt + 2}次重试...")

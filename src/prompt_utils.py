@@ -6,12 +6,6 @@ from typing import Awaitable, Callable, Optional
 import aiofiles
 
 from src.infrastructure.external.ai_client import AIClient
-from src.services.ai_request_compat import (
-    build_responses_input,
-    is_temperature_unsupported_error,
-    remove_temperature_param,
-)
-from src.services.ai_response_parser import extract_ai_response_content
 
 # The meta-prompt to instruct the AI
 META_PROMPT_TEMPLATE = """
@@ -85,34 +79,18 @@ async def generate_criteria(
     await _report_progress(progress_callback, "llm", "正在调用 AI 生成分析标准。")
     print("正在调用AI生成新的分析标准，请稍候...")
     try:
-        use_temperature = True
-        for _attempt in range(2):
-            request_params = {
-                "model": ai_client.settings.model_name,
-                "input": build_responses_input([{"role": "user", "content": prompt}]),
-                "temperature": 0.5,
-            }
-            if not use_temperature:
-                request_params = remove_temperature_param(request_params)
-            if ai_client.settings.enable_thinking:
-                request_params["extra_body"] = {"enable_thinking": False}
+        generated_text = await ai_client._call_ai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_output_tokens=800,
+            enable_json_output=False,
+        )
+        print("AI已成功生成内容。")
 
-            try:
-                response = await ai_client.client.responses.create(**request_params)
-                generated_text = extract_ai_response_content(response)
-                print("AI已成功生成内容。")
+        if generated_text is None or generated_text.strip() == "":
+            raise RuntimeError("AI返回的内容为空，请检查模型配置或重试。")
 
-                # 处理content可能为None或空字符串的情况
-                if generated_text is None or generated_text.strip() == "":
-                    raise RuntimeError("AI返回的内容为空，请检查模型配置或重试。")
-
-                return generated_text.strip()
-            except Exception as e:
-                if use_temperature and is_temperature_unsupported_error(e):
-                    use_temperature = False
-                    print("当前模型不支持 temperature 参数，正在自动重试并移除该参数")
-                    continue
-                raise
+        return generated_text.strip()
     except Exception as e:
         print(f"调用 OpenAI API 时出错: {e}")
         raise e

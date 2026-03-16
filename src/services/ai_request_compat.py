@@ -1,8 +1,11 @@
 """AI 请求兼容性辅助逻辑。"""
 
+import copy
 from typing import Any, Dict, Iterable, List
 
 
+RESPONSES_API_MODE = "responses"
+CHAT_COMPLETIONS_API_MODE = "chat_completions"
 INPUT_TEXT_TYPE = "input_text"
 INPUT_IMAGE_TYPE = "input_image"
 IMAGE_DETAIL_AUTO = "auto"
@@ -13,6 +16,12 @@ UNSUPPORTED_JSON_OUTPUT_MARKERS = (
     "json_schema",
     "text.format",
     "response_format.type",
+)
+RESPONSES_API_UNSUPPORTED_MARKERS = (
+    "404 page not found",
+    "page not found",
+    "/responses",
+    "/v1/responses",
 )
 UNSUPPORTED_TEMPERATURE_MARKERS = (
     "temperature",
@@ -49,6 +58,17 @@ def add_json_text_format(
     return next_params
 
 
+def add_json_response_format(
+    request_params: Dict[str, Any],
+    enabled: bool,
+) -> Dict[str, Any]:
+    """按需附加 Chat Completions 的 JSON 输出参数。"""
+    next_params = dict(request_params)
+    if enabled:
+        next_params["response_format"] = {"type": JSON_OUTPUT_TYPE}
+    return next_params
+
+
 def is_json_output_unsupported_error(error: Exception) -> bool:
     """识别模型不支持结构化 JSON 输出参数的错误。"""
     message = str(error)
@@ -56,6 +76,68 @@ def is_json_output_unsupported_error(error: Exception) -> bool:
         "not supported" in message.lower()
         and any(marker in message for marker in UNSUPPORTED_JSON_OUTPUT_MARKERS)
     )
+
+
+def is_responses_api_unsupported_error(error: Exception) -> bool:
+    """识别 OpenAI 兼容服务未实现 Responses API 的错误。"""
+    message = str(error).lower()
+    return any(marker in message for marker in RESPONSES_API_UNSUPPORTED_MARKERS)
+
+
+def build_ai_request_params(
+    api_mode: str,
+    *,
+    model: str,
+    messages: Iterable[Dict[str, Any]],
+    temperature: float | None = None,
+    max_output_tokens: int | None = None,
+    enable_json_output: bool = False,
+) -> Dict[str, Any]:
+    """根据 API 模式构建请求参数。"""
+    request_params = {"model": model}
+    if api_mode == RESPONSES_API_MODE:
+        request_params["input"] = build_responses_input(messages)
+        if max_output_tokens is not None:
+            request_params["max_output_tokens"] = max_output_tokens
+        if temperature is not None:
+            request_params["temperature"] = temperature
+        return add_json_text_format(request_params, enable_json_output)
+
+    if api_mode == CHAT_COMPLETIONS_API_MODE:
+        request_params["messages"] = copy.deepcopy(list(messages))
+        if max_output_tokens is not None:
+            request_params["max_tokens"] = max_output_tokens
+        if temperature is not None:
+            request_params["temperature"] = temperature
+        return add_json_response_format(request_params, enable_json_output)
+
+    raise ValueError(f"不支持的 AI API 模式: {api_mode}")
+
+
+async def create_ai_response_async(
+    client: Any,
+    api_mode: str,
+    request_params: Dict[str, Any],
+) -> Any:
+    """根据 API 模式发起异步请求。"""
+    if api_mode == RESPONSES_API_MODE:
+        return await client.responses.create(**request_params)
+    if api_mode == CHAT_COMPLETIONS_API_MODE:
+        return await client.chat.completions.create(**request_params)
+    raise ValueError(f"不支持的 AI API 模式: {api_mode}")
+
+
+def create_ai_response_sync(
+    client: Any,
+    api_mode: str,
+    request_params: Dict[str, Any],
+) -> Any:
+    """根据 API 模式发起同步请求。"""
+    if api_mode == RESPONSES_API_MODE:
+        return client.responses.create(**request_params)
+    if api_mode == CHAT_COMPLETIONS_API_MODE:
+        return client.chat.completions.create(**request_params)
+    raise ValueError(f"不支持的 AI API 模式: {api_mode}")
 
 
 def is_temperature_unsupported_error(error: Exception) -> bool:
