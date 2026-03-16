@@ -20,10 +20,7 @@ jobs:
       contents: read
       packages: write
     outputs:
-      enable_acr: ${{ steps.prepare.outputs.enable_acr }}
-      acr_registry_server: ${{ steps.prepare.outputs.acr_registry_server }}
       base_image: ${{ steps.prepare.outputs.base_image }}
-      app_tags: ${{ steps.prepare.outputs.app_tags }}
 
     steps:
       - name: Checkout code
@@ -146,6 +143,53 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Prepare release tags
+        id: prepare
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          ACR_REGISTRY_SERVER: ${{ secrets.ACR_REGISTRY_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          ACR_IMAGE_REPOSITORY: ${{ secrets.ACR_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+
+          owner_lower=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
+          acr_registry_server="${ACR_REGISTRY_SERVER%/}"
+          acr_image_repository="${ACR_IMAGE_REPOSITORY%/}"
+
+          enable_acr=false
+
+          app_tags=(
+            "ghcr.io/${owner_lower}/${IMAGE_NAME}:latest"
+            "ghcr.io/${owner_lower}/${IMAGE_NAME}:${GITHUB_SHA}"
+          )
+
+          if [ -n "$acr_registry_server" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ] && [ -n "$acr_image_repository" ]; then
+            case "$acr_image_repository" in
+              "${acr_registry_server}"/*) ;;
+              *)
+                echo "ACR_IMAGE_REPOSITORY 必须以 ${acr_registry_server}/ 开头" >&2
+                exit 1
+                ;;
+            esac
+
+            enable_acr=true
+            app_tags+=(
+              "${acr_image_repository}:latest"
+              "${acr_image_repository}:${GITHUB_SHA}"
+            )
+          fi
+
+          {
+            echo "enable_acr=${enable_acr}"
+            echo "acr_registry_server=${acr_registry_server}"
+            echo 'app_tags<<EOF'
+            printf '%s\n' "${app_tags[@]}"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -154,10 +198,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Alibaba Cloud ACR
-        if: ${{ needs.build-base.outputs.enable_acr == 'true' }}
+        if: ${{ steps.prepare.outputs.enable_acr == 'true' }}
         uses: docker/login-action@v3
         with:
-          registry: ${{ needs.build-base.outputs.acr_registry_server }}
+          registry: ${{ steps.prepare.outputs.acr_registry_server }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
@@ -171,6 +215,6 @@ jobs:
           push: true
           build-args: |
             BASE_IMAGE=${{ needs.build-base.outputs.base_image }}
-          tags: ${{ needs.build-base.outputs.app_tags }}
+          tags: ${{ steps.prepare.outputs.app_tags }}
           cache-from: type=gha,scope=ai-goofish-release-docker
           cache-to: type=gha,scope=ai-goofish-release-docker,mode=max
