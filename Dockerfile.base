@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    RUNNING_IN_DOCKER=true \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    TZ=Asia/Shanghai
+
+COPY requirements-runtime.txt /tmp/requirements-runtime.txt
+
+RUN python3 -m venv "$VIRTUAL_ENV"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/requirements-runtime.txt
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tzdata \
+        tini \
+        libzbar0 \
+    && playwright install --with-deps --no-shell chromium \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/requirements-runtime.txt
+
+RUN mkdir -p /app/data /app/state /app/logs /app/images /app/jsonl /app/price_history
+
+ENTRYPOINT ["tini", "--"]
