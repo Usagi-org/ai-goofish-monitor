@@ -81,7 +81,19 @@ def is_json_output_unsupported_error(error: Exception) -> bool:
 def is_responses_api_unsupported_error(error: Exception) -> bool:
     """识别 OpenAI 兼容服务未实现 Responses API 的错误。"""
     message = str(error).lower()
-    return any(marker in message for marker in RESPONSES_API_UNSUPPORTED_MARKERS)
+    if any(marker in message for marker in RESPONSES_API_UNSUPPORTED_MARKERS):
+        return True
+
+    status_code = getattr(error, "status_code", None)
+    body = getattr(error, "body", None)
+    response = getattr(error, "response", None)
+    response_text = getattr(response, "text", None) if response else None
+    return (
+        status_code == 404
+        and message.strip() == "error code: 404"
+        and not body
+        and not response_text
+    )
 
 
 def build_ai_request_params(
