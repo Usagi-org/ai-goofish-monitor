@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
+ARG BASE_IMAGE=ghcr.io/usagi-org/ai-goofish-base:latest
+
 FROM node:22-alpine AS frontend-builder
 
 WORKDIR /web-ui
@@ -12,7 +14,6 @@ COPY web-ui/ .
 
 RUN npm run build
 
-ARG BASE_IMAGE=ghcr.io/usagi-org/ai-goofish-base:latest
 FROM ${BASE_IMAGE}
 
 WORKDIR /app
