@@ -11,6 +11,7 @@ services:
     environment:
       APP_DATABASE_FILE: /app/data/app.sqlite3
     volumes:
+      - ./.env:/app/.env
       - ./data:/app/data
       - ./state:/app/state
       - ./config.json:/app/config.json

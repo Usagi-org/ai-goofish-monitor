@@ -1,7 +1,8 @@
 """
 环境变量管理器
-负责读取和更新 .env 文件
+负责读取和更新 .env 文件，并在读取时回退到运行时环境变量
 """
+import os
 import re
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -37,7 +38,11 @@ class EnvManager:
         }
 
     def get_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """获取单个环境变量的值"""
+        """获取单个环境变量的值，优先返回运行时环境变量"""
+        runtime_value = os.getenv(key)
+        if runtime_value is not None:
+            return runtime_value
+
         env_vars = self.read_env()
         return env_vars.get(key, default)
 
