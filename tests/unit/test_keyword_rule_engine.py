@@ -50,3 +50,15 @@ def test_keyword_rules_no_match():
     result = evaluate_keyword_rules(["佳能", "单反"], text)
     assert result["is_recommended"] is False
     assert result["keyword_hit_count"] == 0
+
+
+def test_keyword_rules_do_not_partially_match_alphanumeric_prefixes():
+    result = evaluate_keyword_rules(["q1"], "富士 q1r5 旗舰相机")
+    assert result["is_recommended"] is False
+    assert result["keyword_hit_count"] == 0
+
+
+def test_keyword_rules_still_match_full_alphanumeric_token():
+    result = evaluate_keyword_rules(["q1r5"], "富士 q1r5 旗舰相机")
+    assert result["is_recommended"] is True
+    assert result["keyword_hit_count"] == 1

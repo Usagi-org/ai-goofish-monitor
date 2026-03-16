@@ -1,7 +1,13 @@
 """
 关键词判断引擎：单组 OR 逻辑，命中任意关键词即推荐。
+纯英数字关键词按完整词匹配，避免 Q1 误命中 Q1R5。
 """
+import re
 from typing import Any, Dict, Iterable, List
+
+
+_ASCII_TOKEN_KEYWORD_PATTERN = re.compile(r"^[a-z0-9 ]+$")
+_ASCII_TOKEN_BOUNDARY = r"[a-z0-9]"
 
 
 def normalize_text(value: str) -> str:
@@ -52,6 +58,17 @@ def _normalize_keywords(values: Iterable[str]) -> List[str]:
     return normalized
 
 
+def _uses_ascii_token_match(keyword: str) -> bool:
+    return bool(keyword) and _ASCII_TOKEN_KEYWORD_PATTERN.fullmatch(keyword) is not None
+
+
+def _keyword_matches(keyword: str, normalized_text: str) -> bool:
+    if not _uses_ascii_token_match(keyword):
+        return keyword in normalized_text
+    pattern = rf"(?<!{_ASCII_TOKEN_BOUNDARY}){re.escape(keyword)}(?!{_ASCII_TOKEN_BOUNDARY})"
+    return re.search(pattern, normalized_text) is not None
+
+
 def evaluate_keyword_rules(keywords: List[str], search_text: str) -> Dict[str, Any]:
     normalized_text = normalize_text(search_text)
     normalized_keywords = _normalize_keywords(keywords)
@@ -74,7 +91,7 @@ def evaluate_keyword_rules(keywords: List[str], search_text: str) -> Dict[str, A
             "keyword_hit_count": 0,
         }
 
-    matched_keywords = [kw for kw in normalized_keywords if kw in normalized_text]
+    matched_keywords = [kw for kw in normalized_keywords if _keyword_matches(kw, normalized_text)]
     hit_count = len(matched_keywords)
     is_recommended = hit_count > 0
 
