@@ -38,61 +38,22 @@ jobs:
         id: prepare
         env:
           REPO_OWNER: ${{ github.repository_owner }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
           BASE_IMAGE_NAME: ${{ env.BASE_IMAGE_NAME }}
-          ACR_REGISTRY_SERVER: ${{ secrets.ACR_REGISTRY_SERVER }}
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-          ACR_IMAGE_REPOSITORY: ${{ secrets.ACR_IMAGE_REPOSITORY }}
         run: |
           set -euo pipefail
 
           owner_lower=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
           base_image="ghcr.io/${owner_lower}/${BASE_IMAGE_NAME}:latest"
-          acr_registry_server="${ACR_REGISTRY_SERVER%/}"
-          acr_image_repository="${ACR_IMAGE_REPOSITORY%/}"
-
-          enable_acr=false
 
           base_tags=(
             "${base_image}"
             "ghcr.io/${owner_lower}/${BASE_IMAGE_NAME}:${GITHUB_SHA}"
           )
 
-          app_tags=(
-            "ghcr.io/${owner_lower}/${IMAGE_NAME}:latest"
-            "ghcr.io/${owner_lower}/${IMAGE_NAME}:${GITHUB_SHA}"
-          )
-
-          if [ -n "$acr_registry_server" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ] && [ -n "$acr_image_repository" ]; then
-            case "$acr_image_repository" in
-              "${acr_registry_server}"/*) ;;
-              *)
-                echo "ACR_IMAGE_REPOSITORY 必须以 ${acr_registry_server}/ 开头" >&2
-                exit 1
-                ;;
-            esac
-
-            enable_acr=true
-            base_tags+=(
-              "${acr_image_repository}-base:latest"
-              "${acr_image_repository}-base:${GITHUB_SHA}"
-            )
-            app_tags+=(
-              "${acr_image_repository}:latest"
-              "${acr_image_repository}:${GITHUB_SHA}"
-            )
-          fi
-
           {
-            echo "enable_acr=${enable_acr}"
-            echo "acr_registry_server=${acr_registry_server}"
             echo "base_image=${base_image}"
             echo 'base_tags<<EOF'
             printf '%s\n' "${base_tags[@]}"
-            echo EOF
-            echo 'app_tags<<EOF'
-            printf '%s\n' "${app_tags[@]}"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
@@ -102,14 +63,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Alibaba Cloud ACR
-        if: ${{ steps.prepare.outputs.enable_acr == 'true' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.prepare.outputs.acr_registry_server }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push base Docker image
         uses: docker/build-push-action@v5
@@ -148,43 +101,17 @@ jobs:
         env:
           REPO_OWNER: ${{ github.repository_owner }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          ACR_REGISTRY_SERVER: ${{ secrets.ACR_REGISTRY_SERVER }}
-          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-          ACR_IMAGE_REPOSITORY: ${{ secrets.ACR_IMAGE_REPOSITORY }}
         run: |
           set -euo pipefail
 
           owner_lower=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
-          acr_registry_server="${ACR_REGISTRY_SERVER%/}"
-          acr_image_repository="${ACR_IMAGE_REPOSITORY%/}"
-
-          enable_acr=false
 
           app_tags=(
             "ghcr.io/${owner_lower}/${IMAGE_NAME}:latest"
             "ghcr.io/${owner_lower}/${IMAGE_NAME}:${GITHUB_SHA}"
           )
 
-          if [ -n "$acr_registry_server" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ] && [ -n "$acr_image_repository" ]; then
-            case "$acr_image_repository" in
-              "${acr_registry_server}"/*) ;;
-              *)
-                echo "ACR_IMAGE_REPOSITORY 必须以 ${acr_registry_server}/ 开头" >&2
-                exit 1
-                ;;
-            esac
-
-            enable_acr=true
-            app_tags+=(
-              "${acr_image_repository}:latest"
-              "${acr_image_repository}:${GITHUB_SHA}"
-            )
-          fi
-
           {
-            echo "enable_acr=${enable_acr}"
-            echo "acr_registry_server=${acr_registry_server}"
             echo 'app_tags<<EOF'
             printf '%s\n' "${app_tags[@]}"
             echo EOF
@@ -196,14 +123,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Alibaba Cloud ACR
-        if: ${{ steps.prepare.outputs.enable_acr == 'true' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.prepare.outputs.acr_registry_server }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push multi-arch Docker images
         uses: docker/build-push-action@v5
