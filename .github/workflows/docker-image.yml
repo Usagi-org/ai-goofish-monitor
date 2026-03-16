@@ -6,8 +6,12 @@ on:
     types: [closed]
     branches: ["master"]
 
+env:
+  IMAGE_NAME: ai-goofish
+  BASE_IMAGE_NAME: ai-goofish-base
+
 jobs:
-  build-and-push:
+  build-base:
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
@@ -15,6 +19,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      enable_acr: ${{ steps.prepare.outputs.enable_acr }}
+      acr_registry_server: ${{ steps.prepare.outputs.acr_registry_server }}
+      base_image: ${{ steps.prepare.outputs.base_image }}
+      app_tags: ${{ steps.prepare.outputs.app_tags }}
 
     steps:
       - name: Checkout code
@@ -28,11 +37,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Prepare multi-registry image tags
+      - name: Prepare image tags
         id: prepare
         env:
           REPO_OWNER: ${{ github.repository_owner }}
-          IMAGE_NAME: ai-goofish
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          BASE_IMAGE_NAME: ${{ env.BASE_IMAGE_NAME }}
           ACR_REGISTRY_SERVER: ${{ secrets.ACR_REGISTRY_SERVER }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
@@ -41,12 +51,18 @@ jobs:
           set -euo pipefail
 
           owner_lower=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
+          base_image="ghcr.io/${owner_lower}/${BASE_IMAGE_NAME}:latest"
           acr_registry_server="${ACR_REGISTRY_SERVER%/}"
           acr_image_repository="${ACR_IMAGE_REPOSITORY%/}"
 
           enable_acr=false
 
-          tags=(
+          base_tags=(
+            "${base_image}"
+            "ghcr.io/${owner_lower}/${BASE_IMAGE_NAME}:${GITHUB_SHA}"
+          )
+
+          app_tags=(
             "ghcr.io/${owner_lower}/${IMAGE_NAME}:latest"
             "ghcr.io/${owner_lower}/${IMAGE_NAME}:${GITHUB_SHA}"
           )
@@ -61,7 +77,11 @@ jobs:
             esac
 
             enable_acr=true
-            tags+=(
+            base_tags+=(
+              "${acr_image_repository}-base:latest"
+              "${acr_image_repository}-base:${GITHUB_SHA}"
+            )
+            app_tags+=(
               "${acr_image_repository}:latest"
               "${acr_image_repository}:${GITHUB_SHA}"
             )
@@ -70,8 +90,12 @@ jobs:
           {
             echo "enable_acr=${enable_acr}"
             echo "acr_registry_server=${acr_registry_server}"
-            echo 'tags<<EOF'
-            printf '%s\n' "${tags[@]}"
+            echo "base_image=${base_image}"
+            echo 'base_tags<<EOF'
+            printf '%s\n' "${base_tags[@]}"
+            echo EOF
+            echo 'app_tags<<EOF'
+            printf '%s\n' "${app_tags[@]}"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 
@@ -90,13 +114,63 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
+      - name: Build and push base Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.base
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.prepare.outputs.base_tags }}
+          cache-from: type=gha,scope=ai-goofish-base-docker
+          cache-to: type=gha,scope=ai-goofish-base-docker,mode=max
+
+  build-and-push:
+    needs: build-base
+    if: ${{ needs.build-base.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Alibaba Cloud ACR
+        if: ${{ needs.build-base.outputs.enable_acr == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.build-base.outputs.acr_registry_server }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Build and push multi-arch Docker images
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.release
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
-          tags: ${{ steps.prepare.outputs.tags }}
-          cache-from: type=gha,scope=ai-goofish-docker
-          cache-to: type=gha,scope=ai-goofish-docker,mode=max
+          build-args: |
+            BASE_IMAGE=${{ needs.build-base.outputs.base_image }}
+          tags: ${{ needs.build-base.outputs.app_tags }}
+          cache-from: type=gha,scope=ai-goofish-release-docker
+          cache-to: type=gha,scope=ai-goofish-release-docker,mode=max

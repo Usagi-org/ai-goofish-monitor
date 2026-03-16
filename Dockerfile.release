@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:22-alpine AS frontend-builder
+
+WORKDIR /web-ui
+
+COPY web-ui/package*.json ./
+
+RUN --mount=type=cache,target=/root/.npm npm ci
+
+COPY web-ui/ .
+
+RUN npm run build
+
+ARG BASE_IMAGE=ghcr.io/usagi-org/ai-goofish-base:latest
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+COPY --from=frontend-builder /dist /app/dist
+
+COPY src /app/src
+COPY spider_v2.py /app/spider_v2.py
+COPY prompts /app/prompts
+COPY static /app/static
+COPY config.json.example /app/config.json.example
+
+EXPOSE 8000
+
+CMD ["python", "-m", "src.app"]
