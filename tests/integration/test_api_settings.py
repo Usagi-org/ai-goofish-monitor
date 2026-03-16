@@ -218,3 +218,79 @@ def test_notification_test_endpoint_merges_stored_secret_values(tmp_path, monkey
     assert payload["results"]["telegram"]["success"] is True
     assert captured["url"].endswith("/botstored-token/sendMessage")
     assert captured["json"]["chat_id"] == "20002"
+
+
+def test_ai_test_endpoint_falls_back_to_chat_completions_when_responses_api_404(
+    tmp_path, monkeypatch
+):
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+    request_history = []
+
+    class _FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.responses = type(
+                "_Responses",
+                (),
+                {"create": self._responses_create},
+            )()
+            self.chat = type(
+                "_Chat",
+                (),
+                {
+                    "completions": type(
+                        "_Completions",
+                        (),
+                        {"create": self._chat_create},
+                    )()
+                },
+            )()
+
+        def _responses_create(self, **kwargs):
+            request_history.append(("responses", kwargs))
+            raise Exception("Error code: 404 - page not found")
+
+        def _chat_create(self, **kwargs):
+            request_history.append(("chat", kwargs))
+            return type(
+                "_Response",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "_Choice",
+                            (),
+                            {
+                                "message": type(
+                                    "_Message",
+                                    (),
+                                    {"content": "OK"},
+                                )()
+                            },
+                        )()
+                    ]
+                },
+            )()
+
+    import openai
+
+    monkeypatch.setattr(openai, "OpenAI", _FakeOpenAI)
+
+    response = client.post(
+        "/api/settings/ai/test",
+        json={
+            "OPENAI_API_KEY": "demo",
+            "OPENAI_BASE_URL": "https://example.com/v1/",
+            "OPENAI_MODEL_NAME": "demo-model",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["response"] == "OK"
+    assert request_history[0][0] == "responses"
+    assert request_history[1][0] == "chat"
+    assert request_history[1][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
