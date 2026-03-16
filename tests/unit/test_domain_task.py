@@ -21,7 +21,7 @@ def test_task_can_start_and_stop():
     assert task.can_start() is True
     assert task.can_stop() is False
 
-    running = task.copy(update={"is_running": True})
+    running = task.model_copy(update={"is_running": True})
     assert running.can_start() is False
     assert running.can_stop() is True
 

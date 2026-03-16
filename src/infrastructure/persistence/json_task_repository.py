@@ -67,6 +67,6 @@ class JsonTaskRepository(TaskRepository):
 
     async def _write_tasks(self, tasks: List[Task]):
         """写入任务列表到文件"""
-        tasks_data = [task.dict(exclude={'id'}) for task in tasks]
+        tasks_data = [task.model_dump(exclude={'id'}) for task in tasks]
         async with aiofiles.open(self.config_file, 'w', encoding='utf-8') as f:
             await f.write(json.dumps(tasks_data, ensure_ascii=False, indent=2))

@@ -84,7 +84,7 @@ class SqliteTaskRepository(TaskRepository):
             task_id = task.id
             if task_id is None:
                 task_id = self._next_task_id(conn)
-            payload = self._task_values(task.copy(update={"id": task_id}))
+            payload = self._task_values(task.model_copy(update={"id": task_id}))
             conn.execute(
                 """
                 INSERT OR REPLACE INTO tasks (
@@ -104,7 +104,7 @@ class SqliteTaskRepository(TaskRepository):
                 payload,
             )
             conn.commit()
-        return task.copy(update={"id": task_id})
+        return task.model_copy(update={"id": task_id})
 
     def _delete_sync(self, task_id: int) -> bool:
         bootstrap_sqlite_storage(
@@ -121,7 +121,7 @@ class SqliteTaskRepository(TaskRepository):
         return int(row["max_id"]) + 1
 
     def _task_values(self, task: Task) -> dict:
-        values = task.dict()
+        values = task.model_dump()
         values["enabled"] = int(task.enabled)
         values["analyze_images"] = int(task.analyze_images)
         values["personal_only"] = int(task.personal_only)
