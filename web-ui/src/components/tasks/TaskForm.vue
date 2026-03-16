@@ -307,7 +307,7 @@ function handleSubmit() {
         <Label class="text-right pt-2">关键词规则</Label>
         <div class="col-span-3 space-y-2">
           <p class="text-xs text-gray-500">
-            单组 OR 逻辑：命中任一关键词即推荐（每行一个关键词，或使用逗号分隔）。
+            单组 OR 逻辑：命中任一关键词即推荐（每行一个关键词，或使用逗号分隔）。纯英数字关键词按完整词匹配。
           </p>
           <Textarea
             v-model="keywordRulesInput"
