@@ -35,6 +35,11 @@ docker compose down
 
 - 默认 Web UI 地址：`http://127.0.0.1:8000`
 - Docker 镜像已内置 Chromium，无需宿主机额外安装浏览器。
+- 镜像地址：
+  - `ghcr.io/usagi-org/ai-goofish:latest`
+  - `crpi-m6dg00zinw0v52ae.cn-hangzhou.personal.cr.aliyuncs.com/usagi/ai-goofish:latest`
+- `docker-compose.yaml` 支持通过 `APP_IMAGE` 覆盖镜像地址；默认值为 `ghcr.io/usagi-org/ai-goofish:latest`
+- 如果国内网络拉取 GHCR 较慢，可在 `.env` 中添加 `APP_IMAGE=crpi-m6dg00zinw0v52ae.cn-hangzhou.personal.cr.aliyuncs.com/usagi/ai-goofish:latest`
 - 更新镜像：`docker compose pull && docker compose up -d`
 - 如果你修改了 `.env` 中的 `SERVER_PORT`，请同步更新 `docker-compose.yaml` 里的端口映射。
 - `docker-compose.yaml` 默认会把 SQLite 主库挂载到 `./data:/app/data`，数据库文件默认为 `data/app.sqlite3`
