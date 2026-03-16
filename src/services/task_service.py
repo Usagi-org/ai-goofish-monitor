@@ -23,7 +23,7 @@ class TaskService:
 
     async def create_task(self, task_create: TaskCreate) -> Task:
         """创建新任务"""
-        task = Task(**task_create.dict(), is_running=False)
+        task = Task(**task_create.model_dump(), is_running=False)
         return await self.repository.save(task)
 
     async def update_task(self, task_id: int, task_update: TaskUpdate) -> Task:

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from types import SimpleNamespace
 
 from src.services.process_service import ProcessService
@@ -91,3 +92,20 @@ def test_process_service_reindexes_runtime_maps_after_delete():
     assert service.log_paths == {0: "a.log", 1: "c.log"}
     assert service.task_names == {0: "A", 1: "C"}
     assert service.exit_watchers == {0: watcher_a, 1: watcher_c}
+
+
+def test_process_service_adds_debug_limit_arg_when_env_enabled(monkeypatch):
+    monkeypatch.setenv("SPIDER_DEBUG_LIMIT", "1")
+    service = ProcessService()
+
+    command = service._build_spawn_command("task-a")
+
+    assert command == [
+        sys.executable,
+        "-u",
+        "spider_v2.py",
+        "--task-name",
+        "task-a",
+        "--debug-limit",
+        "1",
+    ]

@@ -26,6 +26,7 @@ from src.services.ai_request_compat import (
     remove_temperature_param,
 )
 from src.services.ai_response_parser import extract_ai_response_content
+from src.services.ai_response_parser import parse_ai_response_json
 
 
 class AIClient:
@@ -190,28 +191,7 @@ class AIClient:
     def _parse_response(self, response_text: str) -> Optional[Dict]:
         """解析 AI 响应"""
         try:
-            # 直接解析 JSON
-            return json.loads(response_text)
+            return parse_ai_response_json(response_text)
         except json.JSONDecodeError:
-            # 清理 Markdown 代码块标记
-            cleaned = response_text.strip()
-            if cleaned.startswith('```json'):
-                cleaned = cleaned[7:]
-            if cleaned.startswith('```'):
-                cleaned = cleaned[3:]
-            if cleaned.endswith('```'):
-                cleaned = cleaned[:-3]
-            cleaned = cleaned.strip()
-
-            # 提取 JSON 对象
-            start = cleaned.find('{')
-            end = cleaned.rfind('}')
-            if start != -1 and end != -1 and end > start:
-                json_str = cleaned[start:end + 1]
-                try:
-                    return json.loads(json_str)
-                except json.JSONDecodeError:
-                    pass
-
             print(f"无法解析 AI 响应: {response_text[:100]}")
             return None

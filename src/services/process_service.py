@@ -18,6 +18,7 @@ from src.infrastructure.persistence.sqlite_task_repository import find_task_by_n
 from src.utils import build_task_log_path
 
 STOP_TIMEOUT_SECONDS = 20
+SPIDER_DEBUG_LIMIT_ENV = "SPIDER_DEBUG_LIMIT"
 LifecycleHook = Callable[[int], Awaitable[None] | None]
 
 
@@ -85,6 +86,19 @@ class ProcessService:
         log_file_handle = open(log_file_path, "a", encoding="utf-8")
         return log_file_path, log_file_handle
 
+    def _build_spawn_command(self, task_name: str) -> list[str]:
+        command = [
+            sys.executable,
+            "-u",
+            "spider_v2.py",
+            "--task-name",
+            task_name,
+        ]
+        debug_limit = str(os.getenv(SPIDER_DEBUG_LIMIT_ENV, "")).strip()
+        if debug_limit.isdigit() and int(debug_limit) > 0:
+            command.extend(["--debug-limit", debug_limit])
+        return command
+
     async def _spawn_process(
         self,
         task_name: str,
@@ -95,11 +109,7 @@ class ProcessService:
         child_env["PYTHONIOENCODING"] = "utf-8"
         child_env["PYTHONUTF8"] = "1"
         return await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-u",
-            "spider_v2.py",
-            "--task-name",
-            task_name,
+            *self._build_spawn_command(task_name),
             stdout=log_file_handle,
             stderr=log_file_handle,
             preexec_fn=preexec_fn,

@@ -73,3 +73,31 @@ tests/
 1. 目标是离线可跑且稳定复现
 2. 集成测试优先覆盖真实运行链路（API、CLI、解析器）
 3. 如需新增真实场景样例，统一补充到 `tests/fixtures/`
+
+## Live smoke（真实冒烟测试）
+
+- 目录：`tests/live/`
+- 默认关闭；仅当显式设置 `RUN_LIVE_TESTS=1` 时才会执行
+- 推荐命令：
+
+```bash
+RUN_LIVE_TESTS=1 \
+LIVE_TEST_ACCOUNT_STATE_FILE=/absolute/path/to/account.json \
+LIVE_TEST_KEYWORD="MacBook Pro M2" \
+pytest tests/live -m live -v
+```
+
+- 一键脚本：
+
+```bash
+./run_live_smoke.sh
+./run_live_smoke.sh --without-generation
+```
+
+- 可选环境变量：
+  - `LIVE_TEST_TASK_NAME`
+  - `LIVE_EXPECT_MIN_ITEMS`（默认 `1`）
+  - `LIVE_TEST_DEBUG_LIMIT`（默认 `1`，只抓取/分析前 N 个新商品）
+  - `LIVE_TIMEOUT_SECONDS`（默认 `180`）
+  - `LIVE_ENABLE_TASK_GENERATION`（脚本默认 `1`；设为 `0` 或使用 `--without-generation` 可关闭真实 AI 任务生成慢用例）
+- live 套件会在临时工作目录中启动真实 `uvicorn`，并清空通知相关 env，避免污染仓库根目录或向真实通知通道发消息。

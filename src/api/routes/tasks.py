@@ -60,7 +60,7 @@ async def get_tasks(
 ):
     """获取所有任务"""
     tasks = await service.get_all_tasks()
-    return [task.dict() for task in tasks]
+    return [task.model_dump() for task in tasks]
 @router.get("/{task_id}", response_model=dict)
 async def get_task(
     task_id: int,
@@ -70,7 +70,7 @@ async def get_task(
     task = await service.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务未找到")
-    return task.dict()
+    return task.model_dump()
 @router.post("/", response_model=dict)
 async def create_task(
     task_create: TaskCreate,
@@ -80,7 +80,7 @@ async def create_task(
     """创建新任务"""
     task = await service.create_task(task_create)
     await _reload_scheduler_if_needed(service, scheduler_service)
-    return {"message": "任务创建成功", "task": task.dict()}
+    return {"message": "任务创建成功", "task": task.model_dump()}
 @router.post("/generate", response_model=dict)
 async def generate_task(
     req: TaskGenerateRequest,
@@ -205,7 +205,7 @@ async def update_task(
                 raise HTTPException(status_code=500, detail=error_msg)
         task = await service.update_task(task_id, task_update)
         await _reload_scheduler_if_needed(service, scheduler_service)
-        return {"message": "任务更新成功", "task": task.dict()}
+        return {"message": "任务更新成功", "task": task.model_dump()}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 @router.delete("/{task_id}", response_model=dict)

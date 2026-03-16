@@ -166,3 +166,14 @@ def test_call_ai_retries_without_temperature_when_gateway_rejects_it():
     assert response == '{"ok":true}'
     assert request_history[0]["temperature"] == 0.1
     assert "temperature" not in request_history[1]
+
+
+def test_parse_response_uses_first_json_object_when_response_contains_multiple_objects():
+    client = AIClient.__new__(AIClient)
+
+    result = client._parse_response("""```json
+{"ok": true, "reason": "first"}
+{"ok": false, "reason": "second"}
+```""")
+
+    assert result == {"ok": True, "reason": "first"}
