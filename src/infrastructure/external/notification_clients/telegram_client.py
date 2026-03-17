@@ -2,8 +2,12 @@
 Telegram 通知客户端
 """
 import asyncio
-import requests
 from typing import Dict
+
+import requests
+
+from src.infrastructure.config.settings import DEFAULT_TELEGRAM_API_BASE_URL
+
 from .base import NotificationClient
 
 
@@ -13,10 +17,19 @@ class TelegramClient(NotificationClient):
     channel_key = "telegram"
     display_name = "Telegram"
 
-    def __init__(self, bot_token: str = None, chat_id: str = None, pcurl_to_mobile: bool = True):
+    def __init__(
+        self,
+        bot_token: str = None,
+        chat_id: str = None,
+        api_base_url: str = DEFAULT_TELEGRAM_API_BASE_URL,
+        pcurl_to_mobile: bool = True,
+    ):
         super().__init__(enabled=bool(bot_token and chat_id), pcurl_to_mobile=pcurl_to_mobile)
         self.bot_token = bot_token
         self.chat_id = chat_id
+        self.api_base_url = (
+            (api_base_url or DEFAULT_TELEGRAM_API_BASE_URL).rstrip("/")
+        )
 
     async def send(self, product_data: Dict, reason: str) -> None:
         """发送 Telegram 通知"""
@@ -36,7 +49,7 @@ class TelegramClient(NotificationClient):
             telegram_message.append(f"📱 <a href='{message.mobile_link}'>手机端链接</a>")
         telegram_message.append(f"💻 <a href='{message.desktop_link}'>电脑端链接</a>")
 
-        telegram_api_url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        telegram_api_url = f"{self.api_base_url}/bot{self.bot_token}/sendMessage"
         telegram_payload = {
             "chat_id": self.chat_id,
             "text": "\n".join(telegram_message),

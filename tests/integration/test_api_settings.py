@@ -29,6 +29,7 @@ _SETTINGS_ENV_KEYS = [
     "WX_BOT_URL",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
+    "TELEGRAM_API_BASE_URL",
     "WEBHOOK_URL",
     "WEBHOOK_METHOD",
     "WEBHOOK_HEADERS",
@@ -119,6 +120,7 @@ def test_notification_settings_redact_sensitive_values_and_expose_flags(tmp_path
                 "WX_BOT_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
                 "TELEGRAM_BOT_TOKEN=telegram-secret",
                 "TELEGRAM_CHAT_ID=123456",
+                "TELEGRAM_API_BASE_URL=https://tg.example.com/proxy",
                 "WEBHOOK_URL=https://hooks.example.com/notify?token=secret",
                 'WEBHOOK_HEADERS={"Authorization":"Bearer secret"}',
                 'WEBHOOK_BODY={"message":"{{content}}"}',
@@ -136,6 +138,7 @@ def test_notification_settings_redact_sensitive_values_and_expose_flags(tmp_path
     assert payload["NTFY_TOPIC_URL"] == "https://ntfy.sh/demo-topic"
     assert payload["GOTIFY_URL"] == "https://gotify.example.com"
     assert payload["TELEGRAM_CHAT_ID"] == "123456"
+    assert payload["TELEGRAM_API_BASE_URL"] == "https://tg.example.com/proxy"
     assert payload["BARK_URL"] == ""
     assert payload["WX_BOT_URL"] == ""
     assert payload["GOTIFY_TOKEN"] == ""
@@ -164,6 +167,13 @@ def test_update_notification_settings_rejects_invalid_channel_config(tmp_path, m
     )
     assert gotify_response.status_code == 422
     assert "GOTIFY_TOKEN" in gotify_response.text
+
+    telegram_proxy_response = client.put(
+        "/api/settings/notifications",
+        json={"TELEGRAM_API_BASE_URL": "not-a-url"},
+    )
+    assert telegram_proxy_response.status_code == 422
+    assert "TELEGRAM_API_BASE_URL" in telegram_proxy_response.text
 
     webhook_response = client.put(
         "/api/settings/notifications",
@@ -221,6 +231,7 @@ def test_notification_test_endpoint_merges_stored_secret_values(tmp_path, monkey
             [
                 "TELEGRAM_BOT_TOKEN=stored-token",
                 "TELEGRAM_CHAT_ID=10001",
+                "TELEGRAM_API_BASE_URL=https://tg-proxy.example.com/base",
             ]
         ),
         encoding="utf-8",
@@ -259,7 +270,7 @@ def test_notification_test_endpoint_merges_stored_secret_values(tmp_path, monkey
     assert response.status_code == 200
     payload = response.json()
     assert payload["results"]["telegram"]["success"] is True
-    assert captured["url"].endswith("/botstored-token/sendMessage")
+    assert captured["url"] == "https://tg-proxy.example.com/base/botstored-token/sendMessage"
     assert captured["json"]["chat_id"] == "20002"
 
 
@@ -300,6 +311,7 @@ def test_notification_settings_fall_back_to_runtime_environment_when_env_file_mi
     monkeypatch.setenv("NTFY_TOPIC_URL", "https://ntfy.sh/runtime-topic")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "runtime-telegram-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "20001")
+    monkeypatch.setenv("TELEGRAM_API_BASE_URL", "https://runtime-tg-proxy.example.com")
     monkeypatch.setenv("BARK_URL", "https://api.day.app/runtime-secret/")
     client = _build_settings_client()
 
@@ -309,6 +321,7 @@ def test_notification_settings_fall_back_to_runtime_environment_when_env_file_mi
     payload = response.json()
     assert payload["NTFY_TOPIC_URL"] == "https://ntfy.sh/runtime-topic"
     assert payload["TELEGRAM_CHAT_ID"] == "20001"
+    assert payload["TELEGRAM_API_BASE_URL"] == "https://runtime-tg-proxy.example.com"
     assert payload["BARK_URL"] == ""
     assert payload["BARK_URL_SET"] is True
     assert payload["TELEGRAM_BOT_TOKEN_SET"] is True

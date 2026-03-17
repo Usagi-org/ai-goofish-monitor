@@ -12,6 +12,8 @@ from pydantic import Field
 from typing import Optional
 import os
 
+DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org"
+
 
 def _env_field(default, env_name: str, **kwargs):
     if _USING_PYDANTIC_SETTINGS:
@@ -61,6 +63,10 @@ class NotificationSettings(_EnvSettings):
     wx_bot_url: Optional[str] = _env_field(None, "WX_BOT_URL")
     telegram_bot_token: Optional[str] = _env_field(None, "TELEGRAM_BOT_TOKEN")
     telegram_chat_id: Optional[str] = _env_field(None, "TELEGRAM_CHAT_ID")
+    telegram_api_base_url: Optional[str] = _env_field(
+        DEFAULT_TELEGRAM_API_BASE_URL,
+        "TELEGRAM_API_BASE_URL",
+    )
     webhook_url: Optional[str] = _env_field(None, "WEBHOOK_URL")
     webhook_method: str = _env_field("POST", "WEBHOOK_METHOD")
     webhook_headers: Optional[str] = _env_field(None, "WEBHOOK_HEADERS")
