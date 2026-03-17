@@ -37,7 +37,7 @@ const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = 
   bark: ['BARK_URL'],
   gotify: ['GOTIFY_URL', 'GOTIFY_TOKEN'],
   wecom: ['WX_BOT_URL'],
-  telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'],
+  telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL'],
   webhook: ['WEBHOOK_URL', 'WEBHOOK_METHOD', 'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_HEADERS', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY'],
 }
 
@@ -45,6 +45,7 @@ function syncFromSettings(settings: NotificationSettings) {
   initialValues.NTFY_TOPIC_URL = settings.NTFY_TOPIC_URL ?? ''
   initialValues.GOTIFY_URL = settings.GOTIFY_URL ?? ''
   initialValues.TELEGRAM_CHAT_ID = settings.TELEGRAM_CHAT_ID ?? ''
+  initialValues.TELEGRAM_API_BASE_URL = settings.TELEGRAM_API_BASE_URL ?? 'https://api.telegram.org'
   initialValues.WEBHOOK_METHOD = settings.WEBHOOK_METHOD ?? 'POST'
   initialValues.WEBHOOK_CONTENT_TYPE = settings.WEBHOOK_CONTENT_TYPE ?? 'JSON'
   initialValues.WEBHOOK_QUERY_PARAMETERS = settings.WEBHOOK_QUERY_PARAMETERS ?? ''
@@ -103,7 +104,7 @@ function buildPayload(): NotificationSettingsUpdate {
   const payload: NotificationSettingsUpdate = {}
   const mutablePayload = payload as Record<string, string | boolean | null | undefined>
   const textFields: (keyof NotificationSettingsUpdate)[] = [
-    'NTFY_TOPIC_URL', 'GOTIFY_URL', 'TELEGRAM_CHAT_ID', 'WEBHOOK_METHOD',
+    'NTFY_TOPIC_URL', 'GOTIFY_URL', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL', 'WEBHOOK_METHOD',
     'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY',
   ]
 
@@ -238,10 +239,11 @@ function resultClass(channel: ChannelKey) {
         </Card>
 
         <Card class="border-l-4 border-l-cyan-500">
-          <CardHeader><CardTitle>Telegram</CardTitle><CardDescription>Bot Token 属于敏感字段，Chat ID 可直接查看和修改。</CardDescription></CardHeader>
-          <CardContent class="grid gap-4 md:grid-cols-2">
+          <CardHeader><CardTitle>Telegram</CardTitle><CardDescription>Bot Token 属于敏感字段，Chat ID 与反代地址可直接查看和修改。</CardDescription></CardHeader>
+          <CardContent class="grid gap-4 md:grid-cols-3">
             <div class="grid gap-2"><Label>Bot Token</Label><Input type="password" :model-value="form.TELEGRAM_BOT_TOKEN ?? ''" placeholder="已配置则留空保留" @update:model-value="(value) => updateSecretField('TELEGRAM_BOT_TOKEN', String(value))" /></div>
             <div class="grid gap-2"><Label>Chat ID</Label><Input :model-value="form.TELEGRAM_CHAT_ID ?? ''" placeholder="例如：123456789" @update:model-value="(value) => updateField('TELEGRAM_CHAT_ID', String(value))" /></div>
+            <div class="grid gap-2"><Label>API / 反代地址</Label><Input :model-value="form.TELEGRAM_API_BASE_URL ?? ''" placeholder="https://api.telegram.org" @update:model-value="(value) => updateField('TELEGRAM_API_BASE_URL', String(value))" /></div>
           </CardContent>
           <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('telegram') ? 'default' : 'outline'">{{ isChannelConfigured('telegram') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('telegram')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('telegram')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
         </Card>

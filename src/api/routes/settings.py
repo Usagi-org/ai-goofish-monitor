@@ -77,6 +77,7 @@ class NotificationSettingsModel(BaseModel):
     WX_BOT_URL: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
+    TELEGRAM_API_BASE_URL: Optional[str] = None
     WEBHOOK_URL: Optional[str] = None
     WEBHOOK_METHOD: Optional[str] = None
     WEBHOOK_HEADERS: Optional[str] = None

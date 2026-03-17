@@ -5,7 +5,10 @@ import json
 from urllib.parse import urlparse
 
 from src.infrastructure.config.env_manager import env_manager
-from src.infrastructure.config.settings import NotificationSettings
+from src.infrastructure.config.settings import (
+    DEFAULT_TELEGRAM_API_BASE_URL,
+    NotificationSettings,
+)
 
 
 NOTIFICATION_FIELD_MAP = {
@@ -16,6 +19,7 @@ NOTIFICATION_FIELD_MAP = {
     "WX_BOT_URL": "wx_bot_url",
     "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
     "TELEGRAM_CHAT_ID": "telegram_chat_id",
+    "TELEGRAM_API_BASE_URL": "telegram_api_base_url",
     "WEBHOOK_URL": "webhook_url",
     "WEBHOOK_METHOD": "webhook_method",
     "WEBHOOK_HEADERS": "webhook_headers",
@@ -45,6 +49,7 @@ URL_FIELDS = {
     "GOTIFY_URL",
     "BARK_URL",
     "WX_BOT_URL",
+    "TELEGRAM_API_BASE_URL",
     "WEBHOOK_URL",
 }
 
@@ -74,6 +79,10 @@ def build_notification_settings_response(
         "WX_BOT_URL": "",
         "TELEGRAM_BOT_TOKEN": "",
         "TELEGRAM_CHAT_ID": notification_settings.telegram_chat_id or "",
+        "TELEGRAM_API_BASE_URL": (
+            notification_settings.telegram_api_base_url
+            or DEFAULT_TELEGRAM_API_BASE_URL
+        ),
         "WEBHOOK_URL": "",
         "WEBHOOK_METHOD": notification_settings.webhook_method,
         "WEBHOOK_HEADERS": "",
@@ -177,6 +186,10 @@ def load_notification_settings() -> NotificationSettings:
             "wx_bot_url": _normalize_existing_text(env_manager.get_value("WX_BOT_URL")),
             "telegram_bot_token": _normalize_existing_text(env_manager.get_value("TELEGRAM_BOT_TOKEN")),
             "telegram_chat_id": _normalize_existing_text(env_manager.get_value("TELEGRAM_CHAT_ID")),
+            "telegram_api_base_url": (
+                _normalize_existing_text(env_manager.get_value("TELEGRAM_API_BASE_URL"))
+                or DEFAULT_TELEGRAM_API_BASE_URL
+            ),
             "webhook_url": _normalize_existing_text(env_manager.get_value("WEBHOOK_URL")),
             "webhook_method": _normalize_existing_text(env_manager.get_value("WEBHOOK_METHOD")) or "POST",
             "webhook_headers": _normalize_existing_text(env_manager.get_value("WEBHOOK_HEADERS")),

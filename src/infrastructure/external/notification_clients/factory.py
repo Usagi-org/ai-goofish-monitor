@@ -25,6 +25,7 @@ def build_notification_clients(settings: NotificationSettings):
         TelegramClient(
             settings.telegram_bot_token,
             settings.telegram_chat_id,
+            settings.telegram_api_base_url,
             pcurl_to_mobile=pcurl_to_mobile,
         ),
         WebhookClient(

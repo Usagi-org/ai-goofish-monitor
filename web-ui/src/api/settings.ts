@@ -8,6 +8,7 @@ export interface NotificationSettings {
   WX_BOT_URL?: string
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
+  TELEGRAM_API_BASE_URL?: string
   WEBHOOK_URL?: string
   WEBHOOK_METHOD?: string
   WEBHOOK_HEADERS?: string
@@ -32,6 +33,7 @@ export interface NotificationSettingsUpdate {
   WX_BOT_URL?: string | null
   TELEGRAM_BOT_TOKEN?: string | null
   TELEGRAM_CHAT_ID?: string | null
+  TELEGRAM_API_BASE_URL?: string | null
   WEBHOOK_URL?: string | null
   WEBHOOK_METHOD?: string | null
   WEBHOOK_HEADERS?: string | null
