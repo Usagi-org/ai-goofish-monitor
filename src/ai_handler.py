@@ -40,6 +40,7 @@ from src.services.ai_request_compat import (
     RESPONSES_API_MODE,
     build_ai_request_params,
     create_ai_response_async,
+    is_chat_completions_api_unsupported_error,
     is_json_output_unsupported_error,
     is_responses_api_unsupported_error,
     is_temperature_unsupported_error,
@@ -369,7 +370,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
 
     # 增强的AI调用，包含更严格的结构化输出控制和重试机制
     max_retries = 4
-    api_mode = RESPONSES_API_MODE
+    api_mode = CHAT_COMPLETIONS_API_MODE
     use_response_format = ENABLE_RESPONSE_FORMAT
     use_temperature = True
     for attempt in range(max_retries):
@@ -442,7 +443,15 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 raise e
 
         except Exception as e:
-            if api_mode == RESPONSES_API_MODE and is_responses_api_unsupported_error(e):
+            if (
+                api_mode == CHAT_COMPLETIONS_API_MODE
+                and is_chat_completions_api_unsupported_error(e)
+            ):
+                api_mode = RESPONSES_API_MODE
+                safe_print(
+                    "   [AI分析] 当前服务未实现 Chat Completions API，后续重试将自动回退到 Responses API。"
+                )
+            elif api_mode == RESPONSES_API_MODE and is_responses_api_unsupported_error(e):
                 api_mode = CHAT_COMPLETIONS_API_MODE
                 safe_print(
                     "   [AI分析] 当前服务未实现 Responses API，后续重试将自动回退到 Chat Completions API。"

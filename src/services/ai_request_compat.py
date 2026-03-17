@@ -23,6 +23,12 @@ RESPONSES_API_UNSUPPORTED_MARKERS = (
     "/responses",
     "/v1/responses",
 )
+CHAT_COMPLETIONS_API_UNSUPPORTED_MARKERS = (
+    "404 page not found",
+    "page not found",
+    "/chat/completions",
+    "/v1/chat/completions",
+)
 UNSUPPORTED_TEMPERATURE_MARKERS = (
     "temperature",
     "sampling temperature",
@@ -80,20 +86,12 @@ def is_json_output_unsupported_error(error: Exception) -> bool:
 
 def is_responses_api_unsupported_error(error: Exception) -> bool:
     """识别 OpenAI 兼容服务未实现 Responses API 的错误。"""
-    message = str(error).lower()
-    if any(marker in message for marker in RESPONSES_API_UNSUPPORTED_MARKERS):
-        return True
+    return _is_api_unsupported_error(error, RESPONSES_API_UNSUPPORTED_MARKERS)
 
-    status_code = getattr(error, "status_code", None)
-    body = getattr(error, "body", None)
-    response = getattr(error, "response", None)
-    response_text = getattr(response, "text", None) if response else None
-    return (
-        status_code == 404
-        and message.strip() == "error code: 404"
-        and not body
-        and not response_text
-    )
+
+def is_chat_completions_api_unsupported_error(error: Exception) -> bool:
+    """识别 OpenAI 兼容服务未实现 Chat Completions API 的错误。"""
+    return _is_api_unsupported_error(error, CHAT_COMPLETIONS_API_UNSUPPORTED_MARKERS)
 
 
 def build_ai_request_params(
@@ -168,6 +166,26 @@ def remove_temperature_param(request_params: Dict[str, Any]) -> Dict[str, Any]:
     next_params = dict(request_params)
     next_params.pop("temperature", None)
     return next_params
+
+
+def _is_api_unsupported_error(
+    error: Exception,
+    markers: tuple[str, ...],
+) -> bool:
+    message = str(error).lower()
+    if any(marker in message for marker in markers):
+        return True
+
+    status_code = getattr(error, "status_code", None)
+    body = getattr(error, "body", None)
+    response = getattr(error, "response", None)
+    response_text = getattr(response, "text", None) if response else None
+    return (
+        status_code == 404
+        and message.strip() == "error code: 404"
+        and not body
+        and not response_text
+    )
 
 
 def _build_input_content(content: Any) -> List[Dict[str, Any]]:

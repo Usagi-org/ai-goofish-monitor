@@ -83,15 +83,21 @@ def test_get_ai_analysis_retries_without_structured_output_when_model_rejects_it
         if len(request_history) == 1:
             raise Exception(
                 "Error code: 400 - {'error': {'code': 'InvalidParameter', "
-                "'message': 'The parameter `text.format.type` specified in "
+                "'message': 'The parameter `response_format.type` specified in "
                 "the request are not valid: `json_object` is not supported by "
-                "this model.', 'param': 'text.format.type'}}"
+                "this model.', 'param': 'response_format.type'}}"
             )
         return SimpleNamespace(
-            output_text=(
-                '{"prompt_version":"v1","is_recommended":true,'
-                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
-            )
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"prompt_version":"v1","is_recommended":true,'
+                            '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+                        )
+                    )
+                )
+            ]
         )
 
     monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
@@ -108,42 +114,36 @@ def test_get_ai_analysis_retries_without_structured_output_when_model_rejects_it
     )
 
     assert result["reason"] == "ok"
-    assert request_history[0]["input"][0]["content"][0]["type"] == "input_text"
-    assert request_history[0]["text"]["format"]["type"] == "json_object"
-    assert "text" not in request_history[1]
+    assert request_history[0]["messages"][0]["role"] == "user"
+    assert request_history[0]["response_format"]["type"] == "json_object"
+    assert "response_format" not in request_history[1]
     assert ai_handler.ENABLE_RESPONSE_FORMAT is True
 
 
-def test_get_ai_analysis_falls_back_to_chat_completions_when_responses_api_is_missing(
+def test_get_ai_analysis_falls_back_to_responses_when_chat_completions_api_is_missing(
     monkeypatch, tmp_path
 ):
     monkeypatch.chdir(tmp_path)
     request_history = []
 
-    async def fake_responses_create(**kwargs):
-        request_history.append(("responses", kwargs))
-        raise Exception("Error code: 404 - page not found")
-
     async def fake_chat_create(**kwargs):
         request_history.append(("chat", kwargs))
-        if len([item for item in request_history if item[0] == "chat"]) == 1:
+        raise Exception("Error code: 404 - page not found")
+
+    async def fake_responses_create(**kwargs):
+        request_history.append(("responses", kwargs))
+        if len([item for item in request_history if item[0] == "responses"]) == 1:
             raise Exception(
                 "Error code: 400 - {'error': {'code': 'InvalidParameter', "
-                "'message': 'The parameter `response_format.type` specified in "
+                "'message': 'The parameter `text.format.type` specified in "
                 "the request are not valid: `json_object` is not supported by "
-                "this model.', 'param': 'response_format.type'}}"
+                "this model.', 'param': 'text.format.type'}}"
             )
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"prompt_version":"v1","is_recommended":true,'
-                            '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
-                        )
-                    )
-                )
-            ]
+            output_text=(
+                '{"prompt_version":"v1","is_recommended":true,'
+                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+            )
         )
 
     monkeypatch.setattr(
@@ -164,12 +164,12 @@ def test_get_ai_analysis_falls_back_to_chat_completions_when_responses_api_is_mi
     )
 
     assert result["reason"] == "ok"
-    assert request_history[0][0] == "responses"
-    assert request_history[0][1]["input"][0]["content"][0]["type"] == "input_text"
-    assert request_history[1][0] == "chat"
-    assert request_history[1][1]["response_format"]["type"] == "json_object"
-    assert request_history[2][0] == "chat"
-    assert "response_format" not in request_history[2][1]
+    assert request_history[0][0] == "chat"
+    assert request_history[0][1]["messages"][0]["role"] == "user"
+    assert request_history[1][0] == "responses"
+    assert request_history[1][1]["text"]["format"]["type"] == "json_object"
+    assert request_history[2][0] == "responses"
+    assert "text" not in request_history[2][1]
 
 
 def test_get_ai_analysis_retries_without_temperature_when_gateway_rejects_it(
@@ -183,10 +183,16 @@ def test_get_ai_analysis_retries_without_temperature_when_gateway_rejects_it(
         if len(request_history) == 1:
             raise Exception("temperature is unsupported for this model")
         return SimpleNamespace(
-            output_text=(
-                '{"prompt_version":"v1","is_recommended":true,'
-                '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
-            )
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"prompt_version":"v1","is_recommended":true,'
+                            '"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}'
+                        )
+                    )
+                )
+            ]
         )
 
     monkeypatch.setattr(ai_handler, "client", _build_fake_client(fake_create))
