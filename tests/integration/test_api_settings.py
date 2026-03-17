@@ -328,7 +328,7 @@ def test_notification_settings_fall_back_to_runtime_environment_when_env_file_mi
     assert sorted(payload["CONFIGURED_CHANNELS"]) == ["bark", "ntfy", "telegram"]
 
 
-def test_ai_test_endpoint_falls_back_to_chat_completions_when_responses_api_404(
+def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
     tmp_path, monkeypatch
 ):
     _clear_settings_env(monkeypatch)
@@ -359,29 +359,15 @@ def test_ai_test_endpoint_falls_back_to_chat_completions_when_responses_api_404(
 
         def _responses_create(self, **kwargs):
             request_history.append(("responses", kwargs))
-            raise Exception("Error code: 404 - page not found")
-
-        def _chat_create(self, **kwargs):
-            request_history.append(("chat", kwargs))
             return type(
                 "_Response",
                 (),
-                {
-                    "choices": [
-                        type(
-                            "_Choice",
-                            (),
-                            {
-                                "message": type(
-                                    "_Message",
-                                    (),
-                                    {"content": "OK"},
-                                )()
-                            },
-                        )()
-                    ]
-                },
+                {"output_text": "OK"},
             )()
+
+        def _chat_create(self, **kwargs):
+            request_history.append(("chat", kwargs))
+            raise Exception("Error code: 404 - page not found")
 
     import openai
 
@@ -400,6 +386,7 @@ def test_ai_test_endpoint_falls_back_to_chat_completions_when_responses_api_404(
     payload = response.json()
     assert payload["success"] is True
     assert payload["response"] == "OK"
-    assert request_history[0][0] == "responses"
-    assert request_history[1][0] == "chat"
-    assert request_history[1][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
+    assert request_history[0][0] == "chat"
+    assert request_history[0][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
+    assert request_history[1][0] == "responses"
+    assert request_history[1][1]["input"][0]["content"][0]["text"] == settings.AI_TEST_PROMPT

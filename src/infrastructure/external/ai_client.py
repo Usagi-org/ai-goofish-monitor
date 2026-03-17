@@ -20,6 +20,7 @@ from src.services.ai_request_compat import (
     RESPONSES_API_MODE,
     build_ai_request_params,
     create_ai_response_async,
+    is_chat_completions_api_unsupported_error,
     is_json_output_unsupported_error,
     is_responses_api_unsupported_error,
     is_temperature_unsupported_error,
@@ -136,7 +137,7 @@ class AIClient:
         enable_json_output: Optional[bool] = None,
     ) -> str:
         """调用 AI API"""
-        api_mode = RESPONSES_API_MODE
+        api_mode = CHAT_COMPLETIONS_API_MODE
         use_response_format = (
             self.settings.enable_response_format
             if enable_json_output is None
@@ -168,7 +169,17 @@ class AIClient:
                 )
             except Exception as exc:
                 changed = False
-                if api_mode == RESPONSES_API_MODE and is_responses_api_unsupported_error(exc):
+                if (
+                    api_mode == CHAT_COMPLETIONS_API_MODE
+                    and is_chat_completions_api_unsupported_error(exc)
+                ):
+                    api_mode = RESPONSES_API_MODE
+                    changed = True
+                    print("当前服务未实现 Chat Completions API，正在自动回退到 Responses API")
+                elif (
+                    api_mode == RESPONSES_API_MODE
+                    and is_responses_api_unsupported_error(exc)
+                ):
                     api_mode = CHAT_COMPLETIONS_API_MODE
                     changed = True
                     print("当前服务未实现 Responses API，正在自动回退到 Chat Completions API")
