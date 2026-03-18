@@ -11,10 +11,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 PYTHON_CMD="${PYTHON_CMD:-python3}"
-MARK_EXPRESSION="live"
+MARK_EXPRESSION=""
 DRY_RUN=false
 WITH_GENERATION=true
 PYTEST_ARGS=()
+TASK_CREATE_TEST="tests/integration/test_api_tasks.py::test_create_list_update_delete_task"
+TEST_TARGETS=(
+    "$TASK_CREATE_TEST"
+    "tests/live"
+)
 
 usage() {
     cat <<'EOF'
@@ -40,6 +45,7 @@ usage() {
   ./run_live_smoke.sh -- -k live_real_traffic
 
 说明:
+  0. 默认先执行任务创建 CRUD 集成测试，再执行 tests/live 真实流量 smoke
   1. 脚本会自动设置 RUN_LIVE_TESTS=1
   2. 若未设置 LIVE_TEST_ACCOUNT_STATE_FILE，会自动尝试使用 state/ 下第一个 *.json
   3. 默认使用 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1，避免本机第三方 pytest 插件干扰
@@ -167,10 +173,10 @@ fi
 
 if [[ "$WITH_GENERATION" == "true" ]]; then
     export LIVE_ENABLE_TASK_GENERATION=1
-    MARK_EXPRESSION="live"
+    MARK_EXPRESSION=""
 else
     export LIVE_ENABLE_TASK_GENERATION=0
-    MARK_EXPRESSION="live and not live_slow"
+    MARK_EXPRESSION="not live_slow"
 fi
 
 echo -e "${GREEN}========================================${NC}"
@@ -184,15 +190,23 @@ echo -e "${YELLOW}最少结果数:${NC} ${LIVE_EXPECT_MIN_ITEMS}"
 echo -e "${YELLOW}抓取/分析商品上限:${NC} ${LIVE_TEST_DEBUG_LIMIT}"
 echo -e "${YELLOW}超时(秒):${NC} ${LIVE_TIMEOUT_SECONDS}"
 echo -e "${YELLOW}任务生成慢用例:${NC} ${LIVE_ENABLE_TASK_GENERATION}"
-echo -e "${YELLOW}Pytest Marker:${NC} ${MARK_EXPRESSION}"
+echo -e "${YELLOW}任务创建前置用例:${NC} ${TASK_CREATE_TEST}"
+if [[ -n "$MARK_EXPRESSION" ]]; then
+    echo -e "${YELLOW}Pytest Marker:${NC} ${MARK_EXPRESSION}"
+else
+    echo -e "${YELLOW}Pytest Marker:${NC} <none>"
+fi
 echo -e "${YELLOW}禁用插件自动加载:${NC} ${PYTEST_DISABLE_PLUGIN_AUTOLOAD}"
 
 CMD=(
     "$PYTHON_CMD" -m pytest
-    tests/live
-    -m "$MARK_EXPRESSION"
+    "${TEST_TARGETS[@]}"
     -v
 )
+
+if [[ -n "$MARK_EXPRESSION" ]]; then
+    CMD+=(-m "$MARK_EXPRESSION")
+fi
 
 if [[ ${#PYTEST_ARGS[@]} -gt 0 ]]; then
     CMD+=("${PYTEST_ARGS[@]}")

@@ -20,7 +20,6 @@ from src.ai_handler import (
 )
 from src.config import (
     AI_DEBUG_MODE,
-    API_URL_PATTERN,
     DETAIL_API_URL_PATTERN,
     LOGIN_IS_EDGE,
     RUN_HEADLESS,
@@ -58,7 +57,10 @@ from src.services.price_history_service import (
 )
 from src.services.result_storage_service import load_processed_link_keys
 from src.services.seller_profile_cache import SellerProfileCache
-from src.services.search_pagination import advance_search_page
+from src.services.search_pagination import (
+    advance_search_page,
+    is_search_results_response,
+)
 
 
 class RiskControlError(Exception):
@@ -654,7 +656,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                 # 先监听搜索接口响应，再执行导航，避免错过首次请求
                 async with page.expect_response(
-                    lambda r: API_URL_PATTERN in r.url, timeout=30000
+                    is_search_results_response, timeout=30000
                 ) as initial_response_info:
                     await page.goto(
                         search_url, wait_until="domcontentloaded", timeout=60000
@@ -743,7 +745,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         await page.click("text=新发布")
                         await random_sleep(1, 2)  # 原来是 (1.5, 2.5)
                         async with page.expect_response(
-                            lambda r: API_URL_PATTERN in r.url, timeout=20000
+                            is_search_results_response, timeout=20000
                         ) as response_info:
                             await page.click(f"text={new_publish_option}")
                             # --- 修改: 增加排序后的等待时间 ---
@@ -758,7 +760,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
 
                 if personal_only:
                     async with page.expect_response(
-                        lambda r: API_URL_PATTERN in r.url, timeout=20000
+                        is_search_results_response, timeout=20000
                     ) as response_info:
                         await page.click("text=个人闲置")
                         # --- 修改: 将固定等待改为随机等待，并加长 ---
@@ -768,7 +770,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 if free_shipping:
                     try:
                         async with page.expect_response(
-                            lambda r: API_URL_PATTERN in r.url, timeout=20000
+                            is_search_results_response, timeout=20000
                         ) as response_info:
                             await page.click("text=包邮")
                             await random_sleep(2, 4)
@@ -860,7 +862,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             if await search_btn.count():
                                 try:
                                     async with page.expect_response(
-                                        lambda r: API_URL_PATTERN in r.url,
+                                        is_search_results_response,
                                         timeout=20000,
                                     ) as response_info:
                                         await search_btn.click()
@@ -900,7 +902,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             await random_sleep(1, 2.5)  # 原来是 asyncio.sleep(5)
 
                         async with page.expect_response(
-                            lambda r: API_URL_PATTERN in r.url, timeout=20000
+                            is_search_results_response, timeout=20000
                         ) as response_info:
                             await page.keyboard.press("Tab")
                             # --- 修改: 增加确认价格后的等待时间 ---
@@ -925,7 +927,6 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         page_advance_result = await advance_search_page(
                             page=page,
                             page_num=page_num,
-                            api_url_pattern=API_URL_PATTERN,
                         )
                         if not page_advance_result.advanced:
                             break
