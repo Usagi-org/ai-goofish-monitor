@@ -6,9 +6,9 @@ import re
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
-from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.core.cron_utils import validate_cron_expression
 from src.services.account_strategy_service import (
     clean_account_state_file,
     normalize_account_strategy,
@@ -93,13 +93,7 @@ def _normalize_optional_string(value):
 
 
 def _validate_cron_expression(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    try:
-        CronTrigger.from_crontab(value)
-    except ValueError as exc:
-        raise ValueError("Cron 表达式无效，必须是标准 5 段 crontab。") from exc
-    return value
+    return validate_cron_expression(value)
 
 
 def _normalize_price_value(value):

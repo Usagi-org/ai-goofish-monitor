@@ -12,6 +12,7 @@ export interface Task {
   min_price: string | null;
   max_price: string | null;
   cron: string | null;
+  next_run_at?: string | null;
   ai_prompt_base_file: string;
   ai_prompt_criteria_file: string;
   account_state_file?: string | null;
@@ -52,7 +53,7 @@ export interface TaskCreateResponse {
 }
 
 // For PATCH requests, all fields are optional
-export type TaskUpdate = Partial<Omit<Task, 'id'>>;
+export type TaskUpdate = Partial<Omit<Task, 'id' | 'next_run_at'>>;
 
 // For task creation
 export interface TaskGenerateRequest {

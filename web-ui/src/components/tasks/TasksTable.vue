@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Task } from '@/types/task.d.ts'
 import {
   Table,
@@ -25,6 +26,7 @@ import {
   RefreshCcw,
   Search
 } from 'lucide-vue-next'
+import { formatCountdown, formatNextRunAbsolute } from '@/lib/taskSchedule'
 
 interface Props {
   tasks: Task[]
@@ -35,6 +37,20 @@ interface Props {
 const props = defineProps<Props>()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
 const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
+const nowMs = ref(Date.now())
+let timer: number | null = null
+
+onMounted(() => {
+  timer = window.setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (timer !== null) {
+    window.clearInterval(timer)
+  }
+})
 
 const resolveAccountStrategyLabel = (task: Task) => {
   if (task.account_strategy === 'rotate') return '轮换'
@@ -47,6 +63,23 @@ const resolveAccountName = (task: Task) => {
   const segments = task.account_state_file.split('/')
   const filename = segments[segments.length - 1] || task.account_state_file
   return filename.replace('.json', '')
+}
+
+const resolveCountdownText = (task: Task) => {
+  if (!task.cron) return '手动触发'
+  if (!task.enabled) return '已禁用'
+  return formatCountdown(task.next_run_at, nowMs.value) || '等待调度'
+}
+
+const resolveCountdownTone = (task: Task) => {
+  if (!task.cron) return 'text-slate-400'
+  if (!task.enabled) return 'text-slate-400'
+  return 'text-amber-600'
+}
+
+const resolveNextRunLabel = (task: Task) => {
+  if (!task.cron || !task.enabled || !task.next_run_at) return null
+  return formatNextRunAbsolute(task.next_run_at)
 }
 
 const emit = defineEmits<{
@@ -209,6 +242,24 @@ const emit = defineEmits<{
                 <div class="flex items-center gap-1.5 bg-slate-100/50 border border-slate-200/30 px-2 py-1 rounded-lg">
                   <Clock class="w-3 h-3 text-slate-400" />
                   <span class="text-[11px] font-black text-slate-600 tracking-tight">{{ task.cron || 'MANUAL' }}</span>
+                </div>
+                <div
+                  class="px-2 py-1 rounded-md bg-amber-50/60 border border-amber-100/80 min-w-[112px]"
+                  :class="!task.cron || !task.enabled ? 'bg-slate-50 border-slate-100' : ''"
+                  :title="resolveNextRunLabel(task) || undefined"
+                >
+                  <div
+                    class="text-[10px] font-black tracking-tight"
+                    :class="resolveCountdownTone(task)"
+                  >
+                    {{ resolveCountdownText(task) }}
+                  </div>
+                  <div
+                    v-if="resolveNextRunLabel(task)"
+                    class="text-[9px] font-medium text-slate-400 mt-0.5"
+                  >
+                    {{ resolveNextRunLabel(task) }}
+                  </div>
                 </div>
                 <div class="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest">
                   <Layers class="w-3 h-3 opacity-50" /> {{ task.max_pages || 3 }}P

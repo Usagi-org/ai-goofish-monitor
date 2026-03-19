@@ -1,7 +1,9 @@
 import json
 import os
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -82,9 +84,19 @@ class FakeProcessService:
 class FakeSchedulerService:
     def __init__(self):
         self.reload_calls = 0
+        self.next_run_times = {}
 
-    async def reload_jobs(self, _tasks):
+    async def reload_jobs(self, tasks):
         self.reload_calls += 1
+        base = datetime(2026, 3, 19, 8, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+        self.next_run_times = {
+            task.id: base + timedelta(minutes=(index + 1) * 15)
+            for index, task in enumerate(tasks)
+            if task.id is not None and task.enabled and task.cron
+        }
+
+    def get_next_run_time(self, task_id: int):
+        return self.next_run_times.get(task_id)
 
 
 @pytest.fixture()

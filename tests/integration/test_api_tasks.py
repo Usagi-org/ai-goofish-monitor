@@ -8,6 +8,7 @@ def test_create_list_update_delete_task(api_client, api_context, sample_task_pay
     created = response.json()["task"]
     assert created["task_name"] == sample_task_payload["task_name"]
     assert created["analyze_images"] is True
+    assert created["next_run_at"] == "2026-03-19T08:15:00+08:00"
 
     response = api_client.get("/api/tasks")
     assert response.status_code == 200
@@ -15,12 +16,14 @@ def test_create_list_update_delete_task(api_client, api_context, sample_task_pay
     assert len(tasks) == 1
     assert tasks[0]["keyword"] == sample_task_payload["keyword"]
     assert tasks[0]["analyze_images"] is True
+    assert tasks[0]["next_run_at"] == "2026-03-19T08:15:00+08:00"
 
     response = api_client.patch("/api/tasks/0", json={"enabled": False, "analyze_images": False})
     assert response.status_code == 200
     updated = response.json()["task"]
     assert updated["enabled"] is False
     assert updated["analyze_images"] is False
+    assert updated["next_run_at"] is None
 
     response = api_client.delete("/api/tasks/0")
     assert response.status_code == 200
@@ -118,13 +121,14 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
     assert api_context["scheduler_service"].reload_calls == 1
 
 
-def test_create_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
+def test_create_task_accepts_cron_alias(api_client, sample_task_payload):
     payload = dict(sample_task_payload)
     payload["cron"] = "@daily"
 
     response = api_client.post("/api/tasks/", json=payload)
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["task"]["cron"] == "0 0 * * *"
 
 
 def test_create_task_rejects_fixed_account_strategy_without_state_file(api_client, sample_task_payload):
@@ -147,17 +151,26 @@ def test_create_task_accepts_rotate_account_strategy(api_client, sample_task_pay
     assert task["account_strategy"] == "rotate"
 
 
-def test_update_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
+def test_update_task_accepts_six_field_cron_expression(api_client, sample_task_payload):
     create_response = api_client.post("/api/tasks/", json=sample_task_payload)
     assert create_response.status_code == 200
 
-    response = api_client.patch("/api/tasks/0", json={"cron": "0 8 * * * *"})
+    response = api_client.patch("/api/tasks/0", json={"cron": "0 0 8 * * *"})
 
-    assert response.status_code == 422
+    assert response.status_code == 200
 
     task_response = api_client.get("/api/tasks/0")
     assert task_response.status_code == 200
-    assert task_response.json()["cron"] == sample_task_payload["cron"]
+    assert task_response.json()["cron"] == "0 0 8 * * *"
+
+
+def test_create_task_rejects_invalid_cron_expression(api_client, sample_task_payload):
+    payload = dict(sample_task_payload)
+    payload["cron"] = "every day at 8"
+
+    response = api_client.post("/api/tasks/", json=payload)
+
+    assert response.status_code == 422
 
 
 def test_delete_task_stops_runtime_and_reindexes_process_state(
