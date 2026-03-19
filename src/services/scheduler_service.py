@@ -2,9 +2,11 @@
 调度服务
 负责管理定时任务的调度
 """
+from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from typing import List
+
+from src.core.cron_utils import build_cron_trigger
 from src.domain.models.task import Task
 from src.services.process_service import ProcessService
 
@@ -28,6 +30,25 @@ class SchedulerService:
             self.scheduler.shutdown()
             print("调度器已停止")
 
+    def get_next_run_time(self, task_id: int):
+        job = self.scheduler.get_job(f"task_{task_id}")
+        if job is None:
+            return None
+
+        next_run_time = getattr(job, "next_run_time", None)
+        if next_run_time is not None:
+            return next_run_time
+
+        trigger = getattr(job, "trigger", None)
+        if trigger is None or not hasattr(trigger, "get_next_fire_time"):
+            return None
+
+        try:
+            now = datetime.now(self.scheduler.timezone)
+            return trigger.get_next_fire_time(None, now)
+        except Exception:
+            return None
+
     async def reload_jobs(self, tasks: List[Task]):
         """重新加载所有定时任务"""
         print("正在重新加载定时任务...")
@@ -36,7 +57,10 @@ class SchedulerService:
         for task in tasks:
             if task.enabled and task.cron:
                 try:
-                    trigger = CronTrigger.from_crontab(task.cron)
+                    trigger = build_cron_trigger(
+                        task.cron,
+                        timezone=self.scheduler.timezone,
+                    )
                     self.scheduler.add_job(
                         self._run_task,
                         trigger=trigger,

@@ -20,6 +20,7 @@ from src.services.task_generation_runner import (
     build_task_create,
     run_ai_generation_job,
 )
+from src.services.task_payloads import serialize_task, serialize_tasks
 from src.domain.models.task import TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
 from src.utils import resolve_task_log_path
@@ -57,20 +58,22 @@ def _validate_final_account_strategy(existing_task, task_update: TaskUpdate) -> 
 @router.get("", response_model=List[dict])
 async def get_tasks(
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """获取所有任务"""
     tasks = await service.get_all_tasks()
-    return [task.model_dump() for task in tasks]
+    return serialize_tasks(tasks, scheduler_service)
 @router.get("/{task_id}", response_model=dict)
 async def get_task(
     task_id: int,
     service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
 ):
     """获取单个任务"""
     task = await service.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务未找到")
-    return task.model_dump()
+    return serialize_task(task, scheduler_service)
 @router.post("/", response_model=dict)
 async def create_task(
     task_create: TaskCreate,
@@ -80,7 +83,7 @@ async def create_task(
     """创建新任务"""
     task = await service.create_task(task_create)
     await _reload_scheduler_if_needed(service, scheduler_service)
-    return {"message": "任务创建成功", "task": task.model_dump()}
+    return {"message": "任务创建成功", "task": serialize_task(task, scheduler_service)}
 @router.post("/generate", response_model=dict)
 async def generate_task(
     req: TaskGenerateRequest,
@@ -114,7 +117,7 @@ async def generate_task(
 
         task = await service.create_task(build_task_create(req, ""))
         await _reload_scheduler_if_needed(service, scheduler_service)
-        return {"message": "任务创建成功。", "task": task.model_dump()}
+        return {"message": "任务创建成功。", "task": serialize_task(task, scheduler_service)}
 
     except HTTPException:
         raise
@@ -205,7 +208,7 @@ async def update_task(
                 raise HTTPException(status_code=500, detail=error_msg)
         task = await service.update_task(task_id, task_update)
         await _reload_scheduler_if_needed(service, scheduler_service)
-        return {"message": "任务更新成功", "task": task.model_dump()}
+        return {"message": "任务更新成功", "task": serialize_task(task, scheduler_service)}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 @router.delete("/{task_id}", response_model=dict)

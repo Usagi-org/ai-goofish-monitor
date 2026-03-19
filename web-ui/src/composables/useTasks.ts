@@ -15,8 +15,10 @@ export function useTasks() {
   const stoppingTaskIds = ref<Set<number>>(new Set())
   const { on } = useWebSocket()
 
-  async function fetchTasks() {
-    isLoading.value = true
+  async function fetchTasks(options?: { silent?: boolean }) {
+    if (!options?.silent) {
+      isLoading.value = true
+    }
     error.value = null
     try {
       tasks.value = await taskApi.getAllTasks()
@@ -26,13 +28,15 @@ export function useTasks() {
       }
       console.error(e)
     } finally {
-      isLoading.value = false
+      if (!options?.silent) {
+        isLoading.value = false
+      }
     }
   }
 
   // Real-time updates
   on('tasks_updated', () => {
-    fetchTasks()
+    fetchTasks({ silent: true })
   })
 
   on('task_status_changed', (data: { id: number; is_running: boolean }) => {
@@ -40,6 +44,7 @@ export function useTasks() {
     if (task) {
       task.is_running = data.is_running
     }
+    fetchTasks({ silent: true })
   })
 
   async function createTask(data: TaskGenerateRequest): Promise<TaskCreateResponse> {

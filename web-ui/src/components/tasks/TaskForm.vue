@@ -212,7 +212,7 @@ function handleSubmit() {
   }
 
   // Filter out fields that shouldn't be sent in update requests
-  const { id, is_running, ...submitData } = form.value as any
+  const { id, is_running, next_run_at, ...submitData } = form.value as any
   const currentAccountStrategy = accountStrategy.value || 'auto'
   if (currentAccountStrategy === 'fixed') {
     const currentAccountStateFile = selectedAccountStateFile.value || AUTO_ACCOUNT_VALUE
@@ -353,10 +353,15 @@ function handleSubmit() {
               <Input
                 id="cron"
                 v-model="form.cron"
-                placeholder="分 时 日 月 周 (例如: 0 8 * * *)"
+                placeholder="例如：0 8 * * * / 0 0 8 * * * / @daily"
               />
               <p class="text-xs text-gray-500 mt-1">
-                Cron 格式：分(0-59) 时(0-23) 日(1-31) 月(1-12) 周(0-6)
+                支持 5 段：分 时 日 月 周；6 段：秒 分 时 日 月 周；也支持
+                @hourly / @daily / @weekly / @monthly / @yearly。服务端时区为 Asia/Shanghai。
+              </p>
+              <p class="text-xs text-gray-500">
+                示例：每 15 分钟 <code>*/15 * * * *</code>；每天 8 点 <code>0 8 * * *</code>；
+                每天 8 点（带秒）<code>0 0 8 * * *</code>。
               </p>
             </TabsContent>
           </Tabs>
