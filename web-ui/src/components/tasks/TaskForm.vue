@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Task, TaskGenerateRequest } from '@/types/task.d.ts'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'submit', data: EmittedData): void
 }>()
+const { t } = useI18n()
 
 const form = ref<any>({})
 const accountStrategy = ref<'auto' | 'fixed' | 'rotate'>('auto')
@@ -34,27 +36,27 @@ const keywordRulesInput = ref('')
 const cronMode = ref<'preset' | 'custom'>('preset')
 
 // 常用 cron 预设选项
-const cronPresets = [
-  { value: EMPTY_CRON_VALUE, label: '不定时（手动运行）' },
-  { value: '*/5 * * * *', label: '每 5 分钟' },
-  { value: '*/15 * * * *', label: '每 15 分钟' },
-  { value: '*/30 * * * *', label: '每 30 分钟' },
-  { value: '0 * * * *', label: '每小时' },
-  { value: '0 */2 * * *', label: '每 2 小时' },
-  { value: '0 */6 * * *', label: '每 6 小时' },
-  { value: '0 8 * * *', label: '每天 8:00' },
-  { value: '0 12 * * *', label: '每天 12:00' },
-  { value: '0 18 * * *', label: '每天 18:00' },
-  { value: '0 20 * * *', label: '每天 20:00' },
-  { value: '0 8,12,18 * * *', label: '每天 8:00/12:00/18:00' },
-  { value: '0 9 * * 1-5', label: '工作日 9:00' },
-  { value: '0 10 * * 6,0', label: '周末 10:00' },
-]
+const cronPresets = computed(() => [
+  { value: EMPTY_CRON_VALUE, label: t('tasks.form.cron.manual') },
+  { value: '*/5 * * * *', label: t('tasks.form.cron.every5Minutes') },
+  { value: '*/15 * * * *', label: t('tasks.form.cron.every15Minutes') },
+  { value: '*/30 * * * *', label: t('tasks.form.cron.every30Minutes') },
+  { value: '0 * * * *', label: t('tasks.form.cron.hourly') },
+  { value: '0 */2 * * *', label: t('tasks.form.cron.every2Hours') },
+  { value: '0 */6 * * *', label: t('tasks.form.cron.every6Hours') },
+  { value: '0 8 * * *', label: t('tasks.form.cron.daily8') },
+  { value: '0 12 * * *', label: t('tasks.form.cron.daily12') },
+  { value: '0 18 * * *', label: t('tasks.form.cron.daily18') },
+  { value: '0 20 * * *', label: t('tasks.form.cron.daily20') },
+  { value: '0 8,12,18 * * *', label: t('tasks.form.cron.daily81218') },
+  { value: '0 9 * * 1-5', label: t('tasks.form.cron.weekday9') },
+  { value: '0 10 * * 6,0', label: t('tasks.form.cron.weekend10') },
+])
 
 // 判断 cron 值是否为预设值
 function isPresetCronValue(value: string): boolean {
   if (!value) return true
-  return cronPresets.some(p => p.value === value)
+  return cronPresets.value.some((preset) => preset.value === value)
 }
 
 // 判断当前 cron 是否为预设值
@@ -68,11 +70,11 @@ const presetCronValue = computed({
   },
   set: (val: string) => { form.value.cron = val === EMPTY_CRON_VALUE ? '' : val },
 })
-const accountStrategyOptions = [
-  { value: 'auto', label: '自动选择', description: '优先使用默认登录态；无默认时使用账号池。' },
-  { value: 'fixed', label: '固定账号', description: '当前任务始终绑定一个指定账号。' },
-  { value: 'rotate', label: '轮换账号', description: '当前任务强制使用账号池轮换。' },
-]
+const accountStrategyOptions = computed(() => [
+  { value: 'auto', label: t('tasks.form.accountStrategy.auto'), description: t('tasks.form.accountStrategy.autoDescription') },
+  { value: 'fixed', label: t('tasks.form.accountStrategy.fixed'), description: t('tasks.form.accountStrategy.fixedDescription') },
+  { value: 'rotate', label: t('tasks.form.accountStrategy.rotate'), description: t('tasks.form.accountStrategy.rotateDescription') },
+])
 
 function parseKeywordText(text: string): string[] {
   const values = String(text || '')
@@ -184,8 +186,8 @@ function handleAccountStateFileChange(event: Event) {
 function handleSubmit() {
   if (!form.value.task_name || !form.value.keyword) {
     toast({
-      title: '信息不完整',
-      description: '任务名称和关键词不能为空。',
+      title: t('tasks.form.validation.incomplete'),
+      description: t('tasks.form.validation.nameAndKeywordRequired'),
       variant: 'destructive',
     })
     return
@@ -194,8 +196,8 @@ function handleSubmit() {
   const decisionMode = form.value.decision_mode || 'ai'
   if (decisionMode === 'ai' && !String(form.value.description || '').trim()) {
     toast({
-      title: '信息不完整',
-      description: 'AI 模式下详细需求不能为空。',
+      title: t('tasks.form.validation.incomplete'),
+      description: t('tasks.form.validation.aiDescriptionRequired'),
       variant: 'destructive',
     })
     return
@@ -204,8 +206,8 @@ function handleSubmit() {
   const keywordRules = parseKeywordText(keywordRulesInput.value)
   if (decisionMode === 'keyword' && keywordRules.length === 0) {
     toast({
-      title: '关键词规则不完整',
-      description: '关键词模式下至少需要一个关键词。',
+      title: t('tasks.form.validation.keywordRuleIncomplete'),
+      description: t('tasks.form.validation.keywordRuleRequired'),
       variant: 'destructive',
     })
     return
@@ -218,8 +220,8 @@ function handleSubmit() {
     const currentAccountStateFile = selectedAccountStateFile.value || AUTO_ACCOUNT_VALUE
     if (currentAccountStateFile === AUTO_ACCOUNT_VALUE) {
       toast({
-        title: '账号策略不完整',
-        description: '固定账号模式下必须选择一个账号。',
+        title: t('tasks.form.validation.accountStrategyIncomplete'),
+        description: t('tasks.form.validation.fixedAccountRequired'),
         variant: 'destructive',
       })
       return
@@ -259,88 +261,88 @@ function handleSubmit() {
   <form id="task-form" @submit.prevent="handleSubmit">
     <div class="grid gap-6 py-4">
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="task-name" class="text-right">任务名称</Label>
-        <Input id="task-name" v-model="form.task_name" class="col-span-3" placeholder="例如：索尼 A7M4 相机" required />
+        <Label for="task-name" class="text-right">{{ t('tasks.form.taskName') }}</Label>
+        <Input id="task-name" v-model="form.task_name" class="col-span-3" :placeholder="t('tasks.form.taskNamePlaceholder')" required />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="keyword" class="text-right">搜索关键词</Label>
-        <Input id="keyword" v-model="form.keyword" class="col-span-3" placeholder="例如：a7m4" required />
+        <Label for="keyword" class="text-right">{{ t('tasks.form.keyword') }}</Label>
+        <Input id="keyword" v-model="form.keyword" class="col-span-3" :placeholder="t('tasks.form.keywordPlaceholder')" required />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">判断模式</Label>
+        <Label class="text-right">{{ t('tasks.form.decisionMode') }}</Label>
         <div class="col-span-3">
           <Select v-model="form.decision_mode">
             <SelectTrigger>
-              <SelectValue placeholder="请选择判断模式" />
+              <SelectValue :placeholder="t('tasks.form.decisionModePlaceholder')" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ai">AI判断</SelectItem>
-              <SelectItem value="keyword">关键词判断</SelectItem>
+              <SelectItem value="ai">{{ t('tasks.form.aiMode') }}</SelectItem>
+              <SelectItem value="keyword">{{ t('tasks.form.keywordMode') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="description" class="text-right">详细需求</Label>
+        <Label for="description" class="text-right">{{ t('tasks.form.description') }}</Label>
         <div class="col-span-3 space-y-1">
           <Textarea
             id="description"
             v-model="form.description"
-            placeholder="请用自然语言详细描述你的购买需求，AI将根据此描述生成分析标准..."
+            :placeholder="t('tasks.form.descriptionPlaceholder')"
           />
           <p v-if="form.decision_mode === 'keyword'" class="text-xs text-gray-500">
-            关键词模式下可留空；AI模式下必填。
+            {{ t('tasks.form.keywordDescriptionHint') }}
           </p>
         </div>
       </div>
       <div v-if="form.decision_mode === 'ai'" class="grid grid-cols-4 items-center gap-4">
-        <Label for="analyze-images" class="text-right">分析商品图片</Label>
+        <Label for="analyze-images" class="text-right">{{ t('tasks.form.analyzeImages') }}</Label>
         <div class="col-span-3 space-y-1">
           <Switch id="analyze-images" v-model="form.analyze_images" />
           <p class="text-xs text-gray-500">
-            关闭后只分析商品文字描述和卖家资质，适合纯文本模型或节省 token。
+            {{ t('tasks.form.analyzeImagesHint') }}
           </p>
         </div>
       </div>
 
       <div v-if="form.decision_mode === 'keyword'" class="grid grid-cols-4 gap-4">
-        <Label class="text-right pt-2">关键词规则</Label>
+        <Label class="text-right pt-2">{{ t('tasks.form.keywordRules') }}</Label>
         <div class="col-span-3 space-y-2">
           <p class="text-xs text-gray-500">
-            单组 OR 逻辑：命中任一关键词即推荐（每行一个关键词，或使用逗号分隔）。纯英数字关键词按完整词匹配。
+            {{ t('tasks.form.keywordRulesHint') }}
           </p>
           <Textarea
             v-model="keywordRulesInput"
             class="min-h-[120px]"
-            placeholder="示例：a7m4&#10;验货宝&#10;全画幅"
+            :placeholder="t('tasks.form.keywordRulesPlaceholder')"
           />
         </div>
       </div>
 
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">价格范围</Label>
+        <Label class="text-right">{{ t('tasks.form.priceRange') }}</Label>
         <div class="col-span-3 flex items-center gap-2">
-          <Input type="number" v-model="form.min_price as any" placeholder="最低价" />
+          <Input type="number" v-model="form.min_price as any" :placeholder="t('tasks.form.minPrice')" />
           <span>-</span>
-          <Input type="number" v-model="form.max_price as any" placeholder="最高价" />
+          <Input type="number" v-model="form.max_price as any" :placeholder="t('tasks.form.maxPrice')" />
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="max-pages" class="text-right">搜索页数</Label>
+        <Label for="max-pages" class="text-right">{{ t('tasks.form.maxPages') }}</Label>
         <Input id="max-pages" v-model.number="form.max_pages" type="number" class="col-span-3" />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="cron" class="text-right">定时规则</Label>
+        <Label for="cron" class="text-right">{{ t('tasks.form.schedule') }}</Label>
         <div class="col-span-3 space-y-2">
           <Tabs v-model="cronMode" class="w-full">
             <TabsList class="grid w-full grid-cols-2">
-              <TabsTrigger value="preset">预设</TabsTrigger>
-              <TabsTrigger value="custom">自定义</TabsTrigger>
+              <TabsTrigger value="preset">{{ t('tasks.form.cronPresetTab') }}</TabsTrigger>
+              <TabsTrigger value="custom">{{ t('tasks.form.cronCustomTab') }}</TabsTrigger>
             </TabsList>
             <TabsContent value="preset">
               <Select v-model="presetCronValue">
                 <SelectTrigger>
-                  <SelectValue placeholder="选择定时规则" />
+                  <SelectValue :placeholder="t('tasks.form.cronPlaceholder')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="preset in cronPresets" :key="preset.value" :value="preset.value">
@@ -353,22 +355,20 @@ function handleSubmit() {
               <Input
                 id="cron"
                 v-model="form.cron"
-                placeholder="例如：0 8 * * * / 0 0 8 * * * / @daily"
+                :placeholder="t('tasks.form.cronCustomPlaceholder')"
               />
               <p class="text-xs text-gray-500 mt-1">
-                支持 5 段：分 时 日 月 周；6 段：秒 分 时 日 月 周；也支持
-                @hourly / @daily / @weekly / @monthly / @yearly。服务端时区为 Asia/Shanghai。
+                {{ t('tasks.form.cronCustomHintLine1') }}
               </p>
               <p class="text-xs text-gray-500">
-                示例：每 15 分钟 <code>*/15 * * * *</code>；每天 8 点 <code>0 8 * * *</code>；
-                每天 8 点（带秒）<code>0 0 8 * * *</code>。
+                {{ t('tasks.form.cronCustomHintLine2') }}
               </p>
             </TabsContent>
           </Tabs>
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">账号策略</Label>
+        <Label class="text-right">{{ t('tasks.form.accountStrategyLabel') }}</Label>
         <div class="col-span-3 space-y-2">
           <select
             :value="accountStrategy"
@@ -385,14 +385,14 @@ function handleSubmit() {
         </div>
       </div>
       <div v-if="accountStrategy === 'fixed'" class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">指定账号</Label>
+        <Label class="text-right">{{ t('tasks.form.fixedAccount') }}</Label>
         <div class="col-span-3">
           <select
             :value="selectedAccountStateFile"
             class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             @change="handleAccountStateFileChange"
           >
-            <option :value="AUTO_ACCOUNT_VALUE">请选择账号</option>
+            <option :value="AUTO_ACCOUNT_VALUE">{{ t('tasks.form.selectAccount') }}</option>
             <option v-for="account in accountOptions || []" :key="account.path" :value="account.path">
               {{ account.name }}
             </option>
@@ -400,36 +400,36 @@ function handleSubmit() {
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label for="personal-only" class="text-right">仅个人卖家</Label>
+        <Label for="personal-only" class="text-right">{{ t('tasks.form.personalOnly') }}</Label>
         <Switch id="personal-only" v-model="form.personal_only" />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">是否包邮</Label>
+        <Label class="text-right">{{ t('tasks.form.freeShipping') }}</Label>
         <Switch v-model="form.free_shipping" />
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">新发布范围</Label>
+        <Label class="text-right">{{ t('tasks.form.newPublish') }}</Label>
         <div class="col-span-3">
           <Select v-model="form.new_publish_option as any">
             <SelectTrigger>
-              <SelectValue placeholder="不筛选（默认）" />
+              <SelectValue :placeholder="t('tasks.form.publishOptions.none')" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">不筛选（默认）</SelectItem>
-              <SelectItem value="最新">最新</SelectItem>
-              <SelectItem value="1天内">1天内</SelectItem>
-              <SelectItem value="3天内">3天内</SelectItem>
-              <SelectItem value="7天内">7天内</SelectItem>
-              <SelectItem value="14天内">14天内</SelectItem>
+              <SelectItem value="__none__">{{ t('tasks.form.publishOptions.none') }}</SelectItem>
+              <SelectItem value="最新">{{ t('tasks.form.publishOptions.latest') }}</SelectItem>
+              <SelectItem value="1天内">{{ t('tasks.form.publishOptions.oneDay') }}</SelectItem>
+              <SelectItem value="3天内">{{ t('tasks.form.publishOptions.threeDays') }}</SelectItem>
+              <SelectItem value="7天内">{{ t('tasks.form.publishOptions.sevenDays') }}</SelectItem>
+              <SelectItem value="14天内">{{ t('tasks.form.publishOptions.fourteenDays') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
       <div class="grid grid-cols-4 items-center gap-4">
-        <Label class="text-right">区域筛选(默认不填)</Label>
+        <Label class="text-right">{{ t('tasks.form.region') }}</Label>
         <div class="col-span-3 space-y-1">
           <TaskRegionSelector v-model="form.region as any" />
-          <p class="text-xs text-gray-500">区域筛选会导致满足条件的商品数量很少</p>
+          <p class="text-xs text-gray-500">{{ t('tasks.form.regionHint') }}</p>
         </div>
       </div>
     </div>

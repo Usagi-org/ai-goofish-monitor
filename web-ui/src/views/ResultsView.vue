@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useResults } from '@/composables/useResults'
 import ResultsFilterBar from '@/components/results/ResultsFilterBar.vue'
 import ResultsGrid from '@/components/results/ResultsGrid.vue'
@@ -14,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+
+const { t } = useI18n()
 
 const {
   files,
@@ -36,20 +39,19 @@ const selectedTaskLabel = computed(() => {
   if (!selectedFile.value || fileOptions.value.length === 0) return null
   const match = fileOptions.value.find((option) => option.value === selectedFile.value)
   if (!match) return null
-  const label = match.label.replace(/^任务名称：/, '').trim()
-  return label || null
+  return match.taskName || null
 })
 
 const deleteConfirmText = computed(() => {
   return selectedTaskLabel.value
-    ? `确定删除任务结果「${selectedTaskLabel.value}」吗？此操作不可恢复。`
-    : '确定删除该任务结果吗？此操作不可恢复。'
+    ? t('results.filters.deleteDialogWithTask', { task: selectedTaskLabel.value })
+    : t('results.filters.deleteDialogFallback')
 })
 
 function openDeleteDialog() {
   if (!selectedFile.value) {
     toast({
-      title: '暂无可删除的结果',
+      title: t('results.filters.noResultToDelete'),
       variant: 'destructive',
     })
     return
@@ -60,7 +62,7 @@ function openDeleteDialog() {
 function handleExportResults() {
   if (!selectedFile.value) {
     toast({
-      title: '暂无可导出的结果',
+      title: t('results.filters.noResultToExport'),
       variant: 'destructive',
     })
     return
@@ -72,10 +74,10 @@ async function handleDeleteResults() {
   if (!selectedFile.value) return
   try {
     await deleteSelectedFile(selectedFile.value)
-    toast({ title: '结果已删除' })
+    toast({ title: t('results.filters.resultDeleted') })
   } catch (e) {
     toast({
-      title: '删除结果失败',
+      title: t('results.filters.deleteFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -88,11 +90,11 @@ async function handleDeleteResults() {
 <template>
   <div>
     <h1 class="text-2xl font-bold text-gray-800 mb-6">
-      结果查看
+      {{ t('results.title') }}
     </h1>
 
     <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-      <strong class="font-bold">出错了!</strong>
+      <strong class="font-bold">{{ t('common.error') }}</strong>
       <span class="block sm:inline">{{ error.message }}</span>
     </div>
 
@@ -118,15 +120,15 @@ async function handleDeleteResults() {
     <Dialog v-model:open="isDeleteDialogOpen">
       <DialogContent class="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>删除任务结果</DialogTitle>
+          <DialogTitle>{{ t('results.filters.deleteDialogTitle') }}</DialogTitle>
           <DialogDescription>
             {{ deleteConfirmText }}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" @click="isDeleteDialogOpen = false">取消</Button>
+          <Button variant="outline" @click="isDeleteDialogOpen = false">{{ t('common.cancel') }}</Button>
           <Button variant="destructive" :disabled="isLoading" @click="handleDeleteResults">
-            确认删除
+            {{ t('results.filters.confirmDelete') }}
           </Button>
         </DialogFooter>
       </DialogContent>

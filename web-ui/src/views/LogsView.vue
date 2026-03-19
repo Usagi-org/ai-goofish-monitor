@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useLogs } from '@/composables/useLogs'
 import { useTasks } from '@/composables/useTasks'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 
+const { t } = useI18n()
 const { tasks } = useTasks()
 const { logs, isAutoRefresh, clearLogs, toggleAutoRefresh, fetchLogs, setTaskId, loadLatest, loadPrevious, isFetchingHistory, hasMoreHistory } = useLogs()
 const logContainer = ref<HTMLElement | null>(null)
@@ -87,10 +89,10 @@ function openClearDialog() {
 async function handleClearLogs() {
   try {
     await clearLogs()
-    toast({ title: '日志已清空' })
+    toast({ title: t('logs.logsCleared') })
   } catch (e) {
     toast({
-      title: '清空日志失败',
+      title: t('logs.clearFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -104,16 +106,16 @@ async function handleClearLogs() {
   <div class="h-[calc(100vh-100px)] flex flex-col">
     <div class="flex justify-between items-center mb-4">
       <div class="flex items-center gap-4">
-        <h1 class="text-2xl font-bold text-gray-800">运行日志</h1>
+        <h1 class="text-2xl font-bold text-gray-800">{{ t('logs.title') }}</h1>
         <div class="flex items-center gap-2">
-          <Label class="text-sm text-gray-600">任务</Label>
+          <Label class="text-sm text-gray-600">{{ t('logs.task') }}</Label>
           <Select v-model="selectedTaskId">
             <SelectTrigger class="w-[240px]">
-              <SelectValue placeholder="请选择任务" />
+              <SelectValue :placeholder="t('logs.selectTask')" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem v-for="task in tasks" :key="task.id" :value="String(task.id)">
-                {{ task.task_name }}{{ task.is_running ? '（运行中）' : '' }}
+                {{ task.task_name }}{{ task.is_running ? t('logs.taskRunningSuffix') : '' }}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -122,21 +124,21 @@ async function handleClearLogs() {
       
       <div class="flex items-center gap-4">
         <Button variant="outline" size="sm" :disabled="!selectedTaskId" @click="fetchLogs">
-          刷新
+          {{ t('common.refresh') }}
         </Button>
 
         <div class="flex items-center space-x-2">
           <Switch id="auto-refresh" :model-value="isAutoRefresh" @update:model-value="toggleAutoRefresh" />
-          <Label for="auto-refresh">自动刷新</Label>
+          <Label for="auto-refresh">{{ t('logs.autoRefresh') }}</Label>
         </div>
 
         <div class="flex items-center space-x-2">
           <Switch id="auto-scroll" v-model="autoScroll" />
-          <Label for="auto-scroll">自动滚动</Label>
+          <Label for="auto-scroll">{{ t('logs.autoScroll') }}</Label>
         </div>
 
         <Button variant="destructive" size="sm" :disabled="!selectedTaskId" @click="openClearDialog">
-          清空日志
+          {{ t('logs.clearLogs') }}
         </Button>
       </div>
     </div>
@@ -154,14 +156,14 @@ async function handleClearLogs() {
     <Dialog v-model:open="isClearDialogOpen">
       <DialogContent class="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>清空任务日志</DialogTitle>
+          <DialogTitle>{{ t('logs.dialogTitle') }}</DialogTitle>
           <DialogDescription>
-            此操作不可恢复，确定要清空当前任务日志吗？
+            {{ t('logs.dialogDescription') }}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" @click="isClearDialogOpen = false">取消</Button>
-          <Button variant="destructive" @click="handleClearLogs">确认清空</Button>
+          <Button variant="outline" @click="isClearDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button variant="destructive" @click="handleClearLogs">{{ t('logs.confirmClear') }}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

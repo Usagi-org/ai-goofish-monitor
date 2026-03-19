@@ -16,6 +16,7 @@
     "reka-ui": "^2.7.0",
     "tailwind-merge": "^3.4.0",
     "vue": "^3.5.24",
+    "vue-i18n": "^10.0.7",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {

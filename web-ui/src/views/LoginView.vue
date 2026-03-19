@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import LocaleToggle from '@/components/layout/LocaleToggle.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { useI18n } from 'vue-i18n'
 
 const username = ref('')
 const password = ref('')
@@ -15,10 +17,11 @@ const error = ref('')
 const { login } = useAuth()
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 
 async function handleLogin() {
   if (!username.value || !password.value) {
-    error.value = '请输入用户名和密码'
+    error.value = t('login.errors.missingCredentials')
     return
   }
 
@@ -31,10 +34,10 @@ async function handleLogin() {
       const redirectPath = (route.query.redirect as string) || '/'
       router.push(redirectPath)
     } else {
-      error.value = '登录失败：用户名或密码错误'
+      error.value = t('login.errors.invalidCredentials')
     }
   } catch (e) {
-    error.value = '登录过程中发生错误'
+    error.value = t('login.errors.unexpected')
   } finally {
     isLoading.value = false
   }
@@ -43,21 +46,24 @@ async function handleLogin() {
 
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gray-100">
+    <div class="absolute right-6 top-6">
+      <LocaleToggle />
+    </div>
     <Card class="w-full max-w-md">
       <CardHeader>
-        <CardTitle class="text-2xl text-center">系统登录</CardTitle>
+        <CardTitle class="text-2xl text-center">{{ t('login.title') }}</CardTitle>
         <CardDescription class="text-center">
-          请输入您的管理员凭证以继续
+          {{ t('login.description') }}
         </CardDescription>
       </CardHeader>
       <form @submit.prevent="handleLogin">
         <CardContent class="grid gap-4">
           <div class="grid gap-2">
-            <Label for="username">用户名</Label>
+            <Label for="username">{{ t('login.username') }}</Label>
             <Input id="username" type="text" v-model="username" placeholder="admin" required />
           </div>
           <div class="grid gap-2">
-            <Label for="password">密码</Label>
+            <Label for="password">{{ t('login.password') }}</Label>
             <Input id="password" type="password" v-model="password" required />
           </div>
           <div v-if="error" class="text-sm text-red-500 font-medium">
@@ -66,7 +72,7 @@ async function handleLogin() {
         </CardContent>
         <CardFooter>
           <Button class="w-full" type="submit" :disabled="isLoading">
-            {{ isLoading ? '登录中...' : '登录' }}
+            {{ isLoading ? t('login.submitting') : t('login.submit') }}
           </Button>
         </CardFooter>
       </form>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { LoaderCircle, Search, Sparkles } from 'lucide-vue-next'
 import Badge from '@/components/ui/badge/Badge.vue'
 import * as taskApi from '@/api/tasks'
@@ -10,6 +11,7 @@ import type { Task } from '@/types/task.d.ts'
 const MAX_RESULTS = 6
 
 const router = useRouter()
+const { t } = useI18n()
 const { on } = useWebSocket()
 const rootRef = ref<HTMLElement | null>(null)
 const query = ref('')
@@ -29,7 +31,7 @@ const visibleTasks = computed(() => {
 })
 
 const panelTitle = computed(() => (
-  normalizedQuery.value ? '匹配任务' : '最近任务'
+  normalizedQuery.value ? t('tasks.search.matchingTasks') : t('tasks.search.recentTasks')
 ))
 
 const shouldShowPanel = computed(() => (
@@ -52,15 +54,15 @@ function matchesTask(task: Task, value: string) {
 }
 
 function getTaskStatus(task: Task) {
-  if (task.is_running) return '运行中'
-  if (task.enabled) return '已启用'
-  return '已停用'
+  if (task.is_running) return t('common.running')
+  if (task.enabled) return t('common.enabled')
+  return t('common.disabled')
 }
 
 function getTaskMeta(task: Task) {
   const parts = [task.keyword]
   if (task.region) parts.push(task.region)
-  parts.push(`最多 ${task.max_pages} 页`)
+  parts.push(t('tasks.search.maxPages', { count: task.max_pages }))
   return parts.join(' · ')
 }
 
@@ -70,7 +72,7 @@ async function fetchTasks() {
   try {
     tasks.value = await taskApi.getAllTasks()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '任务加载失败'
+    error.value = e instanceof Error ? e.message : t('tasks.search.loadFailed')
   } finally {
     isLoading.value = false
   }
@@ -172,7 +174,7 @@ onBeforeUnmount(() => {
     <input
       v-model="query"
       type="text"
-      placeholder="搜索任务名、关键词或地区..."
+      :placeholder="t('tasks.search.placeholder')"
       class="w-full h-10 rounded-xl border border-slate-200/60 bg-slate-100/60 pl-10 pr-16 text-sm text-slate-700 transition-all outline-none focus:border-primary/40 focus:bg-white focus:ring-2 focus:ring-primary/15"
       @focus="openPanel"
       @keydown="handleKeydown"
@@ -190,17 +192,17 @@ onBeforeUnmount(() => {
           <div>
             <p class="text-xs font-black uppercase tracking-[0.24em] text-slate-400">{{ panelTitle }}</p>
             <p class="mt-1 text-xs text-slate-500">
-              {{ normalizedQuery ? `共找到 ${visibleTasks.length} 条候选任务` : '直接回车可打开当前高亮任务' }}
+              {{ normalizedQuery ? t('tasks.search.resultCount', { count: visibleTasks.length }) : t('tasks.search.enterHint') }}
             </p>
           </div>
           <Badge variant="outline" class="border-slate-200 bg-slate-50 text-[10px] text-slate-500">
-            任务管理
+            {{ t('routes.tasks') }}
           </Badge>
         </div>
 
         <div v-if="isLoading" class="flex items-center gap-2 px-4 py-6 text-sm text-slate-500">
           <LoaderCircle class="h-4 w-4 animate-spin text-primary" />
-          正在加载任务列表...
+          {{ t('tasks.search.loading') }}
         </div>
 
         <div v-else-if="error" class="px-4 py-6 text-sm text-rose-600">
@@ -208,8 +210,8 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else-if="visibleTasks.length === 0" class="px-4 py-6">
-          <p class="text-sm font-semibold text-slate-700">没有找到匹配任务</p>
-          <p class="mt-1 text-xs text-slate-500">试试任务名、关键词或地区，比如 MacBook、watch、上海。</p>
+          <p class="text-sm font-semibold text-slate-700">{{ t('tasks.search.emptyTitle') }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ t('tasks.search.emptyDescription') }}</p>
         </div>
 
         <div v-else class="divide-y divide-slate-100">
@@ -256,11 +258,11 @@ onBeforeUnmount(() => {
         <div class="flex items-center justify-between border-t border-slate-100 bg-slate-50/80 px-4 py-3 text-[11px] text-slate-500">
           <div class="flex items-center gap-2">
             <Sparkles class="h-3.5 w-3.5 text-primary" />
-            结果只来自任务管理，不影响 dashboard 展示内容
+            {{ t('tasks.search.footerHint') }}
           </div>
           <div class="hidden items-center gap-2 md:flex">
-            <span>↑↓ 切换</span>
-            <span>Enter 打开</span>
+            <span>{{ t('tasks.search.keyboardUpDown') }}</span>
+            <span>{{ t('tasks.search.keyboardEnter') }}</span>
           </div>
         </div>
       </div>

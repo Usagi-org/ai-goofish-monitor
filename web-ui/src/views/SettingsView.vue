@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useSettings } from '@/composables/useSettings'
 import type { NotificationSettingsUpdate, NotificationTestResponse } from '@/api/settings'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 import NotificationSettingsPanel from '@/components/settings/NotificationSettingsPanel.vue'
 import RotationSettingsPanel from '@/components/settings/RotationSettingsPanel.vue'
+const { t } = useI18n()
 
 const {
   notificationSettings,
@@ -54,9 +56,9 @@ function notifyError(title: string, description?: string) {
 async function handleSaveNotifications(payload: NotificationSettingsUpdate) {
   try {
     await saveNotificationSettings(payload)
-    notifySuccess('通知设置已保存')
+    notifySuccess(t('settings.notifications.saved'))
   } catch (e) {
-    notifyError('通知设置保存失败', (e as Error).message)
+    notifyError(t('settings.notifications.saveFailed'), (e as Error).message)
   }
 }
 
@@ -68,7 +70,7 @@ async function handleTestNotification(payload: {
     const result = await testNotification(payload)
     return result
   } catch (e) {
-    notifyError('通知测试失败', (e as Error).message)
+    notifyError(t('settings.notifications.testFailed'), (e as Error).message)
     throw e
   }
 }
@@ -76,27 +78,27 @@ async function handleTestNotification(payload: {
 async function handleSaveAi() {
   try {
     await saveAiSettings()
-    notifySuccess('AI 设置已保存')
+    notifySuccess(t('settings.ai.saved'))
   } catch (e) {
-    notifyError('AI 设置保存失败', (e as Error).message)
+    notifyError(t('settings.ai.saveFailed'), (e as Error).message)
   }
 }
 
 async function handleSaveRotation() {
   try {
     await saveRotationSettings()
-    notifySuccess('轮换设置已保存')
+    notifySuccess(t('settings.rotation.saved'))
   } catch (e) {
-    notifyError('轮换设置保存失败', (e as Error).message)
+    notifyError(t('settings.rotation.saveFailed'), (e as Error).message)
   }
 }
 
 async function handleTestAi() {
   try {
     const res = await testAiConnection()
-    notifySuccess('AI 连接测试完成', res.message)
+    notifySuccess(t('settings.ai.testSuccess'), res.message)
   } catch (e) {
-    notifyError('AI 连接测试失败', (e as Error).message)
+    notifyError(t('settings.ai.testFailed'), (e as Error).message)
   }
 }
 
@@ -119,7 +121,7 @@ async function fetchPrompts() {
 
     selectedPrompt.value = files[0] || null
   } catch (e) {
-    promptError.value = (e as Error).message || '加载 Prompt 列表失败'
+    promptError.value = (e as Error).message || t('settings.prompts.promptListFailed')
   } finally {
     isPromptLoading.value = false
   }
@@ -127,15 +129,15 @@ async function fetchPrompts() {
 
 async function handleSavePrompt() {
   if (!selectedPrompt.value) {
-    notifyError('请选择 Prompt 文件')
+    notifyError(t('settings.prompts.selectPromptFile'))
     return
   }
   isPromptSaving.value = true
   try {
     const res = await updatePrompt(selectedPrompt.value, promptContent.value)
-    notifySuccess('Prompt 保存成功', res.message)
+    notifySuccess(t('settings.prompts.saveSuccess'), res.message)
   } catch (e) {
-    notifyError('Prompt 保存失败', (e as Error).message)
+    notifyError(t('settings.prompts.saveFailed'), (e as Error).message)
   } finally {
     isPromptSaving.value = false
   }
@@ -169,7 +171,7 @@ watch(selectedPrompt, async (value) => {
     const data = await getPromptContent(value)
     promptContent.value = data.content
   } catch (e) {
-    promptError.value = (e as Error).message || '加载 Prompt 内容失败'
+    promptError.value = (e as Error).message || t('settings.prompts.promptContentFailed')
   } finally {
     isPromptLoading.value = false
   }
@@ -178,7 +180,7 @@ watch(selectedPrompt, async (value) => {
 
 <template>
   <div>
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">系统设置</h1>
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ t('settings.title') }}</h1>
     
     <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
       {{ error.message }}
@@ -186,19 +188,19 @@ watch(selectedPrompt, async (value) => {
 
     <Tabs v-model="activeTab" class="w-full">
       <TabsList class="mb-4">
-        <TabsTrigger value="ai">AI 模型</TabsTrigger>
-        <TabsTrigger value="rotation">IP 轮换</TabsTrigger>
-        <TabsTrigger value="notifications">通知推送</TabsTrigger>
-        <TabsTrigger value="status">系统状态</TabsTrigger>
-        <TabsTrigger value="prompts">Prompt 管理</TabsTrigger>
+        <TabsTrigger value="ai">{{ t('settings.tabs.ai') }}</TabsTrigger>
+        <TabsTrigger value="rotation">{{ t('settings.tabs.rotation') }}</TabsTrigger>
+        <TabsTrigger value="notifications">{{ t('settings.tabs.notifications') }}</TabsTrigger>
+        <TabsTrigger value="status">{{ t('settings.tabs.status') }}</TabsTrigger>
+        <TabsTrigger value="prompts">{{ t('settings.tabs.prompts') }}</TabsTrigger>
       </TabsList>
 
       <!-- AI Tab -->
       <TabsContent value="ai">
         <Card>
           <CardHeader>
-            <CardTitle>AI 模型设置</CardTitle>
-            <CardDescription>配置用于商品分析的大语言模型。</CardDescription>
+            <CardTitle>{{ t('settings.ai.title') }}</CardTitle>
+            <CardDescription>{{ t('settings.ai.description') }}</CardDescription>
           </CardHeader>
           <CardContent v-if="isReady" class="space-y-4">
             <div class="grid gap-2">
@@ -210,27 +212,27 @@ watch(selectedPrompt, async (value) => {
               <Input
                 v-model="aiSettings.OPENAI_API_KEY"
                 type="password"
-                placeholder="留空表示不修改"
+                :placeholder="t('settings.ai.keyPlaceholder')"
               />
               <p class="text-xs text-gray-500">
-                {{ systemStatus?.env_file.openai_api_key_set ? '已配置' : '未配置' }}，为安全起见不回显。
+                {{ systemStatus?.env_file.openai_api_key_set ? t('settings.ai.keyConfigured') : t('settings.ai.keyMissing') }}
               </p>
             </div>
             <div class="grid gap-2">
-              <Label>模型名称</Label>
+              <Label>{{ t('settings.ai.modelName') }}</Label>
               <Input v-model="aiSettings.OPENAI_MODEL_NAME" placeholder="gpt-3.5-turbo" />
             </div>
             <div class="grid gap-2">
-              <Label>代理地址 (可选)</Label>
+              <Label>{{ t('settings.ai.proxy') }}</Label>
               <Input v-model="aiSettings.PROXY_URL" placeholder="http://127.0.0.1:7890" />
             </div>
           </CardContent>
           <CardContent v-else class="py-8 text-sm text-gray-500">
-            正在加载 AI 配置...
+            {{ t('settings.ai.loading') }}
           </CardContent>
           <CardFooter v-if="isReady" class="flex gap-2">
-            <Button variant="outline" @click="handleTestAi" :disabled="isSaving">测试连接</Button>
-            <Button @click="handleSaveAi" :disabled="isSaving">保存 AI 设置</Button>
+            <Button variant="outline" @click="handleTestAi" :disabled="isSaving">{{ t('settings.ai.testConnection') }}</Button>
+            <Button @click="handleSaveAi" :disabled="isSaving">{{ t('settings.ai.save') }}</Button>
           </CardFooter>
         </Card>
       </TabsContent>
@@ -260,9 +262,9 @@ watch(selectedPrompt, async (value) => {
       <TabsContent value="status">
         <Card>
           <CardHeader>
-            <CardTitle>系统运行状态</CardTitle>
+            <CardTitle>{{ t('settings.status.title') }}</CardTitle>
             <div class="flex justify-end">
-                <Button variant="outline" size="sm" @click="refreshStatus" :disabled="isLoading">刷新状态</Button>
+                <Button variant="outline" size="sm" @click="refreshStatus" :disabled="isLoading">{{ t('settings.status.refresh') }}</Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -270,11 +272,11 @@ watch(selectedPrompt, async (value) => {
               <!-- Scraper Process Status -->
               <div class="flex items-center justify-between border-b pb-4">
                 <div>
-                  <h3 class="font-medium">爬虫进程</h3>
-                  <p class="text-sm text-gray-500">当前是否有任务正在执行抓取</p>
+                  <h3 class="font-medium">{{ t('settings.status.scraper') }}</h3>
+                  <p class="text-sm text-gray-500">{{ t('settings.status.scraperDescription') }}</p>
                 </div>
                 <span :class="systemStatus.scraper_running ? 'text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full' : 'text-gray-500 bg-gray-100 px-3 py-1 rounded-full'">
-                  {{ systemStatus.scraper_running ? '运行中' : '空闲' }}
+                  {{ systemStatus.scraper_running ? t('common.running') : t('common.idle') }}
                 </span>
               </div>
 
@@ -282,11 +284,11 @@ watch(selectedPrompt, async (value) => {
               <div>
                 <div class="flex items-center justify-between mb-4">
                     <div>
-                        <h3 class="font-medium">环境变量配置</h3>
-                        <p class="text-sm text-gray-500">检查 .env 配置文件中的关键项</p>
+                        <h3 class="font-medium">{{ t('settings.status.env') }}</h3>
+                        <p class="text-sm text-gray-500">{{ t('settings.status.envDescription') }}</p>
                     </div>
                     <span :class="systemStatus.env_file.exists ? 'text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full' : 'text-red-600 font-bold bg-red-50 px-3 py-1 rounded-full'">
-                        {{ systemStatus.env_file.exists ? '已加载' : '缺失' }}
+                        {{ systemStatus.env_file.exists ? t('settings.status.loaded') : t('settings.status.missing') }}
                     </span>
                 </div>
                 
@@ -295,27 +297,27 @@ watch(selectedPrompt, async (value) => {
                         <div class="flex justify-between items-center">
                             <span class="font-medium text-sm">OpenAI API Key</span>
                             <span class="text-xs font-bold" :class="systemStatus.env_file.openai_api_key_set ? 'text-green-700' : 'text-yellow-700'">
-                                {{ systemStatus.env_file.openai_api_key_set ? '已配置' : '未配置' }}
+                                {{ systemStatus.env_file.openai_api_key_set ? t('common.active') : t('common.inactive') }}
                             </span>
                         </div>
                     </div>
                     
                     <div class="p-3 border rounded-lg" :class="systemStatus.configured_notification_channels?.length ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'">
                          <div class="flex justify-between items-center">
-                            <span class="font-medium text-sm">通知渠道</span>
+                            <span class="font-medium text-sm">{{ t('settings.status.channels') }}</span>
                              <span class="text-xs font-bold" :class="systemStatus.configured_notification_channels?.length ? 'text-green-700' : 'text-gray-500'">
-                                {{ systemStatus.configured_notification_channels?.length ? '已配置' : '未配置' }}
+                                {{ systemStatus.configured_notification_channels?.length ? t('common.active') : t('common.inactive') }}
                             </span>
                         </div>
                          <div class="text-xs text-gray-500 mt-1">
-                            {{ systemStatus.configured_notification_channels?.join(', ') || '无' }}
+                            {{ systemStatus.configured_notification_channels?.join(', ') || t('settings.status.none') }}
                         </div>
                     </div>
                 </div>
               </div>
             </div>
             <div v-else class="text-center py-8 text-gray-500">
-                正在获取系统状态...
+                {{ t('settings.status.fetching') }}
             </div>
           </CardContent>
         </Card>
@@ -325,8 +327,8 @@ watch(selectedPrompt, async (value) => {
       <TabsContent value="prompts">
         <Card>
           <CardHeader>
-            <CardTitle>Prompt 管理</CardTitle>
-            <CardDescription>在线编辑 prompts 目录下的 Prompt 文件。</CardDescription>
+            <CardTitle>{{ t('settings.prompts.title') }}</CardTitle>
+            <CardDescription>{{ t('settings.prompts.description') }}</CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
             <div v-if="promptError" class="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded">
@@ -334,13 +336,13 @@ watch(selectedPrompt, async (value) => {
             </div>
 
             <div class="grid gap-2">
-              <Label>选择 Prompt 文件</Label>
+              <Label>{{ t('settings.prompts.selectFile') }}</Label>
               <Select
                 :model-value="selectedPrompt || undefined"
                 @update:model-value="(value) => selectedPrompt = value as string"
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="请选择一个 Prompt 文件..." />
+                  <SelectValue :placeholder="t('settings.prompts.placeholder')" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem v-for="file in promptFiles" :key="file" :value="file">
@@ -349,23 +351,23 @@ watch(selectedPrompt, async (value) => {
                 </SelectContent>
               </Select>
               <p v-if="!promptFiles.length && !isPromptLoading" class="text-sm text-gray-500">
-                没有找到 Prompt 文件。
+                {{ t('settings.prompts.none') }}
               </p>
             </div>
 
             <div class="grid gap-2">
-              <Label>Prompt 内容</Label>
+              <Label>{{ t('settings.prompts.content') }}</Label>
               <Textarea
                 v-model="promptContent"
                 class="min-h-[240px]"
                 :disabled="!selectedPrompt || isPromptLoading"
-                placeholder="请选择一个 Prompt 文件进行编辑..."
+                :placeholder="t('settings.prompts.contentPlaceholder')"
               />
             </div>
           </CardContent>
           <CardFooter>
             <Button :disabled="isPromptSaving || !selectedPrompt" @click="handleSavePrompt">
-              {{ isPromptSaving ? '保存中...' : '保存更改' }}
+              {{ isPromptSaving ? t('common.saving') : t('settings.prompts.save') }}
             </Button>
           </CardFooter>
         </Card>

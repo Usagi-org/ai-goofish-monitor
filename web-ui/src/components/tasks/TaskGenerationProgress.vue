@@ -1,23 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Badge } from '@/components/ui/badge'
 import type { TaskGenerationJob, TaskGenerationStep } from '@/types/task.d.ts'
 
 const props = defineProps<{
   job: TaskGenerationJob
 }>()
+const { t } = useI18n()
 
 const statusMeta = computed(() => {
   if (props.job.status === 'completed') {
-    return { label: '已完成', variant: 'default' as const }
+    return { label: t('tasks.generation.status.completed'), variant: 'default' as const }
   }
   if (props.job.status === 'failed') {
-    return { label: '失败', variant: 'destructive' as const }
+    return { label: t('tasks.generation.status.failed'), variant: 'destructive' as const }
   }
   if (props.job.status === 'running') {
-    return { label: '生成中', variant: 'secondary' as const }
+    return { label: t('tasks.generation.status.running'), variant: 'secondary' as const }
   }
-  return { label: '排队中', variant: 'outline' as const }
+  return { label: t('tasks.generation.status.queued'), variant: 'outline' as const }
 })
 
 function resolveStepDotClass(step: TaskGenerationStep) {

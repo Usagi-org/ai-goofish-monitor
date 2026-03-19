@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import TheHeader from '@/components/layout/TheHeader.vue'
 import TheSidebar from '@/components/layout/TheSidebar.vue'
 import Toaster from '@/components/ui/toast/Toaster.vue'
 import { useMobileNav } from '@/composables/useMobileNav'
 
 const { isMobileNavOpen, closeMobileNav } = useMobileNav()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -23,7 +25,7 @@ const { isMobileNavOpen, closeMobileNav } = useMobileNav()
       <div v-if="isMobileNavOpen" class="fixed inset-0 z-[90] md:hidden">
         <button
           class="absolute inset-0 bg-slate-950/25 backdrop-blur-[2px]"
-          aria-label="关闭移动端导航"
+          :aria-label="t('common.close')"
           @click="closeMobileNav"
         />
         <aside class="relative h-full w-72 border-r border-slate-200/60 bg-white/90 p-4 shadow-2xl backdrop-blur-xl">
