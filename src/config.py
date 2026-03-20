@@ -4,6 +4,8 @@ import sys
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from src.infrastructure.config.settings import AISettings, LLMProvider
+
 # --- AI & Notification Configuration ---
 load_dotenv()
 
@@ -20,10 +22,11 @@ TASK_IMAGE_DIR_PREFIX = "task_images_"
 API_URL_PATTERN = "h5api.m.goofish.com/h5/mtop.taobao.idlemtopsearch.pc.search"
 DETAIL_API_URL_PATTERN = "h5api.m.goofish.com/h5/mtop.taobao.idle.pc.detail"
 
-# --- Environment Variables ---
-API_KEY = os.getenv("OPENAI_API_KEY")
-BASE_URL = os.getenv("OPENAI_BASE_URL")
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME")
+# --- Environment Variables (with provider auto-detection) ---
+_ai_settings = AISettings()
+API_KEY = _ai_settings.resolved_api_key()
+BASE_URL = _ai_settings.resolved_base_url()
+MODEL_NAME = _ai_settings.resolved_model_name()
 PROXY_URL = os.getenv("PROXY_URL")
 NTFY_TOPIC_URL = os.getenv("NTFY_TOPIC_URL")
 GOTIFY_URL = os.getenv("GOTIFY_URL")

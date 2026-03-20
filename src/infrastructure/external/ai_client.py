@@ -47,20 +47,25 @@ class AIClient:
         self.client = self._initialize_client()
 
     def _initialize_client(self) -> Optional[AsyncOpenAI]:
-        """初始化 OpenAI 客户端"""
+        """初始化 OpenAI 兼容客户端（支持 OpenAI、MiniMax 等提供商）"""
         if not self.settings or not self.settings.is_configured():
             print("警告：AI 配置不完整，AI 功能将不可用")
             return None
 
         try:
+            provider = self.settings.resolve_provider()
+            api_key = self.settings.resolved_api_key()
+            base_url = self.settings.resolved_base_url()
+
             if self.settings.proxy_url:
                 print(f"正在为 AI 请求使用代理: {self.settings.proxy_url}")
                 os.environ['HTTP_PROXY'] = self.settings.proxy_url
                 os.environ['HTTPS_PROXY'] = self.settings.proxy_url
 
+            print(f"AI 提供商: {provider.value} | 模型: {self.settings.resolved_model_name()}")
             return AsyncOpenAI(
-                api_key=self.settings.api_key,
-                base_url=self.settings.base_url
+                api_key=api_key,
+                base_url=base_url,
             )
         except Exception as e:
             print(f"初始化 AI 客户端失败: {e}")
@@ -149,7 +154,7 @@ class AIClient:
         for attempt in range(max_attempts):
             request_params = build_ai_request_params(
                 api_mode,
-                model=self.settings.model_name,
+                model=self.settings.resolved_model_name(),
                 messages=messages,
                 temperature=temperature,
                 max_output_tokens=max_output_tokens,

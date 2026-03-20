@@ -42,12 +42,27 @@ cp .env.example .env
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | AI model API key | Yes |
-| `OPENAI_BASE_URL` | OpenAI-compatible API base URL | Yes |
-| `OPENAI_MODEL_NAME` | Model name with image input support | Yes |
+| `OPENAI_API_KEY` | AI model API key (for OpenAI-compatible providers) | Either |
+| `MINIMAX_API_KEY` | MiniMax API key (for MiniMax) | Either |
+| `OPENAI_BASE_URL` | OpenAI-compatible API base URL (auto-filled for MiniMax) | No* |
+| `OPENAI_MODEL_NAME` | Model name with image input support (MiniMax defaults to MiniMax-M2.7) | No* |
+| `LLM_PROVIDER` | AI provider: `openai` (default) or `minimax` | No |
 | `WEB_USERNAME` / `WEB_PASSWORD` | Web UI login credentials, default `admin/admin123` | No |
 
+> \* When using MiniMax, only `MINIMAX_API_KEY` is required. `OPENAI_BASE_URL` and `OPENAI_MODEL_NAME` default to `https://api.minimax.io/v1` and `MiniMax-M2.7` respectively. You can still override them manually.
+
 See "Configuration" below for the rest.
+
+#### Quick Start with MiniMax
+
+[MiniMax](https://www.minimaxi.com/) provides multimodal (Vision) large language models with an OpenAI-compatible API.
+
+```bash
+# Just one line in .env to enable MiniMax
+MINIMAX_API_KEY=your-minimax-api-key
+```
+
+The system auto-detects MiniMax and uses its default API endpoint and model (MiniMax-M2.7).
 
 ### Start Locally
 

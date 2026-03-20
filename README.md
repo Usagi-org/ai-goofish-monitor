@@ -69,12 +69,27 @@ docker compose up -d
 
 | 变量 | 说明 | 必填 |
 |------|------|------|
-| `OPENAI_API_KEY` | AI 模型 API Key | 是 |
-| `OPENAI_BASE_URL` | OpenAI 兼容接口地址 | 是 |
-| `OPENAI_MODEL_NAME` | 支持图片输入的模型名称 | 是 |
+| `OPENAI_API_KEY` | AI 模型 API Key（使用 OpenAI 兼容接口时） | 二选一 |
+| `MINIMAX_API_KEY` | MiniMax API Key（使用 MiniMax 时） | 二选一 |
+| `OPENAI_BASE_URL` | OpenAI 兼容接口地址（MiniMax 自动填充） | 否* |
+| `OPENAI_MODEL_NAME` | 支持图片输入的模型名称（MiniMax 默认 MiniMax-M2.7） | 否* |
+| `LLM_PROVIDER` | AI 提供商：`openai`（默认）或 `minimax` | 否 |
 | `WEB_USERNAME` / `WEB_PASSWORD` | Web UI 登录账号密码，默认 `admin/admin123` | 否 |
 
-其余配置见下方“配置说明”。
+> \* 使用 MiniMax 时，只需设置 `MINIMAX_API_KEY`，`OPENAI_BASE_URL` 和 `OPENAI_MODEL_NAME` 将自动使用默认值（`https://api.minimax.io/v1` 和 `MiniMax-M2.7`）。也可手动覆盖。
+
+其余配置见下方”配置说明”。
+
+#### 使用 MiniMax 快速开始
+
+[MiniMax](https://www.minimaxi.com/) 提供支持多模态（Vision）的大语言模型，与 OpenAI 接口兼容。
+
+```bash
+# .env 中只需一行即可启用 MiniMax
+MINIMAX_API_KEY=your-minimax-api-key
+```
+
+系统会自动检测并使用 MiniMax 的 API 地址和默认模型（MiniMax-M2.7）。
 
 
 ### 第一次使用
