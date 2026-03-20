@@ -78,6 +78,7 @@ def test_call_ai_retries_without_structured_output_when_model_rejects_it():
         model_name="fake-model",
         enable_response_format=True,
         enable_thinking=False,
+        resolved_model_name=lambda: "fake-model",
     )
     request_history = []
 
@@ -114,6 +115,7 @@ def test_call_ai_falls_back_to_responses_when_chat_completions_api_is_missing():
         model_name="fake-model",
         enable_response_format=True,
         enable_thinking=False,
+        resolved_model_name=lambda: "fake-model",
     )
     request_history = []
 
@@ -150,6 +152,7 @@ def test_call_ai_retries_without_temperature_when_gateway_rejects_it():
         model_name="fake-model",
         enable_response_format=False,
         enable_thinking=False,
+        resolved_model_name=lambda: "fake-model",
     )
     request_history = []
 

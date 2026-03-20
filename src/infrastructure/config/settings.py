@@ -10,7 +10,24 @@ except ImportError:
     _USING_PYDANTIC_SETTINGS = False
 from pydantic import Field
 from typing import Optional
+from enum import Enum
 import os
+
+
+# ---- LLM Provider Presets ----
+
+class LLMProvider(str, Enum):
+    OPENAI = "openai"
+    MINIMAX = "minimax"
+
+
+# Default base URLs and model names per provider
+_PROVIDER_PRESETS = {
+    LLMProvider.MINIMAX: {
+        "base_url": "https://api.minimax.io/v1",
+        "model_name": "MiniMax-M2.7",
+    },
+}
 
 DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org"
 
@@ -40,7 +57,9 @@ else:
 
 class AISettings(_EnvSettings):
     """AI模型配置"""
+    llm_provider: Optional[str] = _env_field(None, "LLM_PROVIDER")
     api_key: Optional[str] = _env_field(None, "OPENAI_API_KEY")
+    minimax_api_key: Optional[str] = _env_field(None, "MINIMAX_API_KEY")
     base_url: str = _env_field("", "OPENAI_BASE_URL")
     model_name: str = _env_field("", "OPENAI_MODEL_NAME")
     proxy_url: Optional[str] = _env_field(None, "PROXY_URL")
@@ -49,9 +68,41 @@ class AISettings(_EnvSettings):
     enable_thinking: bool = _env_field(False, "ENABLE_THINKING")
     skip_analysis: bool = _env_field(False, "SKIP_AI_ANALYSIS")
 
+    def resolve_provider(self) -> LLMProvider:
+        """Detect the active LLM provider from explicit setting or API key."""
+        if self.llm_provider:
+            try:
+                return LLMProvider(self.llm_provider.lower())
+            except ValueError:
+                pass
+        if self.minimax_api_key and not self.api_key:
+            return LLMProvider.MINIMAX
+        return LLMProvider.OPENAI
+
+    def resolved_api_key(self) -> Optional[str]:
+        """Return the API key for the resolved provider."""
+        provider = self.resolve_provider()
+        if provider == LLMProvider.MINIMAX:
+            return self.minimax_api_key or self.api_key
+        return self.api_key
+
+    def resolved_base_url(self) -> str:
+        """Return the base URL, falling back to provider defaults."""
+        if self.base_url:
+            return self.base_url
+        preset = _PROVIDER_PRESETS.get(self.resolve_provider())
+        return preset["base_url"] if preset else ""
+
+    def resolved_model_name(self) -> str:
+        """Return the model name, falling back to provider defaults."""
+        if self.model_name:
+            return self.model_name
+        preset = _PROVIDER_PRESETS.get(self.resolve_provider())
+        return preset["model_name"] if preset else ""
+
     def is_configured(self) -> bool:
         """检查AI是否已正确配置"""
-        return bool(self.base_url and self.model_name)
+        return bool(self.resolved_base_url() and self.resolved_model_name())
 
 
 class NotificationSettings(_EnvSettings):
