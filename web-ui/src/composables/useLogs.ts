@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as logsApi from '@/api/logs'
+import { t } from '@/i18n'
 
 export function useLogs() {
   const logs = ref('')
@@ -15,7 +16,7 @@ export function useLogs() {
   let refreshInterval: number | null = null
   const MAX_LOG_CHARS = 200_000
   const TRIM_LOG_CHARS = 150_000
-  const TRIM_NOTICE = '...日志过长已截断，仅保留最新内容...'
+  const TRIM_NOTICE = t('logs.trimmedNotice')
 
   function appendLogs(content: string) {
     if (!content) return

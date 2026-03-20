@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from src.infrastructure.external.ai_client import AIClient
 from src.services.ai_request_compat import build_responses_input
 
@@ -172,6 +174,65 @@ def test_call_ai_retries_without_temperature_when_gateway_rejects_it():
     assert response == '{"ok":true}'
     assert request_history[0]["temperature"] == 0.1
     assert "temperature" not in request_history[1]
+
+
+def test_call_ai_retries_when_response_content_is_empty():
+    client = AIClient.__new__(AIClient)
+    client.settings = SimpleNamespace(
+        model_name="fake-model",
+        enable_response_format=False,
+        enable_thinking=False,
+    )
+    request_history = []
+
+    async def fake_create(**kwargs):
+        request_history.append(kwargs)
+        if len(request_history) < 4:
+            return SimpleNamespace(output_text="")
+        return SimpleNamespace(output_text='{"ok":true}')
+
+    client.client = _build_fake_client(fake_create)
+
+    response = asyncio.run(client._call_ai([{"role": "user", "content": "hi"}]))
+
+    assert response == '{"ok":true}'
+    assert len(request_history) == 4
+
+
+def test_call_ai_raises_after_all_empty_response_retries_are_exhausted():
+    client = AIClient.__new__(AIClient)
+    client.settings = SimpleNamespace(
+        model_name="fake-model",
+        enable_response_format=False,
+        enable_thinking=False,
+    )
+    request_history = []
+
+    async def fake_create(**kwargs):
+        request_history.append(kwargs)
+        return SimpleNamespace(output_text="")
+
+    client.client = _build_fake_client(fake_create)
+
+    with pytest.raises(ValueError, match="AI响应内容为空"):
+        asyncio.run(client._call_ai([{"role": "user", "content": "hi"}]))
+
+    assert len(request_history) == 4
+
+
+def test_close_closes_underlying_async_client_and_clears_reference():
+    client = AIClient.__new__(AIClient)
+    close_state = {"closed": False}
+
+    async def fake_close():
+        close_state["closed"] = True
+
+    client.client = SimpleNamespace(close=fake_close)
+
+    asyncio.run(client.close())
+
+    assert close_state["closed"] is True
+    assert client.client is None
 
 
 def test_parse_response_uses_first_json_object_when_response_contains_multiple_objects():

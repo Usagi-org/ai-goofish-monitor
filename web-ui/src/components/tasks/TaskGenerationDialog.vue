@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TaskGenerationJob } from '@/types/task.d.ts'
 import TaskGenerationProgress from '@/components/tasks/TaskGenerationProgress.vue'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+const { t } = useI18n()
 
 const props = defineProps<{
   job: TaskGenerationJob | null
@@ -29,9 +31,9 @@ const isRunning = computed(() => {
 const helperText = computed(() => {
   if (!props.job) return ''
   if (props.job.status === 'failed') {
-    return '生成失败后会保留这个弹窗，方便你查看错误原因。'
+    return t('tasks.generation.helperFailed')
   }
-  return '任务已转入后台生成，你可以停留在这里查看步骤，也可以先关闭弹窗。'
+  return t('tasks.generation.helperRunning')
 })
 </script>
 
@@ -39,9 +41,9 @@ const helperText = computed(() => {
   <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
     <DialogContent class="sm:max-w-[560px]">
       <DialogHeader>
-        <DialogTitle>任务生成进度</DialogTitle>
+        <DialogTitle>{{ t('tasks.generation.title') }}</DialogTitle>
         <DialogDescription>
-          AI 正在生成分析标准并创建任务。
+          {{ t('tasks.generation.description') }}
         </DialogDescription>
       </DialogHeader>
 
@@ -52,7 +54,7 @@ const helperText = computed(() => {
 
       <DialogFooter>
         <Button variant="outline" @click="emit('update:open', false)">
-          {{ isRunning ? '关闭窗口' : '关闭' }}
+          {{ isRunning ? t('tasks.generation.closeWindow') : t('common.close') }}
         </Button>
       </DialogFooter>
     </DialogContent>

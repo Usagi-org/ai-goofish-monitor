@@ -1,5 +1,6 @@
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { ResultInsights, ResultItem } from '@/types/result.d.ts'
 import * as resultsApi from '@/api/results'
 import type { GetResultContentParams } from '@/api/results'
@@ -7,6 +8,7 @@ import { useWebSocket } from '@/composables/useWebSocket'
 import * as tasksApi from '@/api/tasks'
 
 export function useResults() {
+  const { t } = useI18n()
   const route = useRoute()
   // State
   const files = ref<string[]>([])
@@ -213,7 +215,10 @@ export function useResults() {
       const taskName = taskNameByKeyword.value[keyword]
       return {
         value: file,
-        label: `任务名称：${taskName || '未命名'}`,
+        taskName: taskName || t('common.unnamed'),
+        label: t('results.filters.taskNameLabel', {
+          task: taskName || t('common.unnamed'),
+        }),
       }
     })
   )

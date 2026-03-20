@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { listAccounts, getAccount, createAccount, updateAccount, deleteAccount, type AccountItem } from '@/api/accounts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from '@/components/ui/toast'
+const { t } = useI18n()
 
 const accounts = ref<AccountItem[]>([])
 const isLoading = ref(false)
@@ -31,7 +33,7 @@ async function fetchAccounts() {
   try {
     accounts.value = await listAccounts()
   } catch (e) {
-    toast({ title: '加载账号失败', description: (e as Error).message, variant: 'destructive' })
+    toast({ title: t('accounts.toasts.loadFailed'), description: (e as Error).message, variant: 'destructive' })
   } finally {
     isLoading.value = false
   }
@@ -51,7 +53,7 @@ async function openEditDialog(name: string) {
     editContent.value = detail.content
     isEditDialogOpen.value = true
   } catch (e) {
-    toast({ title: '加载账号内容失败', description: (e as Error).message, variant: 'destructive' })
+    toast({ title: t('accounts.toasts.loadContentFailed'), description: (e as Error).message, variant: 'destructive' })
   } finally {
     isSaving.value = false
   }
@@ -68,17 +70,17 @@ function goCreateTask(name: string) {
 
 async function handleCreateAccount() {
   if (!newName.value.trim() || !newContent.value.trim()) {
-    toast({ title: '信息不完整', description: '请填写账号名称并粘贴 JSON 内容。', variant: 'destructive' })
+    toast({ title: t('accounts.toasts.incomplete'), description: t('accounts.toasts.createDescriptionRequired'), variant: 'destructive' })
     return
   }
   isSaving.value = true
   try {
     await createAccount({ name: newName.value.trim(), content: newContent.value.trim() })
-    toast({ title: '账号已添加' })
+    toast({ title: t('accounts.toasts.created') })
     isCreateDialogOpen.value = false
     await fetchAccounts()
   } catch (e) {
-    toast({ title: '添加账号失败', description: (e as Error).message, variant: 'destructive' })
+    toast({ title: t('accounts.toasts.createFailed'), description: (e as Error).message, variant: 'destructive' })
   } finally {
     isSaving.value = false
   }
@@ -86,17 +88,17 @@ async function handleCreateAccount() {
 
 async function handleUpdateAccount() {
   if (!editContent.value.trim()) {
-    toast({ title: '内容不能为空', description: '请粘贴 JSON 内容。', variant: 'destructive' })
+    toast({ title: t('accounts.toasts.contentRequired'), description: t('accounts.toasts.updateDescriptionRequired'), variant: 'destructive' })
     return
   }
   isSaving.value = true
   try {
     await updateAccount(editName.value, editContent.value.trim())
-    toast({ title: '账号已更新' })
+    toast({ title: t('accounts.toasts.updated') })
     isEditDialogOpen.value = false
     await fetchAccounts()
   } catch (e) {
-    toast({ title: '更新账号失败', description: (e as Error).message, variant: 'destructive' })
+    toast({ title: t('accounts.toasts.updateFailed'), description: (e as Error).message, variant: 'destructive' })
   } finally {
     isSaving.value = false
   }
@@ -106,11 +108,11 @@ async function handleDeleteAccount() {
   isSaving.value = true
   try {
     await deleteAccount(deleteName.value)
-    toast({ title: '账号已删除' })
+    toast({ title: t('accounts.toasts.deleted') })
     isDeleteDialogOpen.value = false
     await fetchAccounts()
   } catch (e) {
-    toast({ title: '删除账号失败', description: (e as Error).message, variant: 'destructive' })
+    toast({ title: t('accounts.toasts.deleteFailed'), description: (e as Error).message, variant: 'destructive' })
   } finally {
     isSaving.value = false
   }
@@ -123,72 +125,72 @@ onMounted(fetchAccounts)
   <div>
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h1 class="text-2xl font-bold text-gray-800">闲鱼账号管理</h1>
-        <p class="text-sm text-gray-500 mt-1">使用 Chrome 扩展提取登录状态 JSON，并在此添加账号。</p>
+        <h1 class="text-2xl font-bold text-gray-800">{{ t('accounts.title') }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ t('accounts.description') }}</p>
       </div>
-      <Button @click="openCreateDialog">+ 添加账号</Button>
+      <Button @click="openCreateDialog">{{ t('accounts.add') }}</Button>
     </div>
 
     <Card class="mb-6">
       <CardHeader>
-        <CardTitle>获取闲鱼Cookie</CardTitle>
+        <CardTitle>{{ t('accounts.cookieGuide.title') }}</CardTitle>
       </CardHeader>
       <CardContent class="text-sm text-gray-600">
         <ol class="list-decimal list-inside space-y-1">
           <li>
-            安装
+            {{ t('accounts.cookieGuide.step1Prefix') }}
             <a
               class="text-blue-600 hover:underline"
               href="https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa"
               target="_blank"
               rel="noopener noreferrer"
-            >闲鱼登录状态提取扩展</a>
+            >{{ t('accounts.cookieGuide.extension') }}</a>
           </li>
           <li>
-            打开并登录
+            {{ t('accounts.cookieGuide.step2Prefix') }}
             <a
               class="text-blue-600 hover:underline"
               href="https://www.goofish.com"
               target="_blank"
               rel="noopener noreferrer"
-            >闲鱼官网</a>
+            >{{ t('accounts.cookieGuide.website') }}</a>
           </li>
-          <li>点击扩展图标，选择“提取登录状态”，再点击“复制到剪贴板”</li>
-          <li>回到本页，点击“添加账号”，粘贴 JSON 内容并保存</li>
-          <li>如果配置多账号，不要在当前窗口退出闲鱼账号，可以新开无痕窗口登录提取其他账号Cookie</li>
+          <li>{{ t('accounts.cookieGuide.step3') }}</li>
+          <li>{{ t('accounts.cookieGuide.step4') }}</li>
+          <li>{{ t('accounts.cookieGuide.step5') }}</li>
         </ol>
       </CardContent>
     </Card>
 
     <Card>
       <CardHeader>
-        <CardTitle>账号列表</CardTitle>
-        <CardDescription>账号文件保存在 state/ 目录下，可绑定到任务。</CardDescription>
+        <CardTitle>{{ t('accounts.list.title') }}</CardTitle>
+        <CardDescription>{{ t('accounts.list.description') }}</CardDescription>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>账号名称</TableHead>
-              <TableHead>状态文件</TableHead>
-              <TableHead class="text-right">操作</TableHead>
+              <TableHead>{{ t('accounts.list.name') }}</TableHead>
+              <TableHead>{{ t('accounts.list.file') }}</TableHead>
+              <TableHead class="text-right">{{ t('accounts.list.actions') }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             <TableRow v-if="isLoading">
-              <TableCell colspan="3" class="h-20 text-center text-muted-foreground">加载中...</TableCell>
+              <TableCell colspan="3" class="h-20 text-center text-muted-foreground">{{ t('common.loading') }}</TableCell>
             </TableRow>
             <TableRow v-else-if="accounts.length === 0">
-              <TableCell colspan="3" class="h-20 text-center text-muted-foreground">暂无账号</TableCell>
+              <TableCell colspan="3" class="h-20 text-center text-muted-foreground">{{ t('accounts.list.empty') }}</TableCell>
             </TableRow>
             <TableRow v-else v-for="account in accounts" :key="account.name">
               <TableCell class="font-medium">{{ account.name }}</TableCell>
               <TableCell class="text-sm text-gray-500">{{ account.path }}</TableCell>
               <TableCell class="text-right">
                 <div class="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" @click="goCreateTask(account.name)">创建任务</Button>
-                  <Button size="sm" variant="outline" @click="openEditDialog(account.name)">更新</Button>
-                  <Button size="sm" variant="destructive" @click="openDeleteDialog(account.name)">删除</Button>
+                  <Button size="sm" variant="outline" @click="goCreateTask(account.name)">{{ t('accounts.list.createTask') }}</Button>
+                  <Button size="sm" variant="outline" @click="openEditDialog(account.name)">{{ t('accounts.list.update') }}</Button>
+                  <Button size="sm" variant="destructive" @click="openDeleteDialog(account.name)">{{ t('accounts.list.delete') }}</Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -200,23 +202,23 @@ onMounted(fetchAccounts)
     <Dialog v-model:open="isCreateDialogOpen">
       <DialogContent class="sm:max-w-[700px]">
         <DialogHeader>
-          <DialogTitle>添加闲鱼账号</DialogTitle>
-          <DialogDescription>粘贴通过 Chrome 插件提取的 JSON 内容。</DialogDescription>
+          <DialogTitle>{{ t('accounts.createDialog.title') }}</DialogTitle>
+          <DialogDescription>{{ t('accounts.createDialog.description') }}</DialogDescription>
         </DialogHeader>
         <div class="space-y-4">
           <div class="grid gap-2">
-            <Label>账号名称</Label>
-            <Input v-model="newName" placeholder="例如：acc_1" />
+            <Label>{{ t('accounts.createDialog.name') }}</Label>
+            <Input v-model="newName" :placeholder="t('accounts.createDialog.namePlaceholder')" />
           </div>
           <div class="grid gap-2">
-            <Label>JSON 内容</Label>
-            <Textarea v-model="newContent" class="min-h-[200px]" placeholder="请粘贴登录状态 JSON..." />
+            <Label>{{ t('accounts.createDialog.jsonContent') }}</Label>
+            <Textarea v-model="newContent" class="min-h-[200px]" :placeholder="t('accounts.createDialog.jsonPlaceholder')" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="isCreateDialogOpen = false">取消</Button>
+          <Button variant="outline" @click="isCreateDialogOpen = false">{{ t('common.cancel') }}</Button>
           <Button :disabled="isSaving" @click="handleCreateAccount">
-            {{ isSaving ? '保存中...' : '保存' }}
+            {{ isSaving ? t('common.saving') : t('common.save') }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -225,19 +227,19 @@ onMounted(fetchAccounts)
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent class="sm:max-w-[700px]">
         <DialogHeader>
-          <DialogTitle>更新账号：{{ editName }}</DialogTitle>
-          <DialogDescription>替换账号的登录状态 JSON。</DialogDescription>
+          <DialogTitle>{{ t('accounts.editDialog.title', { name: editName }) }}</DialogTitle>
+          <DialogDescription>{{ t('accounts.editDialog.description') }}</DialogDescription>
         </DialogHeader>
         <div class="space-y-4">
           <div class="grid gap-2">
-            <Label>JSON 内容</Label>
+            <Label>{{ t('accounts.createDialog.jsonContent') }}</Label>
             <Textarea v-model="editContent" class="min-h-[200px]" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" @click="isEditDialogOpen = false">取消</Button>
+          <Button variant="outline" @click="isEditDialogOpen = false">{{ t('common.cancel') }}</Button>
           <Button :disabled="isSaving" @click="handleUpdateAccount">
-            {{ isSaving ? '保存中...' : '保存' }}
+            {{ isSaving ? t('common.saving') : t('common.save') }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -246,13 +248,13 @@ onMounted(fetchAccounts)
     <Dialog v-model:open="isDeleteDialogOpen">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>删除账号</DialogTitle>
-          <DialogDescription>确认删除账号 {{ deleteName }} 吗？该操作不可恢复。</DialogDescription>
+          <DialogTitle>{{ t('accounts.deleteDialog.title') }}</DialogTitle>
+          <DialogDescription>{{ t('accounts.deleteDialog.description', { name: deleteName }) }}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" @click="isDeleteDialogOpen = false">取消</Button>
+          <Button variant="outline" @click="isDeleteDialogOpen = false">{{ t('common.cancel') }}</Button>
           <Button variant="destructive" :disabled="isSaving" @click="handleDeleteAccount">
-            {{ isSaving ? '删除中...' : '删除' }}
+            {{ isSaving ? t('accounts.deleteDialog.deleting') : t('accounts.list.delete') }}
           </Button>
         </DialogFooter>
       </DialogContent>

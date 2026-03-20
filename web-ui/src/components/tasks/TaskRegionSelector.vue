@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -19,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
 }>()
+const { t } = useI18n()
 
 const tree = regionTree as RegionTree
 const provinceKeys = Object.keys(tree)
@@ -114,7 +116,7 @@ watch(() => props.modelValue, syncFromModel, { immediate: true })
         @update:model-value="(value) => handleProvinceChange(String(value || ''))"
       >
         <SelectTrigger>
-          <SelectValue placeholder="选择省份 / 全国" />
+          <SelectValue :placeholder="t('tasks.region.provincePlaceholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem v-for="option in provinceOptions" :key="option" :value="option">
@@ -129,7 +131,7 @@ watch(() => props.modelValue, syncFromModel, { immediate: true })
         @update:model-value="(value) => handleCityChange(String(value || ''))"
       >
         <SelectTrigger>
-          <SelectValue placeholder="选择城市 / 区域组" />
+          <SelectValue :placeholder="t('tasks.region.cityPlaceholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem v-for="option in cityOptions" :key="option" :value="option">
@@ -144,7 +146,7 @@ watch(() => props.modelValue, syncFromModel, { immediate: true })
         @update:model-value="(value) => handleDistrictChange(String(value || ''))"
       >
         <SelectTrigger>
-          <SelectValue placeholder="选择区 / 县" />
+          <SelectValue :placeholder="t('tasks.region.districtPlaceholder')" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem v-for="option in districtOptions" :key="option" :value="option">
@@ -155,15 +157,15 @@ watch(() => props.modelValue, syncFromModel, { immediate: true })
     </div>
 
     <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-      <span>区域选项基于闲鱼页面抓取快照内置，不再依赖实时外站请求</span>
+      <span>{{ t('tasks.region.helper') }}</span>
     </div>
 
     <div class="flex flex-wrap gap-2">
       <Button type="button" variant="ghost" size="sm" @click="clearSelection">
-        清空区域
+        {{ t('tasks.region.clear') }}
       </Button>
       <span v-if="currentPath" class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-        当前：{{ currentPath }}
+        {{ t('tasks.region.current', { path: currentPath }) }}
       </span>
     </div>
   </div>

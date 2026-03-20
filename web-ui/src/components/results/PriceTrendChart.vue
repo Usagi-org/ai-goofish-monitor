@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 interface TrendPoint {
   day: string
@@ -10,6 +11,7 @@ interface TrendPoint {
 const props = defineProps<{
   points: TrendPoint[]
 }>()
+const { t } = useI18n()
 
 const chartWidth = 720
 const chartHeight = 220
@@ -75,17 +77,17 @@ const areaPath = computed(() => {
       <div class="flex items-center gap-3">
         <span class="inline-flex items-center gap-1">
           <span class="h-2.5 w-2.5 rounded-full bg-[#1f6f78]" />
-          均价
+          {{ t('results.chart.avgPrice') }}
         </span>
         <span class="inline-flex items-center gap-1">
           <span class="h-2.5 w-2.5 rounded-full bg-[#c1683c]" />
-          中位数
+          {{ t('results.chart.medianPrice') }}
         </span>
       </div>
     </div>
 
     <div v-if="validPoints.length === 0" class="rounded-2xl border border-dashed border-[#d0c3af] bg-white/70 px-4 py-10 text-center text-sm text-[#8a7660]">
-      暂无可绘制的趋势数据
+      {{ t('results.chart.noTrend') }}
     </div>
 
     <div v-else>

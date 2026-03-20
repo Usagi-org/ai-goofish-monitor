@@ -11,22 +11,26 @@ import {
   ChevronRight
 } from 'lucide-vue-next'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useI18n } from 'vue-i18n'
 
 const emit = defineEmits<{
   (event: 'navigate'): void
 }>()
 const { isConnected } = useWebSocket()
+const { t } = useI18n()
 
-const navItems = [
-  { to: '/dashboard', label: '监控概览', icon: LayoutDashboard },
-  { to: '/tasks', label: '任务管理', icon: ListTodo },
-  { to: '/accounts', label: '账号管理', icon: Users },
-  { to: '/results', label: '结果查看', icon: Layers },
-  { to: '/logs', label: '运行日志', icon: Terminal },
-  { to: '/settings', label: '系统设置', icon: Settings2 },
-]
+const navItems = computed(() => [
+  { to: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
+  { to: '/tasks', label: t('sidebar.tasks'), icon: ListTodo },
+  { to: '/accounts', label: t('sidebar.accounts'), icon: Users },
+  { to: '/results', label: t('sidebar.results'), icon: Layers },
+  { to: '/logs', label: t('sidebar.logs'), icon: Terminal },
+  { to: '/settings', label: t('sidebar.settings'), icon: Settings2 },
+])
 
-const connectionLabel = computed(() => (isConnected.value ? '后端实时已连接' : '后端连接中'))
+const connectionLabel = computed(() => (
+  isConnected.value ? t('sidebar.backendConnected') : t('sidebar.backendConnecting')
+))
 const connectionTone = computed(() =>
   isConnected.value
     ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
@@ -76,7 +80,7 @@ const connectionTone = computed(() =>
     <!-- Support Section -->
     <div class="mt-12 px-4">
       <div class="rounded-2xl p-4 bg-slate-50/50 border border-slate-100 border-dashed">
-         <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">系统状态</p>
+         <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{{ t('sidebar.systemStatus') }}</p>
          <div class="flex items-center gap-2">
             <div class="w-2 h-2 rounded-full" :class="connectionTone"></div>
             <span class="text-xs font-bold text-slate-600">{{ connectionLabel }}</span>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { BellRing, Radio, ShieldCheck, Send, TestTube2, Trash2, Webhook } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ const props = defineProps<{
   saveSettings: (payload: NotificationSettingsUpdate) => Promise<void>
   testSettings: (payload: { channel?: string; settings: NotificationSettingsUpdate }) => Promise<NotificationTestResponse>
 }>()
+const { t } = useI18n()
 
 const initialValues = reactive<NotificationSettingsUpdate>({})
 const form = reactive<NotificationSettingsUpdate>({})
@@ -76,7 +78,9 @@ function syncFromSettings(settings: NotificationSettings) {
 watch(() => props.settings, syncFromSettings, { immediate: true, deep: true })
 
 const activeChannels = computed(() => props.settings.CONFIGURED_CHANNELS ?? [])
-const summaryText = computed(() => activeChannels.value.length ? activeChannels.value.join(' / ') : '尚未配置可用通知渠道')
+const summaryText = computed(() => (
+  activeChannels.value.length ? activeChannels.value.join(' / ') : t('notifyPanel.noActiveChannels')
+))
 
 function updateSecretField(field: keyof NotificationSettingsUpdate, value: string) {
   mutableForm[field as string] = value
@@ -160,6 +164,10 @@ function resultClass(channel: ChannelKey) {
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-red-200 bg-red-50 text-red-700'
 }
+
+function resolveChannelBadge(channel: ChannelKey) {
+  return isChannelConfigured(channel) ? t('common.active') : t('common.inactive')
+}
 </script>
 
 <template>
@@ -170,13 +178,13 @@ function resultClass(channel: ChannelKey) {
           <div class="space-y-2">
             <div class="flex items-center gap-2 text-slate-800">
               <BellRing class="h-5 w-5 text-sky-600" />
-              <CardTitle>通知推送设置</CardTitle>
+              <CardTitle>{{ t('notifyPanel.title') }}</CardTitle>
             </div>
-            <CardDescription>按渠道单独配置、测试和清空。敏感字段不会回显，留空表示保留现有值。</CardDescription>
+            <CardDescription>{{ t('notifyPanel.description') }}</CardDescription>
           </div>
           <div class="flex flex-wrap gap-2">
-            <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700">已启用：{{ summaryText }}</Badge>
-            <Badge variant="outline" class="border-slate-200 bg-white text-slate-600">支持变量：title / content / price / reason / desktop_link / mobile_link</Badge>
+            <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700">{{ t('notifyPanel.enabledChannels', { channels: summaryText }) }}</Badge>
+            <Badge variant="outline" class="border-slate-200 bg-white text-slate-600">{{ t('notifyPanel.supportedVariables') }}</Badge>
           </div>
         </div>
       </CardHeader>
@@ -184,89 +192,89 @@ function resultClass(channel: ChannelKey) {
         <div class="rounded-2xl border border-slate-200 bg-white/80 p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <p class="text-sm font-semibold text-slate-900">全局行为</p>
-              <p class="text-sm text-slate-500">统一控制所有渠道中的商品链接展示方式。</p>
+              <p class="text-sm font-semibold text-slate-900">{{ t('notifyPanel.globalBehavior') }}</p>
+              <p class="text-sm text-slate-500">{{ t('notifyPanel.globalBehaviorDescription') }}</p>
             </div>
             <div class="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
               <Switch id="pcurl" :model-value="!!form.PCURL_TO_MOBILE" @update:model-value="(value) => form.PCURL_TO_MOBILE = !!value" />
-              <Label for="pcurl" class="text-sm text-slate-700">优先附带手机端链接</Label>
+              <Label for="pcurl" class="text-sm text-slate-700">{{ t('notifyPanel.preferMobileLink') }}</Label>
             </div>
           </div>
         </div>
         <div class="rounded-2xl border border-slate-200 bg-slate-900 p-4 text-slate-100">
           <div class="flex items-center gap-2 text-sm font-semibold">
             <ShieldCheck class="h-4 w-4 text-emerald-300" />
-            配置说明
+            {{ t('notifyPanel.configurationNotes') }}
           </div>
-          <p class="mt-2 text-sm leading-6 text-slate-300">Webhook 的 Query / Body 支持 JSON 模板，测试按钮会直接调用后端真实发送逻辑，能提前发现 token、URL、JSON 格式问题。</p>
+          <p class="mt-2 text-sm leading-6 text-slate-300">{{ t('notifyPanel.configurationNotesDescription') }}</p>
         </div>
       </CardContent>
     </Card>
 
     <div v-if="!isReady" class="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
-      正在加载通知配置...
+      {{ t('notifyPanel.loading') }}
     </div>
 
     <div v-else class="grid gap-4">
       <Card class="border-l-4 border-l-sky-500">
-        <CardHeader><CardTitle class="flex items-center gap-2"><Radio class="h-4 w-4 text-sky-600" /> Ntfy</CardTitle><CardDescription>适合轻量推送，URL 非敏感，可直接回显和修改。</CardDescription></CardHeader>
+        <CardHeader><CardTitle class="flex items-center gap-2"><Radio class="h-4 w-4 text-sky-600" /> Ntfy</CardTitle><CardDescription>{{ t('notifyPanel.ntfy.description') }}</CardDescription></CardHeader>
         <CardContent><Label>Ntfy Topic URL</Label><Input :model-value="form.NTFY_TOPIC_URL ?? ''" placeholder="https://ntfy.sh/topic" @update:model-value="(value) => updateField('NTFY_TOPIC_URL', String(value))" /></CardContent>
-        <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('ntfy') ? 'default' : 'outline'">{{ isChannelConfigured('ntfy') ? '已启用' : '未启用' }}</Badge><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('ntfy')"><TestTube2 class="h-4 w-4" />测试此渠道</Button></CardFooter>
+        <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('ntfy') ? 'default' : 'outline'">{{ resolveChannelBadge('ntfy') }}</Badge><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('ntfy')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.testThisChannel') }}</Button></CardFooter>
       </Card>
 
       <div class="grid gap-4 xl:grid-cols-2">
         <Card class="border-l-4 border-l-amber-500">
-          <CardHeader><CardTitle>Bark</CardTitle><CardDescription>URL 含设备 key，已改为不回显模式。</CardDescription></CardHeader>
-          <CardContent class="space-y-2"><Label>Bark URL</Label><Input :model-value="form.BARK_URL ?? ''" placeholder="已配置则留空保留，输入新值覆盖" @update:model-value="(value) => updateSecretField('BARK_URL', String(value))" /><p class="text-xs text-slate-500">{{ secretConfigured.BARK_URL ? '已配置敏感值，当前页面不回显。' : '尚未配置。' }}</p></CardContent>
-          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('bark') ? 'default' : 'outline'">{{ isChannelConfigured('bark') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('bark')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('bark')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
+          <CardHeader><CardTitle>Bark</CardTitle><CardDescription>{{ t('notifyPanel.bark.description') }}</CardDescription></CardHeader>
+          <CardContent class="space-y-2"><Label>Bark URL</Label><Input :model-value="form.BARK_URL ?? ''" :placeholder="t('notifyPanel.secretPlaceholder')" @update:model-value="(value) => updateSecretField('BARK_URL', String(value))" /><p class="text-xs text-slate-500">{{ secretConfigured.BARK_URL ? t('notifyPanel.bark.configuredHint') : t('notifyPanel.notConfigured') }}</p></CardContent>
+          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('bark') ? 'default' : 'outline'">{{ resolveChannelBadge('bark') }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('bark')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('bark')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
         </Card>
 
         <Card class="border-l-4 border-l-violet-500">
-          <CardHeader><CardTitle>Gotify</CardTitle><CardDescription>URL 与 Token 必须成对配置。</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Gotify</CardTitle><CardDescription>{{ t('notifyPanel.gotify.description') }}</CardDescription></CardHeader>
           <CardContent class="grid gap-4 md:grid-cols-2">
             <div class="grid gap-2"><Label>Gotify URL</Label><Input :model-value="form.GOTIFY_URL ?? ''" placeholder="https://gotify.example.com" @update:model-value="(value) => updateField('GOTIFY_URL', String(value))" /></div>
-            <div class="grid gap-2"><Label>Gotify Token</Label><Input type="password" :model-value="form.GOTIFY_TOKEN ?? ''" placeholder="已配置则留空保留" @update:model-value="(value) => updateSecretField('GOTIFY_TOKEN', String(value))" /></div>
+            <div class="grid gap-2"><Label>Gotify Token</Label><Input type="password" :model-value="form.GOTIFY_TOKEN ?? ''" :placeholder="t('notifyPanel.secretKeepPlaceholder')" @update:model-value="(value) => updateSecretField('GOTIFY_TOKEN', String(value))" /></div>
           </CardContent>
-          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('gotify') ? 'default' : 'outline'">{{ isChannelConfigured('gotify') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('gotify')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('gotify')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
+          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('gotify') ? 'default' : 'outline'">{{ resolveChannelBadge('gotify') }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('gotify')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('gotify')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
         </Card>
       </div>
 
       <div class="grid gap-4 xl:grid-cols-2">
         <Card class="border-l-4 border-l-emerald-500">
-          <CardHeader><CardTitle>企业微信机器人</CardTitle><CardDescription>Bot URL 含 key，不回显，仅支持更新或清空。</CardDescription></CardHeader>
-          <CardContent class="space-y-2"><Label>企业微信 Bot URL</Label><Input :model-value="form.WX_BOT_URL ?? ''" placeholder="已配置则留空保留，输入新值覆盖" @update:model-value="(value) => updateSecretField('WX_BOT_URL', String(value))" /><p class="text-xs text-slate-500">{{ secretConfigured.WX_BOT_URL ? '已保存机器人地址。' : '尚未配置。' }}</p></CardContent>
-          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('wecom') ? 'default' : 'outline'">{{ isChannelConfigured('wecom') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('wecom')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('wecom')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
+          <CardHeader><CardTitle>{{ t('notifyPanel.wecom.title') }}</CardTitle><CardDescription>{{ t('notifyPanel.wecom.description') }}</CardDescription></CardHeader>
+          <CardContent class="space-y-2"><Label>{{ t('notifyPanel.wecom.urlLabel') }}</Label><Input :model-value="form.WX_BOT_URL ?? ''" :placeholder="t('notifyPanel.secretPlaceholder')" @update:model-value="(value) => updateSecretField('WX_BOT_URL', String(value))" /><p class="text-xs text-slate-500">{{ secretConfigured.WX_BOT_URL ? t('notifyPanel.wecom.configuredHint') : t('notifyPanel.notConfigured') }}</p></CardContent>
+          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('wecom') ? 'default' : 'outline'">{{ resolveChannelBadge('wecom') }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('wecom')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('wecom')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
         </Card>
 
         <Card class="border-l-4 border-l-cyan-500">
-          <CardHeader><CardTitle>Telegram</CardTitle><CardDescription>Bot Token 属于敏感字段，Chat ID 与反代地址可直接查看和修改。</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Telegram</CardTitle><CardDescription>{{ t('notifyPanel.telegram.description') }}</CardDescription></CardHeader>
           <CardContent class="grid gap-4 md:grid-cols-3">
-            <div class="grid gap-2"><Label>Bot Token</Label><Input type="password" :model-value="form.TELEGRAM_BOT_TOKEN ?? ''" placeholder="已配置则留空保留" @update:model-value="(value) => updateSecretField('TELEGRAM_BOT_TOKEN', String(value))" /></div>
-            <div class="grid gap-2"><Label>Chat ID</Label><Input :model-value="form.TELEGRAM_CHAT_ID ?? ''" placeholder="例如：123456789" @update:model-value="(value) => updateField('TELEGRAM_CHAT_ID', String(value))" /></div>
-            <div class="grid gap-2"><Label>API / 反代地址</Label><Input :model-value="form.TELEGRAM_API_BASE_URL ?? ''" placeholder="https://api.telegram.org" @update:model-value="(value) => updateField('TELEGRAM_API_BASE_URL', String(value))" /></div>
+            <div class="grid gap-2"><Label>Bot Token</Label><Input type="password" :model-value="form.TELEGRAM_BOT_TOKEN ?? ''" :placeholder="t('notifyPanel.secretKeepPlaceholder')" @update:model-value="(value) => updateSecretField('TELEGRAM_BOT_TOKEN', String(value))" /></div>
+            <div class="grid gap-2"><Label>Chat ID</Label><Input :model-value="form.TELEGRAM_CHAT_ID ?? ''" :placeholder="t('notifyPanel.telegram.chatIdPlaceholder')" @update:model-value="(value) => updateField('TELEGRAM_CHAT_ID', String(value))" /></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.telegram.apiBaseUrl') }}</Label><Input :model-value="form.TELEGRAM_API_BASE_URL ?? ''" placeholder="https://api.telegram.org" @update:model-value="(value) => updateField('TELEGRAM_API_BASE_URL', String(value))" /></div>
           </CardContent>
-          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('telegram') ? 'default' : 'outline'">{{ isChannelConfigured('telegram') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('telegram')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('telegram')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
+          <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('telegram') ? 'default' : 'outline'">{{ resolveChannelBadge('telegram') }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('telegram')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('telegram')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
         </Card>
       </div>
 
       <Card class="border-l-4 border-l-rose-500">
-        <CardHeader><CardTitle class="flex items-center gap-2"><Webhook class="h-4 w-4 text-rose-500" /> 通用 Webhook</CardTitle><CardDescription>支持 JSON 模板变量；URL 和 Headers 作为敏感字段不回显。</CardDescription></CardHeader>
+        <CardHeader><CardTitle class="flex items-center gap-2"><Webhook class="h-4 w-4 text-rose-500" /> {{ t('notifyPanel.webhook.title') }}</CardTitle><CardDescription>{{ t('notifyPanel.webhook.description') }}</CardDescription></CardHeader>
         <CardContent class="grid gap-4">
           <div class="grid gap-4 md:grid-cols-2">
-            <div class="grid gap-2"><Label>Webhook URL</Label><Input :model-value="form.WEBHOOK_URL ?? ''" placeholder="已配置则留空保留，输入新值覆盖" @update:model-value="(value) => updateSecretField('WEBHOOK_URL', String(value))" /></div>
-            <div class="grid gap-2"><Label>Webhook Headers (JSON)</Label><Textarea :model-value="form.WEBHOOK_HEADERS ?? ''" placeholder='已配置则留空保留，例如：{"Authorization":"Bearer token"}' @update:model-value="(value) => updateSecretField('WEBHOOK_HEADERS', String(value))" /></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.urlLabel') }}</Label><Input :model-value="form.WEBHOOK_URL ?? ''" :placeholder="t('notifyPanel.secretPlaceholder')" @update:model-value="(value) => updateSecretField('WEBHOOK_URL', String(value))" /></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.headersLabel') }}</Label><Textarea :model-value="form.WEBHOOK_HEADERS ?? ''" :placeholder="t('notifyPanel.webhook.headersPlaceholder')" @update:model-value="(value) => updateSecretField('WEBHOOK_HEADERS', String(value))" /></div>
           </div>
           <div class="grid gap-4 md:grid-cols-2">
-            <div class="grid gap-2"><Label>Webhook 方法</Label><Select :model-value="form.WEBHOOK_METHOD || 'POST'" @update:model-value="(value) => updateField('WEBHOOK_METHOD', String(value))"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="POST">POST</SelectItem><SelectItem value="GET">GET</SelectItem></SelectContent></Select></div>
-            <div class="grid gap-2"><Label>Webhook 内容类型</Label><Select :model-value="form.WEBHOOK_CONTENT_TYPE || 'JSON'" @update:model-value="(value) => updateField('WEBHOOK_CONTENT_TYPE', String(value))"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="JSON">JSON</SelectItem><SelectItem value="FORM">FORM</SelectItem></SelectContent></Select></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.methodLabel') }}</Label><Select :model-value="form.WEBHOOK_METHOD || 'POST'" @update:model-value="(value) => updateField('WEBHOOK_METHOD', String(value))"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="POST">POST</SelectItem><SelectItem value="GET">GET</SelectItem></SelectContent></Select></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.contentTypeLabel') }}</Label><Select :model-value="form.WEBHOOK_CONTENT_TYPE || 'JSON'" @update:model-value="(value) => updateField('WEBHOOK_CONTENT_TYPE', String(value))"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="JSON">JSON</SelectItem><SelectItem value="FORM">FORM</SelectItem></SelectContent></Select></div>
           </div>
           <div class="grid gap-4 md:grid-cols-2">
-            <div class="grid gap-2"><Label>Webhook Query 参数 (JSON)</Label><Textarea :model-value="form.WEBHOOK_QUERY_PARAMETERS ?? ''" placeholder='例如：{"task":"{{title}}"}' @update:model-value="(value) => updateField('WEBHOOK_QUERY_PARAMETERS', String(value))" /></div>
-            <div class="grid gap-2"><Label>Webhook Body (JSON 模板)</Label><Textarea :model-value="form.WEBHOOK_BODY ?? ''" placeholder='例如：{"message":"{{content}}","price":"{{price}}"}' @update:model-value="(value) => updateField('WEBHOOK_BODY', String(value))" /></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.queryLabel') }}</Label><Textarea :model-value="form.WEBHOOK_QUERY_PARAMETERS ?? ''" :placeholder="t('notifyPanel.webhook.queryPlaceholder')" @update:model-value="(value) => updateField('WEBHOOK_QUERY_PARAMETERS', String(value))" /></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.webhook.bodyLabel') }}</Label><Textarea :model-value="form.WEBHOOK_BODY ?? ''" :placeholder="t('notifyPanel.webhook.bodyPlaceholder')" @update:model-value="(value) => updateField('WEBHOOK_BODY', String(value))" /></div>
           </div>
-          <div v-pre class="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-700">变量说明：{{title}} 是通知标题，{{content}} 是完整正文，另外支持 {{price}}、{{reason}}、{{desktop_link}}、{{mobile_link}}。</div>
+          <div v-pre class="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-700">{{ t('notifyPanel.webhook.variablesHelp') }}</div>
         </CardContent>
-        <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('webhook') ? 'default' : 'outline'">{{ isChannelConfigured('webhook') ? '已启用' : '未启用' }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('webhook')"><Trash2 class="h-4 w-4" />清空</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('webhook')"><TestTube2 class="h-4 w-4" />测试</Button></div></CardFooter>
+        <CardFooter class="justify-between"><Badge :variant="isChannelConfigured('webhook') ? 'default' : 'outline'">{{ resolveChannelBadge('webhook') }}</Badge><div class="flex gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('webhook')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('webhook')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
       </Card>
 
       <div v-for="channel in ['ntfy', 'bark', 'gotify', 'wecom', 'telegram', 'webhook']" :key="channel">
@@ -277,10 +285,10 @@ function resultClass(channel: ChannelKey) {
     </div>
 
     <div class="sticky bottom-0 z-10 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur md:flex-row md:items-center md:justify-between">
-      <div class="flex items-center gap-2 text-sm text-slate-600"><Send class="h-4 w-4 text-slate-400" />保存会只提交改动字段；清空操作会显式删除对应渠道配置。</div>
+      <div class="flex items-center gap-2 text-sm text-slate-600"><Send class="h-4 w-4 text-slate-400" />{{ t('notifyPanel.footerHint') }}</div>
       <div class="flex flex-col gap-2 sm:flex-row">
-        <Button variant="outline" :disabled="props.isSaving" @click="handleTest()"><TestTube2 class="h-4 w-4" />{{ testingChannel === 'all' ? '测试中...' : '测试全部已启用渠道' }}</Button>
-        <Button :disabled="props.isSaving" @click="handleSave"><Send class="h-4 w-4" />保存通知设置</Button>
+        <Button variant="outline" :disabled="props.isSaving" @click="handleTest()"><TestTube2 class="h-4 w-4" />{{ testingChannel === 'all' ? t('common.testing') : t('notifyPanel.testAll') }}</Button>
+        <Button :disabled="props.isSaving" @click="handleSave"><Send class="h-4 w-4" />{{ t('notifyPanel.save') }}</Button>
       </div>
     </div>
   </div>

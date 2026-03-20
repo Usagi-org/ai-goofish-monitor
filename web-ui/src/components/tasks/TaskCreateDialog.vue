@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { createTaskWithAI } from '@/api/tasks'
 import { useTaskGenerationJob } from '@/composables/useTaskGenerationJob'
 import type { TaskGenerateRequest } from '@/types/task.d.ts'
@@ -17,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+const { t } = useI18n()
 
 const props = defineProps<{
   accountOptions?: { name: string; path: string }[]
@@ -57,11 +59,11 @@ async function handleCreateTask(data: TaskGenerateRequest) {
       return
     }
     emit('created')
-    toast({ title: '任务创建成功' })
+    toast({ title: t('tasks.toasts.created') })
     isFormOpen.value = false
   } catch (error) {
     toast({
-      title: '创建任务失败',
+      title: t('tasks.toasts.createFailed'),
       description: (error as Error).message,
       variant: 'destructive',
     })
@@ -92,7 +94,7 @@ watch(
     if (status === 'completed') {
       isSubmitting.value = false
       emit('created')
-      toast({ title: '任务创建成功' })
+      toast({ title: t('tasks.toasts.created') })
       isProgressOpen.value = false
       clearJob()
       return
@@ -100,7 +102,7 @@ watch(
     if (status === 'failed') {
       isSubmitting.value = false
       toast({
-        title: '任务创建失败',
+        title: t('tasks.toasts.createFailed'),
         description: activeJob.value?.error || activeJob.value?.message,
         variant: 'destructive',
       })
@@ -112,7 +114,7 @@ watch(pollingError, (value) => {
   if (!value) return
   isSubmitting.value = false
   toast({
-    title: '任务进度获取失败',
+    title: t('tasks.toasts.progressFailed'),
     description: value.message,
     variant: 'destructive',
   })
@@ -122,11 +124,11 @@ watch(pollingError, (value) => {
 <template>
   <Dialog v-model:open="isFormOpen">
     <DialogTrigger as-child>
-      <Button>+ 创建新任务</Button>
+      <Button>{{ t('tasks.createDialog.trigger') }}</Button>
     </DialogTrigger>
     <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
       <DialogHeader>
-        <DialogTitle>创建新监控任务（AI或KeyWord）</DialogTitle>
+        <DialogTitle>{{ t('tasks.createDialog.title') }}</DialogTitle>
       </DialogHeader>
       <TaskForm
         mode="create"
@@ -137,7 +139,7 @@ watch(pollingError, (value) => {
       />
       <DialogFooter>
         <Button type="submit" form="task-form" :disabled="isSubmitting">
-          {{ isSubmitting ? '提交中...' : '创建任务' }}
+          {{ isSubmitting ? t('tasks.createDialog.submitting') : t('tasks.createDialog.submit') }}
         </Button>
       </DialogFooter>
     </DialogContent>

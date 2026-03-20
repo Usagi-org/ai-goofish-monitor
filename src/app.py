@@ -26,9 +26,11 @@ from src.api.dependencies import (
 from src.services.task_service import TaskService
 from src.services.process_service import ProcessService
 from src.services.scheduler_service import SchedulerService
+from src.services.task_log_cleanup_service import cleanup_task_logs
 from src.services.task_generation_service import TaskGenerationService
 from src.infrastructure.persistence.sqlite_bootstrap import bootstrap_sqlite_storage
 from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
+from src.infrastructure.config.settings import settings as app_settings
 
 
 # 全局服务实例
@@ -66,6 +68,7 @@ async def lifespan(app: FastAPI):
     # 启动时
     print("正在启动应用...")
     bootstrap_sqlite_storage()
+    cleanup_task_logs(keep_days=app_settings.task_log_retention_days)
 
     # 重置所有任务状态为停止
     task_repo = SqliteTaskRepository()
@@ -132,7 +135,6 @@ async def health_check():
 from fastapi import Request, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from src.infrastructure.config.settings import settings
 
 class LoginRequest(BaseModel):
     username: str
@@ -142,7 +144,7 @@ class LoginRequest(BaseModel):
 @app.post("/auth/status")
 async def auth_status(payload: LoginRequest):
     """检查认证状态"""
-    if payload.username == settings.web_username and payload.password == settings.web_password:
+    if payload.username == app_settings.web_username and payload.password == app_settings.web_password:
         return {"authenticated": True, "username": payload.username}
     raise HTTPException(status_code=401, detail="认证失败")
 
@@ -187,5 +189,5 @@ if __name__ == "__main__":
     import uvicorn
     from src.infrastructure.config.settings import settings
 
-    print(f"启动新架构应用，端口: {settings.server_port}")
-    uvicorn.run(app, host="0.0.0.0", port=settings.server_port)
+    print(f"启动新架构应用，端口: {app_settings.server_port}")
+    uvicorn.run(app, host="0.0.0.0", port=app_settings.server_port)

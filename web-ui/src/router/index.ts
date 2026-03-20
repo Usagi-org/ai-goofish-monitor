@@ -1,13 +1,15 @@
+import { watch } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useAuth } from '@/composables/useAuth'
+import { i18n, t } from '@/i18n'
 
 const routes = [
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),
-    meta: { title: '登录' },
+    meta: { titleKey: 'routes.login' },
   },
   {
     path: '/',
@@ -18,37 +20,37 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/DashboardView.vue'),
-        meta: { title: '监控概览', requiresAuth: true },
+        meta: { titleKey: 'routes.dashboard', requiresAuth: true },
       },
       {
         path: 'tasks',
         name: 'Tasks',
         component: () => import('@/views/TasksView.vue'),
-        meta: { title: '任务管理', requiresAuth: true },
+        meta: { titleKey: 'routes.tasks', requiresAuth: true },
       },
       {
         path: 'accounts',
         name: 'Accounts',
         component: () => import('@/views/AccountsView.vue'),
-        meta: { title: '账号管理', requiresAuth: true },
+        meta: { titleKey: 'routes.accounts', requiresAuth: true },
       },
       {
         path: 'results',
         name: 'Results',
         component: () => import('@/views/ResultsView.vue'),
-        meta: { title: '结果查看', requiresAuth: true },
+        meta: { titleKey: 'routes.results', requiresAuth: true },
       },
       {
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/LogsView.vue'),
-        meta: { title: '运行日志', requiresAuth: true },
+        meta: { titleKey: 'routes.logs', requiresAuth: true },
       },
       {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/SettingsView.vue'),
-        meta: { title: '系统设置', requiresAuth: true },
+        meta: { titleKey: 'routes.settings', requiresAuth: true },
       },
     ],
   },
@@ -64,11 +66,17 @@ const router = createRouter({
   routes,
 })
 
+function updateDocumentTitle() {
+  const currentRoute = router.currentRoute.value
+  const titleKey = typeof currentRoute.meta.titleKey === 'string'
+    ? currentRoute.meta.titleKey
+    : null
+  const appName = t('app.name')
+  document.title = titleKey ? `${t(titleKey)} - ${appName}` : appName
+}
+
 router.beforeEach((to, _from, next) => {
   const { isAuthenticated } = useAuth()
-  
-  // Set document title
-  document.title = `${to.meta.title} - 闲鱼智能监控` || '闲鱼智能监控'
 
   if (to.meta.requiresAuth && !isAuthenticated.value) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
@@ -78,5 +86,16 @@ router.beforeEach((to, _from, next) => {
     next()
   }
 })
+
+router.afterEach(() => {
+  updateDocumentTitle()
+})
+
+watch(
+  () => i18n.global.locale.value,
+  () => {
+    updateDocumentTitle()
+  },
+)
 
 export default router

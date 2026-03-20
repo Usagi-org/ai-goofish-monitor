@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ResultItem } from '@/types/result.d.ts'
 import {
   Card,
@@ -10,12 +11,14 @@ import {
 } from '@/components/ui/card'
 import Badge from '@/components/ui/badge/Badge.vue'
 import { ExternalLink, TrendingUp, TrendingDown, Info, User, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-vue-next'
+import { formatDateTime } from '@/i18n'
 
 interface Props {
   item: ResultItem
 }
 
 const props = defineProps<Props>()
+const { t } = useI18n()
 
 const info = props.item.商品信息
 const seller = props.item.卖家信息
@@ -24,15 +27,15 @@ const priceInsight = props.item.price_insight
 
 const isRecommended = ai?.is_recommended === true
 const recommendationStatus = computed(() => {
-  if (ai?.is_recommended === true) return { label: '强烈推荐', color: 'bg-emerald-500', icon: CheckCircle2, text: 'text-emerald-600', bg: 'bg-emerald-50' }
-  if (ai?.is_recommended === false) return { label: '不建议购买', color: 'bg-rose-500', icon: XCircle, text: 'text-rose-600', bg: 'bg-rose-50' }
-  return { label: '待观察', color: 'bg-amber-500', icon: AlertCircle, text: 'text-amber-600', bg: 'bg-amber-50' }
+  if (ai?.is_recommended === true) return { label: t('results.card.strongRecommend'), color: 'bg-emerald-500', icon: CheckCircle2, text: 'text-emerald-600', bg: 'bg-emerald-50' }
+  if (ai?.is_recommended === false) return { label: t('results.card.notRecommended'), color: 'bg-rose-500', icon: XCircle, text: 'text-rose-600', bg: 'bg-rose-50' }
+  return { label: t('results.card.pending'), color: 'bg-amber-500', icon: AlertCircle, text: 'text-amber-600', bg: 'bg-amber-50' }
 })
 
 const imageUrl = info.商品图片列表?.[0] || info.商品主图链接 || ''
 const crawlTime = props.item.爬取时间
-  ? new Date(props.item.爬取时间).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  : '未知'
+  ? formatDateTime(props.item.爬取时间, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  : t('common.unknown')
 const matchScore = ai?.value_score ?? 0
 
 const expanded = ref(false)
@@ -53,7 +56,7 @@ const expanded = ref(false)
       <!-- Overlays -->
       <div class="absolute top-3 left-3 flex gap-2">
         <Badge v-if="isRecommended" variant="default" class="bg-emerald-500/90 backdrop-blur-md border-none shadow-sm">
-          精选
+          {{ t('results.card.curated') }}
         </Badge>
       </div>
       <div class="absolute top-3 right-3">
@@ -100,7 +103,7 @@ const expanded = ref(false)
         </div>
 
         <p class="text-xs leading-relaxed text-slate-600" :class="{ 'line-clamp-2': !expanded }">
-           {{ ai?.reason || 'AI 正在分析该商品的潜在价值...' }}
+           {{ ai?.reason || t('results.card.analyzing') }}
         </p>
         
         <button 
@@ -108,7 +111,7 @@ const expanded = ref(false)
           @click="expanded = !expanded" 
           class="mt-1 text-[10px] font-bold uppercase text-primary/70 hover:text-primary transition-colors flex items-center gap-1"
         >
-          {{ expanded ? '收起详情' : '阅读完整理由' }}
+          {{ expanded ? t('results.card.collapse') : t('results.card.expand') }}
           <Info class="w-3 h-3" />
         </button>
       </div>
@@ -117,7 +120,7 @@ const expanded = ref(false)
       <div v-if="priceInsight?.observation_count" class="mt-4 grid grid-cols-2 gap-3">
         <div class="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50 group/stat">
           <div class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 mb-1">
-            <TrendingUp class="w-3 h-3" /> 市场均价
+            <TrendingUp class="w-3 h-3" /> {{ t('results.card.marketAvg') }}
           </div>
           <div class="text-sm font-bold text-slate-700">
             {{ priceInsight.market_avg_price ? `¥${priceInsight.market_avg_price}` : '—' }}
@@ -125,7 +128,7 @@ const expanded = ref(false)
         </div>
         <div class="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100/50">
           <div class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 mb-1">
-            <TrendingDown class="w-3 h-3" /> 历史低位
+            <TrendingDown class="w-3 h-3" /> {{ t('results.card.historicalLow') }}
           </div>
           <div class="text-sm font-bold text-slate-700">
             {{ priceInsight.min_price ? `¥${priceInsight.min_price}` : '—' }}
@@ -138,7 +141,7 @@ const expanded = ref(false)
       <div class="flex items-center gap-3 text-slate-400">
         <div class="flex items-center gap-1">
           <User class="w-3 h-3" />
-          <span class="truncate max-w-[60px]">{{ seller.卖家昵称 || info.卖家昵称 || '匿名' }}</span>
+          <span class="truncate max-w-[60px]">{{ seller.卖家昵称 || info.卖家昵称 || t('results.card.anonymous') }}</span>
         </div>
         <div class="flex items-center gap-1">
           <Clock class="w-3 h-3" />
@@ -146,7 +149,7 @@ const expanded = ref(false)
         </div>
       </div>
       <a :href="info.商品链接" target="_blank" class="flex items-center gap-1 text-primary font-bold hover:gap-1.5 transition-all">
-        详情 <ExternalLink class="w-3 h-3" />
+        {{ t('results.card.detail') }} <ExternalLink class="w-3 h-3" />
       </a>
     </CardFooter>
   </Card>

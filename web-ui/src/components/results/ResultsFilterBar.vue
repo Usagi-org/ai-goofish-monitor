@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/button'
 interface FileOption {
   value: string
   label: string
+  taskName?: string
 }
 
 interface Props {
@@ -29,6 +31,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useI18n()
 
 const options = computed(() => {
   if (!props.isReady) {
@@ -41,11 +44,11 @@ const options = computed(() => {
 })
 
 const selectedLabel = computed(() => {
-  if (!props.isReady) return '加载任务名称...'
-  if (options.value.length === 0) return '暂无结果，请先运行任务'
-  if (!props.selectedFile) return '请选择任务结果'
+  if (!props.isReady) return t('results.filters.loadingTaskNames')
+  if (options.value.length === 0) return t('results.filters.noResults')
+  if (!props.selectedFile) return t('results.filters.chooseResult')
   const match = options.value.find((option) => option.value === props.selectedFile)
-  return match ? match.label : '任务名称：未命名'
+  return match ? match.label : t('results.filters.taskNameLabel', { task: t('common.unnamed') })
 })
 
 const labelClass = computed(() => {
@@ -111,10 +114,10 @@ function handleToggleKeywordRecommended(value: boolean) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="crawl_time">按爬取时间</SelectItem>
-        <SelectItem value="publish_time">按发布时间</SelectItem>
-        <SelectItem value="price">按价格</SelectItem>
-        <SelectItem value="keyword_hit_count">按命中数</SelectItem>
+        <SelectItem value="crawl_time">{{ t('results.filters.sortByCrawlTime') }}</SelectItem>
+        <SelectItem value="publish_time">{{ t('results.filters.sortByPublishTime') }}</SelectItem>
+        <SelectItem value="price">{{ t('results.filters.sortByPrice') }}</SelectItem>
+        <SelectItem value="keyword_hit_count">{{ t('results.filters.sortByKeywordHits') }}</SelectItem>
       </SelectContent>
     </Select>
 
@@ -126,8 +129,8 @@ function handleToggleKeywordRecommended(value: boolean) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="desc">降序</SelectItem>
-        <SelectItem value="asc">升序</SelectItem>
+        <SelectItem value="desc">{{ t('results.filters.desc') }}</SelectItem>
+        <SelectItem value="asc">{{ t('results.filters.asc') }}</SelectItem>
       </SelectContent>
     </Select>
 
@@ -137,7 +140,7 @@ function handleToggleKeywordRecommended(value: boolean) {
         :model-value="props.aiRecommendedOnly"
         @update:modelValue="(value) => handleToggleAiRecommended(value === true)"
       />
-      <Label for="ai-recommended-only" class="cursor-pointer">仅看AI推荐</Label>
+      <Label for="ai-recommended-only" class="cursor-pointer">{{ t('results.filters.aiOnly') }}</Label>
     </div>
 
     <div class="flex items-center space-x-2">
@@ -146,11 +149,11 @@ function handleToggleKeywordRecommended(value: boolean) {
         :model-value="props.keywordRecommendedOnly"
         @update:modelValue="(value) => handleToggleKeywordRecommended(value === true)"
       />
-      <Label for="keyword-recommended-only" class="cursor-pointer">仅看关键词推荐</Label>
+      <Label for="keyword-recommended-only" class="cursor-pointer">{{ t('results.filters.keywordOnly') }}</Label>
     </div>
 
     <Button @click="emit('refresh')" :disabled="props.isLoading">
-      刷新
+      {{ t('common.refresh') }}
     </Button>
 
     <Button
@@ -158,7 +161,7 @@ function handleToggleKeywordRecommended(value: boolean) {
       @click="emit('export')"
       :disabled="props.isLoading || !props.selectedFile"
     >
-      导出 CSV
+      {{ t('results.filters.exportCsv') }}
     </Button>
 
     <Button
@@ -166,7 +169,7 @@ function handleToggleKeywordRecommended(value: boolean) {
       @click="emit('delete')"
       :disabled="props.isLoading || !props.selectedFile"
     >
-      删除结果
+      {{ t('results.filters.deleteResult') }}
     </Button>
   </div>
 </template>

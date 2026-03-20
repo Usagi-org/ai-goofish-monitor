@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useTasks } from '@/composables/useTasks'
 import type { Task, TaskUpdate } from '@/types/task.d.ts'
 import { parseTaskFormDefaults } from '@/lib/taskFormQuery'
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+const { t } = useI18n()
 
 const {
   tasks,
@@ -58,16 +60,16 @@ function handleDeleteTask(taskId: number) {
 
 async function handleConfirmDeleteTask() {
   if (!taskToDelete.value) {
-    toast({ title: '未找到要删除的任务', variant: 'destructive' })
+    toast({ title: t('tasks.toasts.notFound'), variant: 'destructive' })
     isDeleteDialogOpen.value = false
     return
   }
   try {
     await removeTask(taskToDelete.value.id)
-    toast({ title: '任务已删除' })
+    toast({ title: t('tasks.toasts.deleted') })
   } catch (e) {
     toast({
-      title: '删除任务失败',
+      title: t('tasks.toasts.deleteFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -104,7 +106,7 @@ async function handleUpdateTask(data: TaskUpdate) {
   }
   catch (e) {
     toast({
-      title: '更新任务失败',
+      title: t('tasks.toasts.updateFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -124,8 +126,8 @@ async function handleRefreshCriteria() {
   if (!criteriaTask.value) return
   if (!criteriaDescription.value.trim()) {
     toast({
-      title: '详细需求不能为空',
-      description: '请填写新的详细需求。',
+      title: t('tasks.toasts.descriptionRequired'),
+      description: t('tasks.criteria.descriptionRequired'),
       variant: 'destructive',
     })
     return
@@ -137,7 +139,7 @@ async function handleRefreshCriteria() {
     isCriteriaDialogOpen.value = false
   } catch (e) {
     toast({
-      title: '重新生成失败',
+      title: t('tasks.toasts.regenerateFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -151,7 +153,7 @@ async function handleStartTask(taskId: number) {
     await startTask(taskId)
   } catch (e) {
     toast({
-      title: '启动任务失败',
+      title: t('tasks.toasts.startFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -163,7 +165,7 @@ async function handleStopTask(taskId: number) {
     await stopTask(taskId)
   } catch (e) {
     toast({
-      title: '停止任务失败',
+      title: t('tasks.toasts.stopFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -178,7 +180,7 @@ async function handleToggleEnabled(task: Task, enabled: boolean) {
   } catch (e) {
     task.enabled = previous
     toast({
-      title: '更新状态失败',
+      title: t('tasks.toasts.toggleFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -190,7 +192,7 @@ async function fetchAccountOptions() {
     accountOptions.value = await listAccounts()
   } catch (e) {
     toast({
-      title: '加载账号列表失败',
+      title: t('tasks.toasts.loadAccountsFailed'),
       description: (e as Error).message,
       variant: 'destructive',
     })
@@ -204,7 +206,7 @@ onMounted(fetchAccountOptions)
   <div>
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold text-gray-800">
-        任务管理
+        {{ t('tasks.title') }}
       </h1>
       <TaskCreateDialog :account-options="accountOptions" @created="fetchTasks" />
     </div>
@@ -213,7 +215,7 @@ onMounted(fetchAccountOptions)
     <Dialog v-model:open="isEditDialogOpen">
       <DialogContent class="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>编辑任务: {{ selectedTask?.task_name }}</DialogTitle>
+          <DialogTitle>{{ t('tasks.editDialog.title', { task: selectedTask?.task_name || "" }) }}</DialogTitle>
         </DialogHeader>
         <TaskForm
           v-if="selectedTask"
@@ -225,7 +227,7 @@ onMounted(fetchAccountOptions)
         />
         <DialogFooter>
           <Button type="submit" form="task-form" :disabled="isEditSubmitting">
-            {{ isEditSubmitting ? '保存中...' : '保存更改' }}
+            {{ isEditSubmitting ? t('common.saving') : t('tasks.editDialog.save') }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -235,32 +237,32 @@ onMounted(fetchAccountOptions)
     <Dialog v-model:open="isCriteriaDialogOpen">
       <DialogContent class="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>重新生成 AI 标准</DialogTitle>
+          <DialogTitle>{{ t('tasks.criteria.title') }}</DialogTitle>
           <DialogDescription>
-            修改详细需求后将重新生成 AI 分析标准。
+            {{ t('tasks.criteria.description') }}
           </DialogDescription>
         </DialogHeader>
         <div class="grid gap-3">
-          <label class="text-sm font-medium text-gray-700">详细需求</label>
+          <label class="text-sm font-medium text-gray-700">{{ t('tasks.form.description') }}</label>
           <Textarea
             v-model="criteriaDescription"
             class="min-h-[140px]"
-            placeholder="请用自然语言详细描述你的购买需求，AI将根据此描述生成分析标准..."
+            :placeholder="t('tasks.form.descriptionPlaceholder')"
           />
         </div>
         <DialogFooter>
           <Button variant="outline" @click="isCriteriaDialogOpen = false">
-            取消
+            {{ t('common.cancel') }}
           </Button>
           <Button :disabled="isCriteriaSubmitting" @click="handleRefreshCriteria">
-            {{ isCriteriaSubmitting ? '生成中...' : '重新生成' }}
+            {{ isCriteriaSubmitting ? t('tasks.criteria.generating') : t('tasks.criteria.action') }}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
 
     <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-      <strong class="font-bold">出错了!</strong>
+      <strong class="font-bold">{{ t('common.error') }}</strong>
       <span class="block sm:inline">{{ error.message }}</span>
     </div>
 
@@ -279,14 +281,14 @@ onMounted(fetchAccountOptions)
     <Dialog v-model:open="isDeleteDialogOpen">
       <DialogContent class="sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>删除任务</DialogTitle>
+          <DialogTitle>{{ t('tasks.deleteDialog.title') }}</DialogTitle>
           <DialogDescription>
-            {{ taskToDelete ? `确定删除任务「${taskToDelete.task_name}」吗？此操作不可恢复。` : '确定删除该任务吗？此操作不可恢复。' }}
+            {{ taskToDelete ? t('tasks.deleteDialog.descriptionWithTask', { task: taskToDelete.task_name }) : t('tasks.deleteDialog.descriptionFallback') }}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" @click="isDeleteDialogOpen = false">取消</Button>
-          <Button variant="destructive" @click="handleConfirmDeleteTask">确认删除</Button>
+          <Button variant="outline" @click="isDeleteDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button variant="destructive" @click="handleConfirmDeleteTask">{{ t('tasks.deleteDialog.confirm') }}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

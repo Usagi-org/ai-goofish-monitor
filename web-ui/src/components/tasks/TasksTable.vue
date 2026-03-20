@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { Task } from '@/types/task.d.ts'
 import {
   Table,
@@ -35,6 +36,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useI18n()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
 const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
 const nowMs = ref(Date.now())
@@ -53,22 +55,22 @@ onBeforeUnmount(() => {
 })
 
 const resolveAccountStrategyLabel = (task: Task) => {
-  if (task.account_strategy === 'rotate') return '轮换'
-  if (task.account_strategy === 'fixed') return '固定'
-  return '自动'
+  if (task.account_strategy === 'rotate') return t('tasks.table.accountRotate')
+  if (task.account_strategy === 'fixed') return t('tasks.table.accountFixed')
+  return t('tasks.table.accountAuto')
 }
 
 const resolveAccountName = (task: Task) => {
-  if (!task.account_state_file) return '系统选择'
+  if (!task.account_state_file) return t('tasks.table.systemSelected')
   const segments = task.account_state_file.split('/')
   const filename = segments[segments.length - 1] || task.account_state_file
   return filename.replace('.json', '')
 }
 
 const resolveCountdownText = (task: Task) => {
-  if (!task.cron) return '手动触发'
-  if (!task.enabled) return '已禁用'
-  return formatCountdown(task.next_run_at, nowMs.value) || '等待调度'
+  if (!task.cron) return t('tasks.table.manualTrigger')
+  if (!task.enabled) return t('tasks.table.disabled')
+  return formatCountdown(task.next_run_at, nowMs.value) || t('tasks.table.waitingSchedule')
 }
 
 const resolveCountdownTone = (task: Task) => {
@@ -97,12 +99,12 @@ const emit = defineEmits<{
     <Table>
       <TableHeader class="bg-slate-50/50 border-b border-slate-100">
         <TableRow>
-          <TableHead class="w-[80px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">状态</TableHead>
-          <TableHead class="min-w-[300px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">任务详情</TableHead>
-          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">采集规则</TableHead>
-          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">AI/关键配置</TableHead>
-          <TableHead class="w-[140px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">触发规则</TableHead>
-          <TableHead class="w-[160px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">操作</TableHead>
+          <TableHead class="w-[80px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.status') }}</TableHead>
+          <TableHead class="min-w-[300px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.details') }}</TableHead>
+          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.crawl') }}</TableHead>
+          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.mode') }}</TableHead>
+          <TableHead class="w-[140px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.schedule') }}</TableHead>
+          <TableHead class="w-[160px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">{{ t('tasks.table.headers.actions') }}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -111,7 +113,7 @@ const emit = defineEmits<{
             <TableCell :colspan="6" class="h-32 text-center">
               <div class="flex flex-col items-center justify-center gap-2 text-slate-400">
                 <RefreshCcw class="w-6 h-6 animate-spin" />
-                <span class="text-sm font-medium italic">数据同步中...</span>
+                <span class="text-sm font-medium italic">{{ t('tasks.table.syncing') }}</span>
               </div>
             </TableCell>
           </TableRow>
@@ -121,7 +123,7 @@ const emit = defineEmits<{
             <TableCell :colspan="6" class="h-40 text-center">
                <div class="flex flex-col items-center justify-center gap-2 text-slate-300">
                   <Layers class="w-12 h-12 opacity-20" />
-                  <p class="text-sm font-bold">暂无监测任务</p>
+                  <p class="text-sm font-bold">{{ t('tasks.table.empty') }}</p>
                </div>
             </TableCell>
           </TableRow>
@@ -198,10 +200,10 @@ const emit = defineEmits<{
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                   <Badge variant="outline" class="text-[9px] h-4 border-slate-100 text-slate-400 px-1.5 font-bold bg-white/40">
-                    {{ task.personal_only ? '个人' : '不限' }}
+                    {{ task.personal_only ? t('tasks.table.personalOnly') : t('common.all') }}
                   </Badge>
                   <Badge variant="outline" class="text-[9px] h-4 border-slate-100 text-slate-400 px-1.5 font-bold bg-white/40">
-                    {{ task.free_shipping ? '包邮' : '不限' }}
+                    {{ task.free_shipping ? t('tasks.table.freeShipping') : t('common.all') }}
                   </Badge>
                   <div v-if="task.region" class="flex items-center gap-0.5 text-[9px] font-bold text-slate-400 px-1.5 h-4 bg-slate-50/50 rounded border border-slate-100 truncate max-w-[80px]">
                     <MapPin class="w-2.5 h-2.5" /> {{ task.region }}
@@ -214,7 +216,7 @@ const emit = defineEmits<{
             <TableCell class="align-middle text-center">
               <div class="inline-flex flex-col items-center gap-2">
                 <div v-if="isKeywordMode(task)" class="bg-blue-50/30 p-2 rounded-xl border border-blue-100/50">
-                  <div class="text-xs font-black text-blue-600">{{ task.keyword_rules?.length || 0 }} 组策略</div>
+                  <div class="text-xs font-black text-blue-600">{{ t('tasks.table.keywordStrategies', { count: task.keyword_rules?.length || 0 }) }}</div>
                   <div class="text-[9px] font-bold text-blue-400/70 uppercase mt-0.5 tracking-tighter">OR Logic</div>
                 </div>
                 <div v-else class="flex flex-col items-center gap-1.5">
@@ -230,7 +232,7 @@ const emit = defineEmits<{
                     class="h-6 text-[9px] font-black text-emerald-600 hover:bg-emerald-50 uppercase tracking-widest px-2" 
                     @click="emit('refresh-criteria', task)"
                   >
-                    <RefreshCcw class="w-2.5 h-2.5 mr-1" /> 重刷
+                    <RefreshCcw class="w-2.5 h-2.5 mr-1" /> {{ t('tasks.table.refreshCriteria') }}
                   </Button>
                 </div>
               </div>
@@ -279,7 +281,7 @@ const emit = defineEmits<{
                   @click="emit('run-task', task.id)"
                 >
                   <Play class="w-3 h-3 mr-1.5 fill-current" />
-                  <span class="font-bold text-[11px]">启动</span>
+                  <span class="font-bold text-[11px]">{{ t('tasks.table.start') }}</span>
                 </Button>
                 <Button
                   v-else
@@ -291,7 +293,7 @@ const emit = defineEmits<{
                 >
                   <Square v-if="!isStopping(task.id)" class="w-3 h-3 mr-1.5 fill-current" />
                   <RefreshCcw v-else class="w-3 h-3 mr-1.5 animate-spin" />
-                  <span class="font-bold text-[11px]">{{ isStopping(task.id) ? '停止中' : '停止' }}</span>
+                  <span class="font-bold text-[11px]">{{ isStopping(task.id) ? t('tasks.table.stopping') : t('tasks.table.stop') }}</span>
                 </Button>
 
                 <div class="flex items-center gap-0.5 ml-1">

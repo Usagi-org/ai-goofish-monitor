@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import DashboardTaskSearch from '@/components/layout/DashboardTaskSearch.vue'
+import LocaleToggle from '@/components/layout/LocaleToggle.vue'
 import { 
   Zap, 
   Bell, 
@@ -13,11 +14,13 @@ import {
 } from 'lucide-vue-next'
 import Badge from '@/components/ui/badge/Badge.vue'
 import { useMobileNav } from '@/composables/useMobileNav'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
 const route = useRoute()
 const { toggleMobileNav } = useMobileNav()
 const inactiveSearchValue = ref('')
+const { t } = useI18n()
 
 const isDashboard = computed(() => route.name === 'Dashboard')
 
@@ -57,7 +60,7 @@ function goPrompts() {
         <input 
           type="text" 
           v-model="inactiveSearchValue"
-          placeholder="任务搜索仅在监控概览页可用..."
+          :placeholder="t('header.searchUnavailable')"
           class="w-full h-10 pl-10 pr-4 bg-slate-100/50 border border-slate-200/50 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white focus:border-primary/50"
         />
         <kbd class="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded border border-slate-300 bg-white text-[10px] text-slate-400 font-sans shadow-sm pointer-events-none">
@@ -68,7 +71,11 @@ function goPrompts() {
 
     <!-- Actions -->
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1 sm:gap-2 mr-2">
+      <div class="flex items-center gap-2">
+        <LocaleToggle />
+      </div>
+
+      <div class="flex items-center gap-1 sm:gap-2">
          <Button variant="ghost" size="icon" class="rounded-full text-slate-500 hover:text-primary hover:bg-primary/10" @click="goNotifications">
             <Bell class="w-5 h-5" />
          </Button>
@@ -89,7 +96,7 @@ function goPrompts() {
         </div>
         <div class="text-left hidden lg:block">
            <p class="text-xs font-black text-slate-700 leading-none mb-0.5">Xianyu Admin</p>
-           <p class="text-[10px] text-slate-400 font-medium">账号管理</p>
+           <p class="text-[10px] text-slate-400 font-medium">{{ t('header.accountManagement') }}</p>
         </div>
       </Button>
 

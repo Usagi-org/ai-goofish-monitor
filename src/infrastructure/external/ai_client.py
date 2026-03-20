@@ -26,8 +26,11 @@ from src.services.ai_request_compat import (
     is_temperature_unsupported_error,
     remove_temperature_param,
 )
-from src.services.ai_response_parser import extract_ai_response_content
-from src.services.ai_response_parser import parse_ai_response_json
+from src.services.ai_response_parser import (
+    EmptyAIResponseError,
+    extract_ai_response_content,
+    parse_ai_response_json,
+)
 
 
 class AIClient:
@@ -69,6 +72,18 @@ class AIClient:
     def is_available(self) -> bool:
         """检查 AI 客户端是否可用"""
         return self.client is not None
+
+    async def close(self) -> None:
+        """关闭底层异步客户端，避免事件循环结束后再触发清理。"""
+        client = self.client
+        self.client = None
+        if client is None:
+            return
+
+        close = getattr(client, "close", None)
+        if close is None:
+            return
+        await close()
 
     @staticmethod
     def encode_image(image_path: str) -> Optional[str]:
@@ -167,6 +182,14 @@ class AIClient:
                     api_mode,
                     request_params,
                 )
+                return extract_ai_response_content(response)
+            except EmptyAIResponseError as exc:
+                if attempt < max_attempts - 1:
+                    print(
+                        f"AI响应为空，正在自动重试 ({attempt + 2}/{max_attempts})"
+                    )
+                    continue
+                raise exc
             except Exception as exc:
                 changed = False
                 if (
@@ -194,8 +217,6 @@ class AIClient:
                 if changed and attempt < max_attempts - 1:
                     continue
                 raise
-
-            return extract_ai_response_content(response)
 
         raise RuntimeError("AI 调用在兼容性重试后仍未返回结果")
 
