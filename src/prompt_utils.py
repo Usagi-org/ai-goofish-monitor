@@ -45,6 +45,45 @@ async def _report_progress(
         await progress_callback(step_key, message)
 
 
+def _read_reference_text(reference_file_path: str) -> str:
+    try:
+        with open(reference_file_path, "r", encoding="utf-8") as file:
+            return file.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"参考文件未找到: {reference_file_path}")
+    except IOError as exc:
+        raise IOError(f"读取参考文件失败: {exc}")
+
+
+async def _request_generated_text(ai_client: AIClient, prompt: str) -> str:
+    print("正在调用AI生成新的分析标准，请稍候...")
+    try:
+        generated_text = await ai_client._call_ai(
+            [{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_output_tokens=800,
+            enable_json_output=False,
+        )
+    except Exception as exc:
+        print(f"调用 OpenAI API 时出错: {exc}")
+        raise
+
+    print("AI已成功生成内容。")
+    return generated_text.strip()
+
+
+async def _close_ai_client(
+    ai_client: AIClient,
+    active_error: BaseException | None,
+) -> None:
+    try:
+        await ai_client.close()
+    except Exception as close_error:
+        print(f"关闭 AI 客户端时出错: {close_error}")
+        if active_error is None:
+            raise
+
+
 async def generate_criteria(
     user_description: str,
     reference_file_path: str,
@@ -54,46 +93,31 @@ async def generate_criteria(
     Generates a new criteria file content using AI.
     """
     ai_client = AIClient()
-    if not ai_client.is_available():
-        ai_client.refresh()
-    if not ai_client.is_available():
-        raise RuntimeError("AI客户端未初始化，无法生成分析标准。请检查.env配置。")
-
-    await _report_progress(progress_callback, "reference", "正在读取参考文件。")
-    print(f"正在读取参考文件: {reference_file_path}")
+    active_error: BaseException | None = None
     try:
-        with open(reference_file_path, 'r', encoding='utf-8') as f:
-            reference_text = f.read()
-    except FileNotFoundError:
-        raise FileNotFoundError(f"参考文件未找到: {reference_file_path}")
-    except IOError as e:
-        raise IOError(f"读取参考文件失败: {e}")
+        if not ai_client.is_available():
+            ai_client.refresh()
+        if not ai_client.is_available():
+            raise RuntimeError("AI客户端未初始化，无法生成分析标准。请检查.env配置。")
 
-    await _report_progress(progress_callback, "prompt", "正在构建发送给 AI 的指令。")
-    print("正在构建发送给AI的指令...")
-    prompt = META_PROMPT_TEMPLATE.format(
-        reference_text=reference_text,
-        user_description=user_description
-    )
+        await _report_progress(progress_callback, "reference", "正在读取参考文件。")
+        print(f"正在读取参考文件: {reference_file_path}")
+        reference_text = _read_reference_text(reference_file_path)
 
-    await _report_progress(progress_callback, "llm", "正在调用 AI 生成分析标准。")
-    print("正在调用AI生成新的分析标准，请稍候...")
-    try:
-        generated_text = await ai_client._call_ai(
-            [{"role": "user", "content": prompt}],
-            temperature=0.5,
-            max_output_tokens=800,
-            enable_json_output=False,
+        await _report_progress(progress_callback, "prompt", "正在构建发送给 AI 的指令。")
+        print("正在构建发送给AI的指令...")
+        prompt = META_PROMPT_TEMPLATE.format(
+            reference_text=reference_text,
+            user_description=user_description,
         )
-        print("AI已成功生成内容。")
 
-        if generated_text is None or generated_text.strip() == "":
-            raise RuntimeError("AI返回的内容为空，请检查模型配置或重试。")
-
-        return generated_text.strip()
-    except Exception as e:
-        print(f"调用 OpenAI API 时出错: {e}")
-        raise e
+        await _report_progress(progress_callback, "llm", "正在调用 AI 生成分析标准。")
+        return await _request_generated_text(ai_client, prompt)
+    except Exception as exc:
+        active_error = exc
+        raise
+    finally:
+        await _close_ai_client(ai_client, active_error)
 
 
 async def update_config_with_new_task(new_task: dict, config_file: str = "config.json"):
