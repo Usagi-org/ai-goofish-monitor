@@ -68,8 +68,8 @@ const zhCNExtra = {
       cronPresetTab: '预设',
       cronCustomTab: '自定义',
       cronPlaceholder: '选择定时规则',
-      cronCustomPlaceholder: '例如：0 8 * * * / 0 0 8 * * * / @daily',
-      cronCustomHintLine1: '支持 5 段：分 时 日 月 周；6 段：秒 分 时 日 月 周；也支持 @hourly / @daily / @weekly / @monthly / @yearly。服务端时区为 Asia/Shanghai。',
+      cronCustomPlaceholder: '例如：0 8 * * * / 0 0 8 * * * / {\'@\'}daily',
+      cronCustomHintLine1: '支持 5 段：分 时 日 月 周；6 段：秒 分 时 日 月 周；也支持 {\'@\'}hourly / {\'@\'}daily / {\'@\'}weekly / {\'@\'}monthly / {\'@\'}yearly。服务端时区为 Asia/Shanghai。',
       cronCustomHintLine2: '示例：每 15 分钟 */15 * * * *；每天 8 点 0 8 * * *；每天 8 点（带秒）0 0 8 * * *。',
       cron: {
         manual: '不定时（手动运行）',
