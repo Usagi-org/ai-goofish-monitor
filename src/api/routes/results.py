@@ -83,6 +83,10 @@ async def delete_result_file(filename: str):
 @router.post("/{filename}/delete-items")
 async def delete_result_items(filename: str, body: dict):
     """按 id 列表批量删除指定结果文件中的单条记录"""
+    try:
+        validate_result_filename(filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     ids = body.get("ids")
     if not ids or not isinstance(ids, list):
         raise HTTPException(status_code=400, detail="请提供要删除的 id 列表")

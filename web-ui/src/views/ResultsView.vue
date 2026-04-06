@@ -169,9 +169,9 @@ function openBatchDeleteDialog() {
 
 async function confirmBatchDelete() {
   try {
-    await deleteSelectedItems()
+    const deletedCount = await deleteSelectedItems()
     toast({
-      title: t('results.filters.itemsDeleted', { count: selectedIds.value.size || 0 }),
+      title: t('results.filters.itemsDeleted', { count: deletedCount || 0 }),
     })
   } catch (e) {
     toast({

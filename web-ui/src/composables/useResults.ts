@@ -278,17 +278,18 @@ export function useResults() {
     }
   }
 
-  /** 批量删除当前选中的记录 */
-  async function deleteSelectedItems() {
-    if (!selectedFile.value || selectedIds.value.size === 0) return
+  /** 批量删除当前选中的记录，返回实际删除条数 */
+  async function deleteSelectedItems(): Promise<number> {
+    if (!selectedFile.value || selectedIds.value.size === 0) return 0
     isLoading.value = true
     error.value = null
     try {
       const ids = Array.from(selectedIds.value)
-      await resultsApi.deleteResultItems(selectedFile.value, ids)
+      const { deleted } = await resultsApi.deleteResultItems(selectedFile.value, ids)
       selectedIds.value = new Set()
       await fetchResults()
       await fetchInsights()
+      return deleted
     } catch (e) {
       if (e instanceof Error) error.value = e
       throw e
