@@ -72,3 +72,14 @@ export async function updateItemStatus(filename: string, itemId: string, status:
     body: JSON.stringify({ status }),
   })
 }
+
+export async function deleteResultItems(
+  filename: string,
+  ids: number[]
+): Promise<{ deleted: number }> {
+  return await http(`/api/results/${encodeURIComponent(filename)}/delete-items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+}

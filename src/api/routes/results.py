@@ -17,6 +17,7 @@ from src.services.result_file_service import (
 from src.services.result_storage_service import (
     build_result_ndjson,
     delete_result_file_records,
+    delete_result_items_by_ids,
     list_result_filenames,
     load_all_result_records,
     load_result_blacklist_keywords,
@@ -77,6 +78,22 @@ async def delete_result_file(filename: str):
     if deleted_rows <= 0:
         raise HTTPException(status_code=404, detail="文件不存在")
     return {"message": f"文件 {filename} 已成功删除"}
+
+
+@router.post("/{filename}/delete-items")
+async def delete_result_items(filename: str, body: dict):
+    """按 id 列表批量删除指定结果文件中的单条记录"""
+    ids = body.get("ids")
+    if not ids or not isinstance(ids, list):
+        raise HTTPException(status_code=400, detail="请提供要删除的 id 列表")
+    try:
+        int_ids = [int(i) for i in ids]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="id 列表中包含非法值")
+    if not await result_file_exists(filename):
+        raise HTTPException(status_code=404, detail="结果文件未找到")
+    deleted = await delete_result_items_by_ids(filename, int_ids)
+    return {"deleted": deleted}
 
 
 @router.get("/{filename}")

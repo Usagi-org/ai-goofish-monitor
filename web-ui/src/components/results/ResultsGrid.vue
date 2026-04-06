@@ -6,14 +6,23 @@ import ResultCard from './ResultCard.vue'
 interface Props {
   results: ResultItem[]
   isLoading: boolean
+  selectable?: boolean
+  selectedIds?: Set<number>
 }
 
-defineProps<Props>()
-const { t } = useI18n()
+const props = withDefaults(defineProps<Props>(), {
+  selectable: false,
+  selectedIds: () => new Set<number>(),
+})
 
 const emit = defineEmits<{
   (e: 'toggle-block', item: ResultItem): void
+  (e: 'toggle-select', id: number): void
+  (e: 'delete-item', id: number): void
 }>()
+
+const { t } = useI18n()
+
 const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
 </script>
 
@@ -46,7 +55,16 @@ const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
       {{ t('results.grid.empty') }}
     </div>
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-      <ResultCard v-for="item in results" :key="item.商品信息.商品ID" :item="item" @toggle-block="emit('toggle-block', $event)" />
+      <ResultCard
+        v-for="item in results"
+        :key="item._db_id || item.商品信息.商品ID"
+        :item="item"
+        :selectable="selectable"
+        :selected="item._db_id !== undefined && selectedIds.has(item._db_id)"
+        @toggle-block="emit('toggle-block', $event)"
+        @toggle-select="(id) => emit('toggle-select', id)"
+        @delete="(id) => emit('delete-item', id)"
+      />
     </div>
   </div>
 </template>

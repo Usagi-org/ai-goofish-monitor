@@ -120,6 +120,7 @@ def _load_filtered_records_from_conn(
     sort_by: str,
     sort_order: str,
     include_hidden: bool,
+    attach_db_id: bool = False,
 ) -> list[dict]:
     where_clause, params = _build_query_conditions(
         filename=filename,
@@ -129,7 +130,7 @@ def _load_filtered_records_from_conn(
     order_clause = _sort_expression(sort_by, sort_order)
     rows = conn.execute(
         f"""
-        SELECT raw_json, status
+        SELECT id, raw_json, status
         FROM result_items
         WHERE {where_clause}
         ORDER BY {order_clause}
@@ -141,6 +142,8 @@ def _load_filtered_records_from_conn(
     records: list[dict] = []
     for row in rows:
         record = _parse_raw_record(str(row["raw_json"]), status=row["status"])
+        if attach_db_id:
+            record["_db_id"] = int(row["id"])
         decorated = _decorate_record_visibility(record, row["status"], blacklist_keywords)
         if include_hidden or _is_record_visible(decorated):
             records.append(decorated)
@@ -253,6 +256,25 @@ def _delete_result_file_records_sync(filename: str) -> int:
     return int(cursor.rowcount or 0)
 
 
+async def delete_result_items_by_ids(filename: str, ids: list[int]) -> int:
+    """按数据库 id 列表批量删除指定结果文件中的记录。"""
+    return await asyncio.to_thread(_delete_result_items_by_ids_sync, filename, ids)
+
+
+def _delete_result_items_by_ids_sync(filename: str, ids: list[int]) -> int:
+    if not ids:
+        return 0
+    bootstrap_sqlite_storage()
+    placeholders = ",".join("?" for _ in ids)
+    with sqlite_connection() as conn:
+        cursor = conn.execute(
+            f"DELETE FROM result_items WHERE result_filename = ? AND id IN ({placeholders})",
+            [filename] + list(ids),
+        )
+        conn.commit()
+    return int(cursor.rowcount or 0)
+
+
 async def query_result_records(
     filename: str,
     *,
@@ -298,6 +320,7 @@ def _query_result_records_sync(
             sort_by=sort_by,
             sort_order=sort_order,
             include_hidden=include_hidden,
+            attach_db_id=True,
         )
     total = len(records)
     return total, records[offset: offset + limit]

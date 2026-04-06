@@ -10,16 +10,25 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import Badge from '@/components/ui/badge/Badge.vue'
-import { ExternalLink, TrendingUp, TrendingDown, Info, User, Clock, CheckCircle2, XCircle, AlertCircle, EyeOff, Eye } from 'lucide-vue-next'
+import { ExternalLink, TrendingUp, TrendingDown, Info, User, Clock, CheckCircle2, XCircle, AlertCircle, EyeOff, Eye, Trash2 } from 'lucide-vue-next'
+import { Checkbox } from '@/components/ui/checkbox'
 import { formatDateTime } from '@/i18n'
 
 interface Props {
   item: ResultItem
+  selectable?: boolean
+  selected?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  selectable: false,
+  selected: false,
+})
+
 const emit = defineEmits<{
   (e: 'toggle-block', item: ResultItem): void
+  (e: 'toggle-select', id: number): void
+  (e: 'delete', id: number): void
 }>()
 const { t } = useI18n()
 
@@ -27,6 +36,7 @@ const info = props.item.商品信息
 const seller = props.item.卖家信息
 const ai = props.item.ai_analysis
 const priceInsight = props.item.price_insight
+const dbId = props.item._db_id
 
 const isRecommended = ai?.is_recommended === true
 const recommendationStatus = computed(() => {
@@ -50,13 +60,35 @@ const hiddenLabel = computed(() => {
 })
 
 const expanded = ref(false)
+
+function handleCardClick() {
+  if (props.selectable && dbId !== undefined) {
+    emit('toggle-select', dbId)
+  }
+}
+
+function handleToggleSelect() {
+  if (dbId !== undefined) {
+    emit('toggle-select', dbId)
+  }
+}
+
+function handleDelete() {
+  if (dbId !== undefined) {
+    emit('delete', dbId)
+  }
+}
 </script>
 
 <template>
-  <Card class="group flex flex-col h-full border-none shadow-glass hover:shadow-card-hover transition-all duration-300 rounded-2xl overflow-hidden bg-white/80 backdrop-blur-sm" :class="{ 'opacity-50': isHidden }">
+  <Card
+    class="group flex flex-col h-full border-none shadow-glass hover:shadow-card-hover transition-all duration-300 rounded-2xl overflow-hidden bg-white/80 backdrop-blur-sm"
+    :class="{ 'opacity-50': isHidden, 'ring-2 ring-primary/50 cursor-pointer': selectable && selected, 'cursor-pointer': selectable && !selected }"
+    @click="handleCardClick"
+  >
     <!-- Image Header -->
     <div class="relative aspect-[4/3] overflow-hidden">
-      <div class="absolute inset-0 bg-slate-200 animate-pulse" v-if="!imageUrl"></div>
+      <div class="absolute inset-0 bg-slate-200 animate-pulse" v-if="!imageUrl" @click.stop="handleCardClick"></div>
       <img
         v-else
         :src="imageUrl"
@@ -69,7 +101,20 @@ const expanded = ref(false)
         <span class="text-white/80 text-xs font-semibold uppercase tracking-wider">{{ hiddenLabel }}</span>
       </div>
       <!-- Overlays -->
-      <div class="absolute top-3 left-3 flex gap-2">
+      <div class="absolute top-3 left-3 flex gap-2 items-center">
+        <!-- 多选 Checkbox -->
+        <div
+          v-if="selectable"
+          class="flex items-center justify-center w-7 h-7 rounded-lg bg-white/80 backdrop-blur-md border border-white/40 shadow-sm cursor-pointer"
+          @click.stop="handleToggleSelect"
+        >
+          <Checkbox
+            :model-value="selected"
+            @click.stop
+            @update:modelValue="handleToggleSelect"
+            class="pointer-events-none"
+          />
+        </div>
         <Badge v-if="isRecommended && !isHidden" variant="default" class="bg-emerald-500/90 backdrop-blur-md border-none shadow-sm">
           {{ t('results.card.curated') }}
         </Badge>
@@ -88,12 +133,23 @@ const expanded = ref(false)
           <EyeOff v-if="!isHidden" class="w-4 h-4" />
           <Eye v-else class="w-4 h-4" />
         </button>
+        <!-- 单条删除按钮 -->
+        <button
+          v-if="dbId !== undefined"
+          type="button"
+          @click.stop="handleDelete"
+          :aria-label="t('common.delete')"
+          class="flex rounded-full bg-white/30 p-1.5 text-white backdrop-blur-md border border-white/40 shadow-sm opacity-100 transition-all hover:bg-rose-500/80 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        >
+          <Trash2 class="w-4 h-4" />
+        </button>
          <a
            :href="info.商品链接"
            target="_blank"
            rel="noopener noreferrer"
            :aria-label="t('results.card.detail')"
            class="flex rounded-full bg-white/30 p-1.5 text-white backdrop-blur-md border border-white/40 shadow-sm opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+           @click.stop
          >
             <ExternalLink class="w-4 h-4" />
          </a>
@@ -103,7 +159,7 @@ const expanded = ref(false)
     <CardHeader class="p-4 pb-2">
       <div class="flex justify-between items-start gap-3">
         <CardTitle class="text-base font-semibold text-slate-800 line-clamp-2 leading-snug flex-grow h-10">
-          <a :href="info.商品链接" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors">
+          <a :href="info.商品链接" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors" @click.stop>
             {{ info.商品标题 }}
           </a>
         </CardTitle>
@@ -183,7 +239,7 @@ const expanded = ref(false)
           <span>{{ crawlTime }}</span>
         </div>
       </div>
-      <a :href="info.商品链接" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-primary font-bold hover:gap-1.5 transition-all">
+      <a :href="info.商品链接" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1 text-primary font-bold hover:gap-1.5 transition-all" @click.stop>
         {{ t('results.card.detail') }} <ExternalLink class="w-3 h-3" />
       </a>
     </CardFooter>
