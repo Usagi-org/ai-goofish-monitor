@@ -175,6 +175,7 @@ const enUS = {
       selectAll: 'Select All',
       clearSelection: 'Clear',
       deleteSelected: 'Delete Selected',
+      selectErrors: 'Select Errors',
       deleteItemDialogTitle: 'Delete Result Record',
       deleteItemConfirm: 'Delete this record? This action cannot be undone.',
       deleteItemsConfirm: 'Delete {count} selected records? This action cannot be undone.',

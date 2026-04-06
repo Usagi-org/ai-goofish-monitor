@@ -83,6 +83,15 @@ export function useResults() {
     selectedIds.value = new Set()
   }
 
+  /** 一键选中当前页所有 AI 分析报错的记录（如 429、超时等） */
+  function selectErrorItems() {
+    const errorIds = results.value
+      .filter((item) => item.ai_analysis?.error)
+      .map((item) => item._db_id)
+      .filter((id): id is number => id !== undefined)
+    selectedIds.value = new Set(errorIds)
+  }
+
   function normalizeKeyword(value: string) {
     return value.trim().toLowerCase().replace(/\s+/g, '_')
   }
@@ -392,5 +401,6 @@ export function useResults() {
     toggleSelectItem,
     selectAllItems,
     clearSelection,
+    selectErrorItems,
   }
 }

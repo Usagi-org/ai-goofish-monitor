@@ -175,6 +175,7 @@ const zhCN = {
       selectAll: '全选',
       clearSelection: '取消选择',
       deleteSelected: '删除已选',
+      selectErrors: '选中报错项',
       deleteItemDialogTitle: '删除结果记录',
       deleteItemConfirm: '确定删除这条记录吗？此操作不可恢复。',
       deleteItemsConfirm: '确定删除已选的 {count} 条记录吗？此操作不可恢复。',

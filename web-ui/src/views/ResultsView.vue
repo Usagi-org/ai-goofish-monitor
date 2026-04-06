@@ -45,6 +45,7 @@ const {
   toggleSelectItem,
   selectAllItems,
   clearSelection,
+  selectErrorItems,
 } = useResults()
 
 const isDeleteDialogOpen = ref(false)
@@ -240,12 +241,20 @@ const deleteItemsDialogText = computed(() => {
           <div class="flex items-center gap-2 text-sm text-slate-600 font-medium">
             <span>{{ t('results.filters.selectedCount', { count: selectedIds.size }) }}</span>
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" @click="selectAllItems">
               {{ t('results.filters.selectAll') }}
             </Button>
             <Button size="sm" variant="outline" @click="clearSelection" :disabled="selectedIds.size === 0">
               {{ t('results.filters.clearSelection') }}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="border-orange-300 text-orange-600 hover:bg-orange-50"
+              @click="selectErrorItems"
+            >
+              {{ t('results.filters.selectErrors') }}
             </Button>
             <Button size="sm" variant="destructive" @click="openBatchDeleteDialog" :disabled="selectedIds.size === 0">
               {{ t('results.filters.deleteSelected') }}
