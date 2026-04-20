@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/bin/playwright install:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh workflow:*)",
+      "Bash(git remote:*)",
+      "Bash(lsof -ti:8000)",
+      "Bash(xargs kill:*)",
+      "Bash(lsof -ti:5173)",
+      "Read(//private/tmp/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(openspec new:*)",
+      "Bash(pkill -f \"uvicorn|python.*app\")",
+      "Bash(pkill -f \"vite|npm run dev\")"
+    ],
+    "additionalDirectories": [
+      "/Users/joshua/code/ai-goofish-monitor/openspec/changes/global-ai-toggle/specs"
+    ]
+  }
+}

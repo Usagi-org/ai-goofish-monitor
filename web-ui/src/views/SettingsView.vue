@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 import NotificationSettingsPanel from '@/components/settings/NotificationSettingsPanel.vue'
@@ -22,6 +23,7 @@ const {
   aiSettings,
   rotationSettings,
   systemStatus,
+  isAiEnabled,
   isLoading,
   isSaving,
   isReady,
@@ -31,7 +33,8 @@ const {
   testNotification,
   saveAiSettings,
   saveRotationSettings,
-  testAiConnection
+  testAiConnection,
+  toggleAiEnabled
 } = useSettings()
 
 const activeTab = ref('ai')
@@ -99,6 +102,15 @@ async function handleTestAi() {
     notifySuccess(t('settings.ai.testSuccess'), res.message)
   } catch (e) {
     notifyError(t('settings.ai.testFailed'), (e as Error).message)
+  }
+}
+
+async function handleToggleAiEnabled(checked: boolean) {
+  try {
+    await toggleAiEnabled(checked)
+    notifySuccess(checked ? 'AI 功能已启用' : 'AI 功能已禁用')
+  } catch (e) {
+    notifyError('切换 AI 功能失败', (e as Error).message)
   }
 }
 
@@ -203,6 +215,17 @@ watch(selectedPrompt, async (value) => {
             <CardDescription>{{ t('settings.ai.description') }}</CardDescription>
           </CardHeader>
           <CardContent v-if="isReady" class="space-y-4">
+            <!-- AI 功能总开关 -->
+            <div class="flex items-center justify-between border-b pb-4">
+              <div class="space-y-0.5">
+                <Label class="text-base">AI 功能</Label>
+              </div>
+              <Switch
+                v-model="isAiEnabled"
+                @update:model-value="handleToggleAiEnabled"
+              />
+            </div>
+
             <div class="grid gap-2">
               <Label>API Base URL</Label>
               <Input v-model="aiSettings.OPENAI_BASE_URL" placeholder="https://api.openai.com/v1" />

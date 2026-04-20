@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useSettings } from '@/composables/useSettings'
 import type { Task, TaskGenerateRequest } from '@/types/task.d.ts'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,8 @@ import { toast } from '@/components/ui/toast'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import TaskRegionSelector from '@/components/tasks/TaskRegionSelector.vue'
+
+const { isAiEnabled: isAiEnabledGlobal } = useSettings()
 
 type FormMode = 'create' | 'edit'
 type EmittedData = TaskGenerateRequest | Partial<Task>
@@ -33,7 +36,9 @@ const form = ref<any>({})
 const accountStrategy = ref<'auto' | 'fixed' | 'rotate'>('auto')
 const selectedAccountStateFile = ref(AUTO_ACCOUNT_VALUE)
 const keywordRulesInput = ref('')
+const itemIdListInput = ref('')  // 商品 ID 列表输入（每行一个）
 const cronMode = ref<'preset' | 'custom'>('preset')
+const taskType = ref<'keyword' | 'item_id'>('keyword')  // 任务类型
 
 // 常用 cron 预设选项
 const cronPresets = computed(() => [
@@ -114,10 +119,17 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       region: defaultValues.region || props.initialData.region || '',
       decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
     }
+    taskType.value = props.initialData.task_type || 'keyword'
     keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
     // 编辑模式下，根据 cron 值判断模式
     const cronVal = defaultValues.cron ?? props.initialData.cron ?? ''
     cronMode.value = isPresetCronValue(cronVal) ? 'preset' : 'custom'
+    // 商品 ID 列表
+    if (props.initialData.item_id_list && props.initialData.item_id_list.length > 0) {
+      itemIdListInput.value = props.initialData.item_id_list.join('\n')
+    } else {
+      itemIdListInput.value = ''
+    }
   } else {
     form.value = {
       task_name: '',
@@ -137,6 +149,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       decision_mode: 'ai',
       ...defaultValues,
     }
+    taskType.value = defaultValues.task_type || 'keyword'
     if (!form.value.account_strategy) {
       form.value.account_strategy = props.defaultAccount ? 'fixed' : 'auto'
     }
@@ -147,6 +160,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       form.value.new_publish_option = '__none__'
     }
     keywordRulesInput.value = ''
+    itemIdListInput.value = ''
     if (defaultValues.keyword_rules && defaultValues.keyword_rules.length > 0) {
       keywordRulesInput.value = defaultValues.keyword_rules.join('\n')
     }
@@ -184,37 +198,90 @@ function handleAccountStateFileChange(event: Event) {
 }
 
 function handleSubmit() {
-  if (!form.value.task_name || !form.value.keyword) {
-    toast({
-      title: t('tasks.form.validation.incomplete'),
-      description: t('tasks.form.validation.nameAndKeywordRequired'),
-      variant: 'destructive',
-    })
-    return
-  }
+  // 商品 ID 监控模式验证
+  if (taskType.value === 'item_id') {
+    if (!itemIdListInput.value.trim()) {
+      toast({
+        title: t('tasks.form.validation.incomplete'),
+        description: '请输入至少一个商品 ID。',
+        variant: 'destructive',
+      })
+      return
+    }
+    // 验证商品 ID 格式（每行一个，必须是数字）
+    const itemIdList = itemIdListInput.value
+      .split(/\n+/)
+      .map((item: string) => item.trim())
+      .filter((item: string) => item.length > 0)
 
-  const decisionMode = form.value.decision_mode || 'ai'
-  if (decisionMode === 'ai' && !String(form.value.description || '').trim()) {
-    toast({
-      title: t('tasks.form.validation.incomplete'),
-      description: t('tasks.form.validation.aiDescriptionRequired'),
-      variant: 'destructive',
-    })
-    return
-  }
+    for (const itemId of itemIdList) {
+      if (!/^\d+$/.test(itemId)) {
+        toast({
+          title: t('tasks.form.validation.incomplete'),
+          description: `商品 ID 必须是纯数字：${itemId}`,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+  } else {
+    // 关键词模式验证
+    if (!form.value.keyword) {
+      toast({
+        title: t('tasks.form.validation.incomplete'),
+        description: t('tasks.form.validation.nameAndKeywordRequired'),
+        variant: 'destructive',
+      })
+      return
+    }
 
-  const keywordRules = parseKeywordText(keywordRulesInput.value)
-  if (decisionMode === 'keyword' && keywordRules.length === 0) {
-    toast({
-      title: t('tasks.form.validation.keywordRuleIncomplete'),
-      description: t('tasks.form.validation.keywordRuleRequired'),
-      variant: 'destructive',
-    })
-    return
+    const decisionMode = form.value.decision_mode || 'ai'
+    if (decisionMode === 'ai' && !String(form.value.description || '').trim()) {
+      toast({
+        title: t('tasks.form.validation.incomplete'),
+        description: t('tasks.form.validation.aiDescriptionRequired'),
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const keywordRules = parseKeywordText(keywordRulesInput.value)
+    if (decisionMode === 'keyword' && keywordRules.length === 0) {
+      toast({
+        title: t('tasks.form.validation.keywordRuleIncomplete'),
+        description: t('tasks.form.validation.keywordRuleRequired'),
+        variant: 'destructive',
+      })
+      return
+    }
   }
 
   // Filter out fields that shouldn't be sent in update requests
   const { id, is_running, next_run_at, ...submitData } = form.value as any
+
+  // 设置任务类型
+  submitData.task_type = taskType.value
+
+  // 商品 ID 监控模式：处理 item_id_list
+  if (taskType.value === 'item_id') {
+    submitData.item_id_list = itemIdListInput.value
+      .split(/\n+/)
+      .map((item: string) => item.trim())
+      .filter((item: string) => item.length > 0)
+    submitData.keyword = ''  // 关键词模式不需要
+    submitData.description = ''
+    submitData.decision_mode = 'ai'  // 商品 ID 监控固定使用 AI 分析
+    submitData.keyword_rules = []
+  } else {
+    // 关键词模式
+    const decisionMode = form.value.decision_mode || 'ai'
+    submitData.decision_mode = decisionMode
+    submitData.keyword_rules = decisionMode === 'keyword' ? parseKeywordText(keywordRulesInput.value) : []
+    if (decisionMode === 'keyword' && !submitData.description) {
+      submitData.description = ''
+    }
+  }
+
   const currentAccountStrategy = accountStrategy.value || 'auto'
   if (currentAccountStrategy === 'fixed') {
     const currentAccountStateFile = selectedAccountStateFile.value || AUTO_ACCOUNT_VALUE
@@ -235,7 +302,7 @@ function handleSubmit() {
     const normalized = submitData.region
       .trim()
       .split('/')
-      .map((part: string) => part.trim().replace(/(省|市)$/u, ''))
+      .map((part: string) => part.trim().replace(/(省 |市)$/u, ''))
       .filter((part: string) => part.length > 0)
       .join('/')
     submitData.region = normalized
@@ -245,13 +312,8 @@ function handleSubmit() {
     submitData.new_publish_option = ''
   }
 
-  submitData.decision_mode = decisionMode
   submitData.account_strategy = currentAccountStrategy
   submitData.analyze_images = submitData.analyze_images !== false
-  submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
-  if (decisionMode === 'keyword' && !submitData.description) {
-    submitData.description = ''
-  }
 
   emit('submit', submitData)
 }
@@ -260,80 +322,120 @@ function handleSubmit() {
 <template>
   <form id="task-form" @submit.prevent="handleSubmit">
     <div class="grid gap-6 py-4">
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="task-name" class="sm:text-right">{{ t('tasks.form.taskName') }}</Label>
-        <Input id="task-name" v-model="form.task_name" class="sm:col-span-3" :placeholder="t('tasks.form.taskNamePlaceholder')" required />
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="keyword" class="sm:text-right">{{ t('tasks.form.keyword') }}</Label>
-        <Input id="keyword" v-model="form.keyword" class="sm:col-span-3" :placeholder="t('tasks.form.keywordPlaceholder')" required />
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.decisionMode') }}</Label>
-        <div class="sm:col-span-3">
-          <Select v-model="form.decision_mode">
+      <!-- 任务类型选择 -->
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">{{ t('tasks.form.taskType') }}</Label>
+        <div class="col-span-3">
+          <Select v-model="taskType">
             <SelectTrigger>
-              <SelectValue :placeholder="t('tasks.form.decisionModePlaceholder')" />
+              <SelectValue :placeholder="t('tasks.form.taskTypePlaceholder')" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ai">{{ t('tasks.form.aiMode') }}</SelectItem>
-              <SelectItem value="keyword">{{ t('tasks.form.keywordMode') }}</SelectItem>
+              <SelectItem value="keyword">{{ t('tasks.form.taskTypeKeyword') }}</SelectItem>
+              <SelectItem value="item_id">{{ t('tasks.form.taskTypeItemId') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="description" class="sm:text-right">{{ t('tasks.form.description') }}</Label>
-        <div class="space-y-1 sm:col-span-3">
-          <Textarea
-            id="description"
-            v-model="form.description"
-            :placeholder="t('tasks.form.descriptionPlaceholder')"
-          />
-          <p v-if="form.decision_mode === 'keyword'" class="text-xs text-gray-500">
-            {{ t('tasks.form.keywordDescriptionHint') }}
-          </p>
-        </div>
-      </div>
-      <div v-if="form.decision_mode === 'ai'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="analyze-images" class="sm:text-right">{{ t('tasks.form.analyzeImages') }}</Label>
-        <div class="space-y-1 sm:col-span-3">
-          <Switch id="analyze-images" v-model="form.analyze_images" />
-          <p class="text-xs text-gray-500">
-            {{ t('tasks.form.analyzeImagesHint') }}
-          </p>
-        </div>
+
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label for="task-name" class="text-right">{{ t('tasks.form.taskName') }}</Label>
+        <Input id="task-name" v-model="form.task_name" class="col-span-3" :placeholder="t('tasks.form.taskNamePlaceholder')" required />
       </div>
 
-      <div v-if="form.decision_mode === 'keyword'" class="grid gap-2 sm:grid-cols-4 sm:gap-4">
-        <Label class="pt-1 sm:pt-2 sm:text-right">{{ t('tasks.form.keywordRules') }}</Label>
-        <div class="space-y-2 sm:col-span-3">
-          <p class="text-xs text-gray-500">
-            {{ t('tasks.form.keywordRulesHint') }}
-          </p>
+      <!-- 关键词模式：显示关键词输入 -->
+      <div v-if="taskType === 'keyword'" class="grid grid-cols-4 items-center gap-4">
+        <Label for="keyword" class="text-right">{{ t('tasks.form.keyword') }}</Label>
+        <Input id="keyword" v-model="form.keyword" class="col-span-3" :placeholder="t('tasks.form.keywordPlaceholder')" required />
+      </div>
+
+      <!-- 商品 ID 监控模式：显示商品 ID 列表输入 -->
+      <div v-if="taskType === 'item_id'" class="grid grid-cols-4 gap-4">
+        <Label class="text-right pt-2">{{ t('tasks.form.itemIdListLabel') }}</Label>
+        <div class="col-span-3 space-y-2">
           <Textarea
-            v-model="keywordRulesInput"
+            v-model="itemIdListInput"
             class="min-h-[120px]"
-            :placeholder="t('tasks.form.keywordRulesPlaceholder')"
+            :placeholder="t('tasks.form.itemIdListPlaceholder')"
           />
+          <p class="text-xs text-gray-500">
+            {{ t('tasks.form.itemIdListHint') }}
+          </p>
         </div>
       </div>
 
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.priceRange') }}</Label>
-        <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:col-span-3">
-          <Input type="number" v-model="form.min_price as any" :aria-label="t('tasks.form.minPrice')" :placeholder="t('tasks.form.minPrice')" />
-          <span>-</span>
-          <Input type="number" v-model="form.max_price as any" :aria-label="t('tasks.form.maxPrice')" :placeholder="t('tasks.form.maxPrice')" />
+      <!-- 关键词模式专属字段 -->
+      <template v-if="taskType === 'keyword'">
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label class="text-right">{{ t('tasks.form.decisionMode') }}</Label>
+          <div class="col-span-3">
+            <Select v-model="form.decision_mode">
+              <SelectTrigger>
+                <SelectValue :placeholder="t('tasks.form.decisionModePlaceholder')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ai">{{ t('tasks.form.aiMode') }}</SelectItem>
+                <SelectItem value="keyword">{{ t('tasks.form.keywordMode') }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="max-pages" class="sm:text-right">{{ t('tasks.form.maxPages') }}</Label>
-        <Input id="max-pages" v-model.number="form.max_pages" type="number" class="sm:col-span-3" />
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="cron" class="sm:text-right">{{ t('tasks.form.schedule') }}</Label>
-        <div class="space-y-2 sm:col-span-3">
+        <!-- AI 功能启用时才显示 description 和 analyze_images -->
+        <template v-if="isAiEnabledGlobal">
+          <div class="grid grid-cols-4 items-center gap-4">
+            <Label for="description" class="text-right">{{ t('tasks.form.description') }}</Label>
+            <div class="col-span-3 space-y-1">
+              <Textarea
+                id="description"
+                v-model="form.description"
+                :placeholder="t('tasks.form.descriptionPlaceholder')"
+              />
+              <p v-if="form.decision_mode === 'keyword'" class="text-xs text-gray-500">
+                {{ t('tasks.form.keywordDescriptionHint') }}
+              </p>
+            </div>
+          </div>
+          <div v-if="form.decision_mode === 'ai'" class="grid grid-cols-4 items-center gap-4">
+            <Label for="analyze-images" class="text-right">{{ t('tasks.form.analyzeImages') }}</Label>
+            <div class="col-span-3 space-y-1">
+              <Switch id="analyze-images" v-model="form.analyze_images" />
+              <p class="text-xs text-gray-500">
+                {{ t('tasks.form.analyzeImagesHint') }}
+              </p>
+            </div>
+          </div>
+        </template>
+
+        <div v-if="form.decision_mode === 'keyword'" class="grid grid-cols-4 gap-4">
+          <Label class="text-right pt-2">{{ t('tasks.form.keywordRules') }}</Label>
+          <div class="col-span-3 space-y-2">
+            <p class="text-xs text-gray-500">
+              {{ t('tasks.form.keywordRulesHint') }}
+            </p>
+            <Textarea
+              v-model="keywordRulesInput"
+              class="min-h-[120px]"
+              :placeholder="t('tasks.form.keywordRulesPlaceholder')"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label class="text-right">{{ t('tasks.form.priceRange') }}</Label>
+          <div class="col-span-3 flex items-center gap-2">
+            <Input type="number" v-model="form.min_price as any" :placeholder="t('tasks.form.minPrice')" />
+            <span>-</span>
+            <Input type="number" v-model="form.max_price as any" :placeholder="t('tasks.form.maxPrice')" />
+          </div>
+        </div>
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label for="max-pages" class="text-right">{{ t('tasks.form.maxPages') }}</Label>
+          <Input id="max-pages" v-model.number="form.max_pages" type="number" class="col-span-3" />
+        </div>
+      </template>
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label for="cron" class="text-right">{{ t('tasks.form.schedule') }}</Label>
+        <div class="col-span-3 space-y-2">
           <Tabs v-model="cronMode" class="w-full">
             <TabsList class="grid w-full grid-cols-2">
               <TabsTrigger value="preset">{{ t('tasks.form.cronPresetTab') }}</TabsTrigger>
@@ -367,9 +469,9 @@ function handleSubmit() {
           </Tabs>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.accountStrategyLabel') }}</Label>
-        <div class="space-y-2 sm:col-span-3">
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">{{ t('tasks.form.accountStrategyLabel') }}</Label>
+        <div class="col-span-3 space-y-2">
           <select
             :value="accountStrategy"
             class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -384,9 +486,9 @@ function handleSubmit() {
           </p>
         </div>
       </div>
-      <div v-if="accountStrategy === 'fixed'" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.fixedAccount') }}</Label>
-        <div class="sm:col-span-3">
+      <div v-if="accountStrategy === 'fixed'" class="grid grid-cols-4 items-center gap-4">
+        <Label class="text-right">{{ t('tasks.form.fixedAccount') }}</Label>
+        <div class="col-span-3">
           <select
             :value="selectedAccountStateFile"
             class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -399,43 +501,42 @@ function handleSubmit() {
           </select>
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="personal-only" class="sm:text-right">{{ t('tasks.form.personalOnly') }}</Label>
-        <div class="sm:col-span-3">
+      <!-- 关键词模式专属筛选条件 -->
+      <template v-if="taskType === 'keyword'">
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label for="personal-only" class="text-right">{{ t('tasks.form.personalOnly') }}</Label>
           <Switch id="personal-only" v-model="form.personal_only" />
         </div>
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label for="free-shipping" class="sm:text-right">{{ t('tasks.form.freeShipping') }}</Label>
-        <div class="sm:col-span-3">
-          <Switch id="free-shipping" v-model="form.free_shipping" />
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label class="text-right">{{ t('tasks.form.freeShipping') }}</Label>
+          <Switch v-model="form.free_shipping" />
         </div>
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.newPublish') }}</Label>
-        <div class="sm:col-span-3">
-          <Select v-model="form.new_publish_option as any">
-            <SelectTrigger>
-              <SelectValue :placeholder="t('tasks.form.publishOptions.none')" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">{{ t('tasks.form.publishOptions.none') }}</SelectItem>
-              <SelectItem value="最新">{{ t('tasks.form.publishOptions.latest') }}</SelectItem>
-              <SelectItem value="1天内">{{ t('tasks.form.publishOptions.oneDay') }}</SelectItem>
-              <SelectItem value="3天内">{{ t('tasks.form.publishOptions.threeDays') }}</SelectItem>
-              <SelectItem value="7天内">{{ t('tasks.form.publishOptions.sevenDays') }}</SelectItem>
-              <SelectItem value="14天内">{{ t('tasks.form.publishOptions.fourteenDays') }}</SelectItem>
-            </SelectContent>
-          </Select>
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label class="text-right">{{ t('tasks.form.newPublish') }}</Label>
+          <div class="col-span-3">
+            <Select v-model="form.new_publish_option as any">
+              <SelectTrigger>
+                <SelectValue :placeholder="t('tasks.form.publishOptions.none')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{{ t('tasks.form.publishOptions.none') }}</SelectItem>
+                <SelectItem value="最新">{{ t('tasks.form.publishOptions.latest') }}</SelectItem>
+                <SelectItem value="1 天内">{{ t('tasks.form.publishOptions.oneDay') }}</SelectItem>
+                <SelectItem value="3 天内">{{ t('tasks.form.publishOptions.threeDays') }}</SelectItem>
+                <SelectItem value="7 天内">{{ t('tasks.form.publishOptions.sevenDays') }}</SelectItem>
+                <SelectItem value="14 天内">{{ t('tasks.form.publishOptions.fourteenDays') }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
-      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
-        <Label class="sm:text-right">{{ t('tasks.form.region') }}</Label>
-        <div class="space-y-1 sm:col-span-3">
-          <TaskRegionSelector v-model="form.region as any" />
-          <p class="text-xs text-gray-500">{{ t('tasks.form.regionHint') }}</p>
+        <div class="grid grid-cols-4 items-center gap-4">
+          <Label class="text-right">{{ t('tasks.form.region') }}</Label>
+          <div class="col-span-3 space-y-1">
+            <TaskRegionSelector v-model="form.region as any" />
+            <p class="text-xs text-gray-500">{{ t('tasks.form.regionHint') }}</p>
+          </div>
         </div>
-      </div>
+      </template>
     </div>
   </form>
 </template>

@@ -28,6 +28,7 @@ from src.services.account_strategy_service import normalize_account_strategy
 from src.infrastructure.persistence.storage_names import build_result_filename
 from src.services.price_history_service import delete_price_snapshots
 from src.services.result_storage_service import delete_result_file_records
+from src.api.routes import websocket
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 async def _reload_scheduler_if_needed(
@@ -279,3 +280,57 @@ async def stop_task(
         raise HTTPException(status_code=404, detail="任务未找到")
     await process_service.stop_task(task_id)
     return {"message": f"任务ID {task_id} 已发送停止信号"}
+
+
+
+@router.post("/pause/{task_id}", response_model=dict)
+async def pause_task(
+    task_id: int,
+    task_service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+):
+    """暂停定时任务"""
+    task = await task_service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务未找到")
+    if not task.enabled:
+        raise HTTPException(status_code=400, detail="任务已禁用，无需暂停")
+    if task.is_running:
+        raise HTTPException(status_code=400, detail="请先停止正在运行的任务")
+    if task.is_paused:
+        raise HTTPException(status_code=400, detail="任务已处于暂停状态")
+
+    # 更新任务状态
+    await task_service.update_task(task_id, TaskUpdate(is_paused=True))
+    # 从调度器移除
+    await scheduler_service.pause_task(task_id, task)
+    # 广播 WebSocket 消息
+    await websocket.broadcast_message("task_paused_changed", {"id": task_id, "is_paused": True})
+
+    return {"message": f"任务 '{task.task_name}' 已暂停"}
+
+
+@router.post("/resume/{task_id}", response_model=dict)
+async def resume_task(
+    task_id: int,
+    task_service: TaskService = Depends(get_task_service),
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+):
+    """恢复定时任务"""
+    task = await task_service.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务未找到")
+    if not task.is_paused:
+        raise HTTPException(status_code=400, detail="任务未处于暂停状态")
+    if not task.cron:
+        raise HTTPException(status_code=400, detail="任务没有配置 cron 表达式")
+
+    # 更新任务状态
+    await task_service.update_task(task_id, TaskUpdate(is_paused=False))
+    # 重新添加到调度器
+    await scheduler_service.resume_task(task_id, task)
+    # 广播 WebSocket 消息
+    await websocket.broadcast_message("task_paused_changed", {"id": task_id, "is_paused": False})
+
+    return {"message": f"任务 '{task.task_name}' 已恢复"}
+

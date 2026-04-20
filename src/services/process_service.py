@@ -12,7 +12,8 @@ from datetime import datetime
 from typing import Awaitable, Callable, Dict, TextIO
 
 from src.ai_handler import send_ntfy_notification
-from src.config import STATE_FILE
+from src.api.routes import websocket
+from src.config import get_state_file
 from src.failure_guard import FailureGuard
 from src.infrastructure.persistence.sqlite_task_repository import find_task_by_name_sync
 from src.utils import build_task_log_path
@@ -60,7 +61,8 @@ class ProcessService:
         except Exception:
             pass
 
-        return STATE_FILE if os.path.exists(STATE_FILE) else None
+        state_file = get_state_file()
+        return state_file if os.path.exists(state_file) else None
 
     def is_running(self, task_id: int) -> bool:
         """检查任务是否正在运行"""
@@ -188,6 +190,76 @@ class ProcessService:
         task_id = self._find_task_id_by_process(process)
         if task_id is None:
             return
+
+        task_name = self.task_names.get(task_id, "Unknown")
+
+        # 尝试获取商品数量（从日志文件或结果文件）
+        items_count = 0
+        want_count_total = 0
+        want_count_diff = 0
+        price_diff = None
+        log_path = self.log_paths.get(task_id)
+        if log_path:
+            try:
+                with open(log_path, "r", encoding="utf-8") as f:
+                    full_content = f.read()
+
+                    # 只解析本次运行的日志（最后一个 "--- 开始执行监控任务 ---" 之后的内容）
+                    import re
+                    run_markers = list(re.finditer(r"--- 开始执行监控任务 ---", full_content))
+                    if run_markers:
+                        # 取最后一个开始标记之后的内容
+                        last_marker_pos = run_markers[-1].start()
+                        content = full_content[last_marker_pos:]
+                    else:
+                        content = full_content
+
+                    # 从日志中查找类似 "推荐了 X 个商品" 或 "共处理了 X 个商品" 的行
+                    matches = re.findall(r"推荐了 (\d+) 个商品", content)
+                    if matches:
+                        items_count = int(matches[-1])
+                    else:
+                        # 兼容商品 ID 监控模式（跳过 AI 分析）
+                        matches = re.findall(r"共处理了 (\d+) 个商品", content)
+                        if matches:
+                            items_count = int(matches[-1])
+
+                    # 提取想要数汇总信息（只取本次运行的值）
+                    want_matches = re.findall(r"想要数：(\d+)", content)
+                    if want_matches:
+                        want_count_total = int(want_matches[-1])  # 只取本次运行的值
+                        # 从日志中提取上次的想要数
+                        prev_want_matches = re.findall(r"上次想要数：(\d+)", content)
+                        if prev_want_matches:
+                            prev_want = int(prev_want_matches[-1])
+                            want_count_diff = want_count_total - prev_want
+
+                    # 提取价格变化信息（只解析本次运行的日志）
+                    # 匹配格式：价格变化：¥+4.0 或 价格变化：¥-2.5 或 价格变化：¥3.0
+                    price_matches = re.findall(r"价格变化：¥([+-]?[\d.]+)", content)
+                    if price_matches:
+                        # 只取本次运行的最后一次价格变化
+                        last_price_change = price_matches[-1]
+                        price_diff = round(float(last_price_change), 2)
+            except Exception:
+                pass
+
+        # 发送 WebSocket 通知
+        notification_data = {
+            "task_id": task_id,
+            "task_name": task_name,
+            "completed_at": datetime.now().isoformat(),
+            "items_count": items_count,
+        }
+        if want_count_total > 0:
+            notification_data["want_count_total"] = want_count_total
+            if want_count_diff != 0:
+                notification_data["want_count_diff"] = want_count_diff
+        if price_diff is not None and price_diff != 0:
+            notification_data["price_diff"] = price_diff
+
+        await websocket.broadcast_message("task_completed", notification_data)
+
         self._cleanup_runtime(task_id, process)
         await self._invoke_hook(self._on_stopped, task_id)
 

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
 from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
+from src.services.metrics_tracking_service import get_metrics_service
 
 
 SellerLoader = Callable[[str], Awaitable[dict]]
@@ -76,7 +77,58 @@ class ItemAnalysisDispatcher:
         record["ai_analysis"] = await self._build_analysis_result(job, record)
         if await self._saver(record, job.keyword):
             self.completed_count += 1
+
+        # 记录指标快照（价格、想要数）
+        await self._record_metrics(item_data)
+
         await self._notify_if_recommended(item_data, record["ai_analysis"])
+
+    async def _record_metrics(self, item_data: dict) -> None:
+        """记录商品指标快照"""
+        try:
+            item_id = str(item_data.get("商品 ID", ""))
+            if not item_id:
+                return
+
+            price = item_data.get("当前售价")
+            want_count = item_data.get("想要人数")
+            browse_count = item_data.get("浏览量")
+
+            # 尝试解析价格为数字
+            price_value = None
+            if price:
+                try:
+                    price_value = float(str(price).replace("¥", "").strip())
+                except (ValueError, TypeError):
+                    price_value = None
+
+            # 尝试解析想要数和浏览量为整数
+            want_count_value = None
+            browse_count_value = None
+            if want_count:
+                try:
+                    want_count_value = int(str(want_count).replace("想要", "").strip())
+                except (ValueError, TypeError):
+                    pass
+            if browse_count:
+                try:
+                    browse_count_value = int(str(browse_count).replace("浏览", "").strip())
+                except (ValueError, TypeError):
+                    pass
+
+            metrics_service = get_metrics_service()
+            metrics_service.record_metrics(
+                item_id=item_id,
+                title=item_data.get("商品标题", "")[:200],
+                price=price_value,
+                price_display=str(price) if price else None,
+                want_count=want_count_value,
+                browse_count=browse_count_value,
+                seller_id=item_data.get("卖家 ID"),
+                link=item_data.get("商品链接"),
+            )
+        except Exception as e:
+            print(f"   [指标] 记录指标快照失败：{e}")
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:
         seller_info = {}

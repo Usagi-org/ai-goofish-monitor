@@ -68,7 +68,7 @@ def _build_snapshot_record(
     run_id: str,
     snapshot_time: str,
 ) -> Optional[dict]:
-    item_id = str(item.get("商品ID") or "").strip()
+    item_id = str(item.get("商品 ID") or "").strip()
     link = str(item.get("商品链接") or "").strip()
     unique_id = item_id or link
     price_value = parse_price_value(item.get("当前售价"))
@@ -348,7 +348,7 @@ def build_market_reference(
     history_summary = _summarize_prices(_dedupe_latest(historical_snapshots, "item_id"))
     item_context = build_item_price_context(
         historical_snapshots,
-        item_id=str(item.get("商品ID") or ""),
+        item_id=str(item.get("商品 ID") or ""),
         current_price=parse_price_value(item.get("当前售价")),
     )
     return {

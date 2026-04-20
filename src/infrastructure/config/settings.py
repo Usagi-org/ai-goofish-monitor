@@ -73,6 +73,8 @@ class NotificationSettings(_EnvSettings):
     webhook_content_type: str = _env_field("JSON", "WEBHOOK_CONTENT_TYPE")
     webhook_query_parameters: Optional[str] = _env_field(None, "WEBHOOK_QUERY_PARAMETERS")
     webhook_body: Optional[str] = _env_field(None, "WEBHOOK_BODY")
+    feishu_webhook_url: Optional[str] = _env_field(None, "FEISHU_WEBHOOK_URL")
+    dingtalk_webhook_url: Optional[str] = _env_field(None, "DINGTALK_WEBHOOK_URL")
     pcurl_to_mobile: bool = _env_field(True, "PCURL_TO_MOBILE")
 
     def has_any_notification_enabled(self) -> bool:
@@ -92,7 +94,7 @@ class ScraperSettings(_EnvSettings):
     run_headless: bool = _env_field(True, "RUN_HEADLESS")
     login_is_edge: bool = _env_field(False, "LOGIN_IS_EDGE")
     running_in_docker: bool = _env_field(False, "RUNNING_IN_DOCKER")
-    state_file: str = _env_field("xianyu_state.json", "STATE_FILE")
+    state_file: str = _env_field("state/default.json", "STATE_FILE")
 
 
 class AppSettings(_EnvSettings):

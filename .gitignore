@@ -15,3 +15,5 @@ prompts/
 .serena/
 price_history/
 data/
+venv/**/
+*.db

@@ -47,6 +47,14 @@ export function useTasks() {
     fetchTasks({ silent: true })
   })
 
+  on('task_paused_changed', (data: { id: number; is_paused: boolean }) => {
+    const task = tasks.value.find((t) => t.id === data.id)
+    if (task) {
+      task.is_paused = data.is_paused
+    }
+    fetchTasks({ silent: true })
+  })
+
   async function createTask(data: TaskGenerateRequest): Promise<TaskCreateResponse> {
     isLoading.value = true
     error.value = null
@@ -135,6 +143,46 @@ export function useTasks() {
       isLoading.value = false
     }
   }
+
+  async function pauseTask(taskId: number) {
+    isLoading.value = true
+    const task = tasks.value.find((t) => t.id === taskId)
+    const previous = task?.is_paused
+    if (task) {
+      task.is_paused = true
+    }
+    try {
+      await taskApi.pauseTask(taskId)
+    } catch (e) {
+      if (task && previous !== undefined) {
+        task.is_paused = previous
+      }
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function resumeTask(taskId: number) {
+    isLoading.value = true
+    const task = tasks.value.find((t) => t.id === taskId)
+    const previous = task?.is_paused
+    if (task) {
+      task.is_paused = false
+    }
+    try {
+      await taskApi.resumeTask(taskId)
+    } catch (e) {
+      if (task && previous !== undefined) {
+        task.is_paused = previous
+      }
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
   
   // Load tasks when the composable is first used in a component
   onMounted(fetchTasks)
@@ -149,6 +197,8 @@ export function useTasks() {
     removeTask,
     startTask,
     stopTask,
+    pauseTask,
+    resumeTask,
     stoppingTaskIds,
   }
 }

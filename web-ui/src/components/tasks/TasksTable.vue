@@ -13,19 +13,21 @@ import {
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Play, 
-  Square, 
-  Pencil, 
-  Trash2, 
-  User, 
-  BrainCircuit, 
+import {
+  Play,
+  Square,
+  Pencil,
+  Trash2,
+  User,
+  BrainCircuit,
   Keyboard,
   Clock,
   Layers,
   MapPin,
   RefreshCcw,
-  Search
+  Search,
+  Pause,
+  PlayCircle
 } from 'lucide-vue-next'
 import { formatCountdown, formatNextRunAbsolute } from '@/lib/taskSchedule'
 
@@ -88,6 +90,8 @@ const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
   (e: 'run-task', taskId: number): void
   (e: 'stop-task', taskId: number): void
+  (e: 'pause-task', taskId: number): void
+  (e: 'resume-task', taskId: number): void
   (e: 'edit-task', task: Task): void
   (e: 'refresh-criteria', task: Task): void
   (e: 'toggle-enabled', task: Task, enabled: boolean): void
@@ -95,234 +99,45 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="app-surface overflow-hidden animate-fade-in">
-    <div class="space-y-4 p-4 lg:hidden">
-      <template v-if="isLoading && tasks.length === 0">
-        <div class="flex min-h-40 flex-col items-center justify-center gap-2 text-slate-400">
-          <RefreshCcw class="h-6 w-6 animate-spin" />
-          <span class="text-sm font-medium italic">{{ t('tasks.table.syncing') }}</span>
-        </div>
-      </template>
-      <template v-else-if="tasks.length === 0">
-        <div class="flex min-h-40 flex-col items-center justify-center gap-2 text-slate-300">
-          <Layers class="h-12 w-12 opacity-20" />
-          <p class="text-sm font-bold">{{ t('tasks.table.empty') }}</p>
-        </div>
-      </template>
-      <template v-else>
-        <article
-          v-for="task in tasks"
-          :key="task.id"
-          class="app-surface-subtle p-4"
-        >
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0 space-y-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="truncate text-base font-black tracking-tight text-slate-900">
-                  {{ task.task_name }}
-                </h3>
-                <Badge
-                  variant="outline"
-                  :class="[
-                    'border-none px-2 py-0.5 text-[10px] font-black',
-                    isKeywordMode(task) ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600',
-                  ]"
-                >
-                  <component :is="isKeywordMode(task) ? Keyboard : BrainCircuit" class="mr-1 h-3 w-3" />
-                  {{ isKeywordMode(task) ? 'KEYWORD' : 'AI' }}
-                </Badge>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <div class="inline-flex items-center gap-1.5 rounded-md border border-slate-200/70 bg-slate-100/80 px-2 py-1 font-semibold">
-                  <Search class="h-3.5 w-3.5 text-slate-400" />
-                  {{ task.keyword }}
-                </div>
-                <span v-if="task.description" class="line-clamp-1 text-slate-500">
-                  {{ task.description }}
-                </span>
-              </div>
-            </div>
-
-            <div class="flex flex-col items-end gap-2">
-              <Switch
-                :model-value="task.enabled"
-                class="data-[state=checked]:bg-primary"
-                @update:model-value="(val: boolean) => emit('toggle-enabled', task, val)"
-              />
-              <Badge
-                variant="outline"
-                :class="task.is_running ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'"
-              >
-                {{ task.is_running ? t('common.running') : t('common.idle') }}
-              </Badge>
-            </div>
-          </div>
-
-          <div class="mt-4 grid gap-3 sm:grid-cols-2">
-            <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                {{ t('tasks.table.headers.crawl') }}
-              </p>
-              <p class="mt-2 text-sm font-bold text-slate-700">
-                ¥{{ task.min_price || 0 }} - {{ task.max_price || 'MAX' }}
-              </p>
-              <div class="mt-2 flex flex-wrap gap-1.5">
-                <Badge variant="outline" class="border-slate-200/70 bg-slate-50 text-slate-500">
-                  {{ task.personal_only ? t('tasks.table.personalOnly') : t('common.all') }}
-                </Badge>
-                <Badge variant="outline" class="border-slate-200/70 bg-slate-50 text-slate-500">
-                  {{ task.free_shipping ? t('tasks.table.freeShipping') : t('common.all') }}
-                </Badge>
-                <Badge v-if="task.region" variant="outline" class="border-slate-200/70 bg-slate-50 text-slate-500">
-                  <MapPin class="mr-1 h-3 w-3" />
-                  {{ task.region }}
-                </Badge>
-              </div>
-            </div>
-
-            <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3">
-              <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                {{ t('tasks.table.headers.schedule') }}
-              </p>
-              <p class="mt-2 text-sm font-bold" :class="resolveCountdownTone(task)">
-                {{ resolveCountdownText(task) }}
-              </p>
-              <p v-if="resolveNextRunLabel(task)" class="mt-1 text-xs text-slate-500">
-                {{ resolveNextRunLabel(task) }}
-              </p>
-              <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span class="inline-flex items-center gap-1">
-                  <Clock class="h-3.5 w-3.5" />
-                  {{ task.cron || 'MANUAL' }}
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <Layers class="h-3.5 w-3.5" />
-                  {{ task.max_pages || 3 }}P
-                </span>
-              </div>
-            </div>
-
-            <div class="rounded-xl border border-slate-200/70 bg-white/80 p-3 sm:col-span-2">
-              <div class="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                    {{ t('tasks.table.headers.mode') }}
-                  </p>
-                  <p class="mt-2 text-sm font-semibold text-slate-700">
-                    {{ resolveAccountStrategyLabel(task) }} · {{ resolveAccountName(task) }}
-                  </p>
-                </div>
-
-                <div v-if="isKeywordMode(task)" class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
-                  {{ t('tasks.table.keywordStrategies', { count: task.keyword_rules?.length || 0 }) }}
-                </div>
-                <div v-else class="flex flex-wrap items-center gap-2">
-                  <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-mono font-semibold text-emerald-700">
-                    {{ (task.ai_prompt_criteria_file || 'STANDARD').split('/').pop() }}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="text-emerald-700 hover:bg-emerald-50"
-                    :aria-label="`${t('tasks.table.refreshCriteria')} ${task.task_name}`"
-                    @click="emit('refresh-criteria', task)"
-                  >
-                    <RefreshCcw class="mr-1 h-3.5 w-3.5" />
-                    {{ t('tasks.table.refreshCriteria') }}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 flex flex-wrap gap-2">
-            <Button
-              v-if="!task.is_running"
-              size="sm"
-              class="flex-1 min-w-[120px]"
-              :class="task.enabled ? '' : 'pointer-events-none opacity-50'"
-              :aria-label="`${t('tasks.table.start')} ${task.task_name}`"
-              @click="emit('run-task', task.id)"
-            >
-              <Play class="mr-1 h-3.5 w-3.5 fill-current" />
-              {{ t('tasks.table.start') }}
-            </Button>
-            <Button
-              v-else
-              size="sm"
-              variant="destructive"
-              class="flex-1 min-w-[120px]"
-              :disabled="isStopping(task.id)"
-              :aria-label="`${t('tasks.table.stop')} ${task.task_name}`"
-              @click="emit('stop-task', task.id)"
-            >
-              <Square v-if="!isStopping(task.id)" class="mr-1 h-3.5 w-3.5 fill-current" />
-              <RefreshCcw v-else class="mr-1 h-3.5 w-3.5 animate-spin" />
-              {{ isStopping(task.id) ? t('tasks.table.stopping') : t('tasks.table.stop') }}
-            </Button>
-            <Button
-              size="icon"
-              variant="outline"
-              class="size-10"
-              :aria-label="`${t('common.edit')} ${task.task_name}`"
-              @click="emit('edit-task', task)"
-            >
-              <Pencil class="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="outline"
-              class="size-10 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-              :aria-label="`${t('common.delete')} ${task.task_name}`"
-              @click="emit('delete-task', task.id)"
-            >
-              <Trash2 class="h-4 w-4" />
-            </Button>
-          </div>
-        </article>
-      </template>
-    </div>
-
-    <div class="hidden lg:block">
-      <Table>
-        <TableHeader class="bg-slate-50/50 border-b border-slate-100">
+  <div class="border-none shadow-glass rounded-2xl bg-white/60 backdrop-blur-md overflow-hidden animate-fade-in">
+    <Table>
+      <TableHeader class="bg-slate-50/50 border-b border-slate-100">
+        <TableRow>
+          <TableHead class="w-[80px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.status') }}</TableHead>
+          <TableHead class="min-w-[300px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.details') }}</TableHead>
+          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.crawl') }}</TableHead>
+          <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.mode') }}</TableHead>
+          <TableHead class="w-[140px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.schedule') }}</TableHead>
+          <TableHead class="w-[160px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">{{ t('tasks.table.headers.actions') }}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <template v-if="isLoading && tasks.length === 0">
           <TableRow>
-            <TableHead class="w-[80px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.status') }}</TableHead>
-            <TableHead class="min-w-[300px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.details') }}</TableHead>
-            <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.crawl') }}</TableHead>
-            <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.mode') }}</TableHead>
-            <TableHead class="w-[140px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.schedule') }}</TableHead>
-            <TableHead class="w-[160px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">{{ t('tasks.table.headers.actions') }}</TableHead>
+            <TableCell :colspan="6" class="h-32 text-center">
+              <div class="flex flex-col items-center justify-center gap-2 text-slate-400">
+                <RefreshCcw class="w-6 h-6 animate-spin" />
+                <span class="text-sm font-medium italic">{{ t('tasks.table.syncing') }}</span>
+              </div>
+            </TableCell>
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          <template v-if="isLoading && tasks.length === 0">
-            <TableRow>
-              <TableCell :colspan="6" class="h-32 text-center">
-                <div class="flex flex-col items-center justify-center gap-2 text-slate-400">
-                  <RefreshCcw class="w-6 h-6 animate-spin" />
-                  <span class="text-sm font-medium italic">{{ t('tasks.table.syncing') }}</span>
-                </div>
-              </TableCell>
-            </TableRow>
-          </template>
-          <template v-else-if="tasks.length === 0">
-            <TableRow>
-              <TableCell :colspan="6" class="h-40 text-center">
-                <div class="flex flex-col items-center justify-center gap-2 text-slate-300">
+        </template>
+        <template v-else-if="tasks.length === 0">
+          <TableRow>
+            <TableCell :colspan="6" class="h-40 text-center">
+               <div class="flex flex-col items-center justify-center gap-2 text-slate-300">
                   <Layers class="w-12 h-12 opacity-20" />
                   <p class="text-sm font-bold">{{ t('tasks.table.empty') }}</p>
-                </div>
-              </TableCell>
-            </TableRow>
-          </template>
-          <template v-else>
-            <TableRow
-              v-for="task in tasks"
-              :key="task.id"
-              class="group hover:bg-white/80 transition-all duration-300 border-b border-slate-100/50 last:border-0"
-            >
+               </div>
+            </TableCell>
+          </TableRow>
+        </template>
+        <template v-else>
+          <TableRow
+            v-for="task in tasks"
+            :key="task.id"
+            class="group hover:bg-white/80 transition-all duration-300 border-b border-slate-100/50 last:border-0"
+          >
             <!-- Column 1: Status -->
             <TableCell class="px-6 align-middle">
               <div class="flex flex-col items-center gap-2.5">
@@ -419,8 +234,6 @@ const emit = defineEmits<{
                     size="sm" 
                     variant="ghost" 
                     class="h-6 text-[9px] font-black text-emerald-600 hover:bg-emerald-50 uppercase tracking-widest px-2" 
-                    :aria-label="`${t('tasks.table.refreshCriteria')} ${task.task_name}`"
-                    :title="`${t('tasks.table.refreshCriteria')} ${task.task_name}`"
                     @click="emit('refresh-criteria', task)"
                   >
                     <RefreshCcw class="w-2.5 h-2.5 mr-1" /> {{ t('tasks.table.refreshCriteria') }}
@@ -463,49 +276,65 @@ const emit = defineEmits<{
             <!-- Column 6: Actions -->
             <TableCell class="px-6 align-middle text-right">
               <div class="flex justify-end items-center gap-2">
-                  <Button
-                    v-if="!task.is_running"
-                    size="sm" 
-                    variant="default"
-                    class="h-8 px-3 rounded-lg shadow-sm transition-all active:scale-95 text-white border-none"
-                    :class="task.enabled ? 'bg-primary hover:bg-primary/90' : 'bg-slate-200 text-slate-400 pointer-events-none opacity-50'"
-                    :aria-label="`${t('tasks.table.start')} ${task.task_name}`"
-                    @click="emit('run-task', task.id)"
-                  >
+                <Button
+                  v-if="!task.is_running"
+                  size="sm"
+                  variant="default"
+                  class="h-8 px-3 rounded-lg shadow-sm transition-all active:scale-95 text-white border-none"
+                  :class="task.enabled ? 'bg-primary hover:bg-primary/90' : 'bg-slate-200 text-slate-400 pointer-events-none opacity-50'"
+                  @click="emit('run-task', task.id)"
+                >
                   <Play class="w-3 h-3 mr-1.5 fill-current" />
                   <span class="font-bold text-[11px]">{{ t('tasks.table.start') }}</span>
                 </Button>
-                  <Button
-                    v-else
-                    size="sm"
-                    variant="destructive"
-                    class="h-8 px-3 rounded-lg shadow-sm active:scale-95 border-none"
-                    :disabled="isStopping(task.id)"
-                    :aria-label="`${t('tasks.table.stop')} ${task.task_name}`"
-                    @click="emit('stop-task', task.id)"
-                  >
+                <Button
+                  v-else
+                  size="sm"
+                  variant="destructive"
+                  class="h-8 px-3 rounded-lg shadow-sm active:scale-95 border-none"
+                  :disabled="isStopping(task.id)"
+                  @click="emit('stop-task', task.id)"
+                >
                   <Square v-if="!isStopping(task.id)" class="w-3 h-3 mr-1.5 fill-current" />
                   <RefreshCcw v-else class="w-3 h-3 mr-1.5 animate-spin" />
                   <span class="font-bold text-[11px]">{{ isStopping(task.id) ? t('tasks.table.stopping') : t('tasks.table.stop') }}</span>
                 </Button>
 
+                <!-- Pause/Resume button -->
+                <template v-if="task.cron && task.enabled">
+                  <Button
+                    v-if="task.is_paused"
+                    size="sm"
+                    variant="outline"
+                    class="h-8 px-2 rounded-lg border-amber-200 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                    @click="emit('resume-task', task.id)"
+                  >
+                    <PlayCircle class="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    v-else
+                    size="sm"
+                    variant="outline"
+                    class="h-8 px-2 rounded-lg border-slate-200 text-slate-500 hover:bg-slate-50"
+                    @click="emit('pause-task', task.id)"
+                  >
+                    <Pause class="w-3.5 h-3.5" />
+                  </Button>
+                </template>
+
                 <div class="flex items-center gap-0.5 ml-1">
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    class="w-8 h-8 rounded-full text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors" 
-                    :aria-label="`${t('common.edit')} ${task.task_name}`"
-                    :title="`${t('common.edit')} ${task.task_name}`"
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="w-8 h-8 rounded-full text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
                     @click="emit('edit-task', task)"
                   >
                     <Pencil class="w-3.5 h-3.5" />
                   </Button>
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    class="w-8 h-8 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" 
-                    :aria-label="`${t('common.delete')} ${task.task_name}`"
-                    :title="`${t('common.delete')} ${task.task_name}`"
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    class="w-8 h-8 rounded-full text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
                     @click="emit('delete-task', task.id)"
                   >
                     <Trash2 class="w-3.5 h-3.5" />
@@ -513,11 +342,10 @@ const emit = defineEmits<{
                 </div>
               </div>
             </TableCell>
-            </TableRow>
-          </template>
-        </TableBody>
-      </Table>
-    </div>
+          </TableRow>
+        </template>
+      </TableBody>
+    </Table>
   </div>
 </template>
 

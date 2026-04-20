@@ -4,13 +4,13 @@ export interface ProductInfo {
   "商品标题": string;
   "当前售价": string;
   "商品原价"?: string;
-  "“想要”人数"?: string | number;
+  "想要人数"?: string | number;
   "商品标签"?: string[];
   "发货地区"?: string;
   "卖家昵称"?: string;
   "商品链接": string;
   "发布时间"?: string;
-  "商品ID": string;
+  "商品 ID": string;
   "商品图片列表"?: string[];
   "商品主图链接"?: string;
   "浏览量"?: string | number;

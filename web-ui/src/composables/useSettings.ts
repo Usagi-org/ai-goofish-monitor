@@ -14,8 +14,9 @@ export function useSettings() {
   const aiSettings = ref<AiSettings>({})
   const rotationSettings = ref<RotationSettings>({})
   const systemStatus = ref<SystemStatus | null>(null)
+  const isAiEnabled = ref(true)
   const isReady = ref(false)
-  
+
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<Error | null>(null)
@@ -24,16 +25,18 @@ export function useSettings() {
     isLoading.value = true
     error.value = null
     try {
-      const [notif, ai, rotation, status] = await Promise.all([
+      const [notif, ai, rotation, status, aiEnabled] = await Promise.all([
         settingsApi.getNotificationSettings(),
         settingsApi.getAiSettings(),
         settingsApi.getRotationSettings(),
-        settingsApi.getSystemStatus()
+        settingsApi.getSystemStatus(),
+        settingsApi.getAiEnabled()
       ])
       notificationSettings.value = notif
       aiSettings.value = ai
       rotationSettings.value = rotation
       systemStatus.value = status
+      isAiEnabled.value = aiEnabled
     } catch (e) {
       if (e instanceof Error) error.value = e
     } finally {
@@ -52,6 +55,19 @@ export function useSettings() {
       throw e
     } finally {
       isLoading.value = false
+    }
+  }
+
+  async function toggleAiEnabled(enabled: boolean) {
+    isSaving.value = true
+    try {
+      await settingsApi.setAiEnabled(enabled)
+      isAiEnabled.value = enabled
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isSaving.value = false
     }
   }
 
@@ -151,6 +167,7 @@ export function useSettings() {
     aiSettings,
     rotationSettings,
     systemStatus,
+    isAiEnabled,
     isLoading,
     isSaving,
     isReady,
@@ -162,5 +179,6 @@ export function useSettings() {
     saveRotationSettings,
     testAiConnection,
     refreshStatus,
+    toggleAiEnabled,
   }
 }

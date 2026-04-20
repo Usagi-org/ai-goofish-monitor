@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useDashboard } from '@/composables/useDashboard'
+import { useSettings } from '@/composables/useSettings'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Badge from '@/components/ui/badge/Badge.vue'
@@ -21,6 +22,7 @@ import {
 
 const router = useRouter()
 const { t } = useI18n()
+const { isAiEnabled: isAiEnabledGlobal } = useSettings()
 const {
   focusInsights,
   focusTask,
@@ -150,14 +152,14 @@ function openActivity(activity: { filename: string | null; type: string }) {
         </Button>
       </div>
     </div>
-    <div v-if="error" class="app-alert-error" role="alert">
+    <div v-if="error" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
       {{ error.message }}
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
       <Card
         v-for="stat in statCards"
         :key="stat.label"
-        class="app-surface border-none transition-all hover:-translate-y-0.5"
+        class="border-none shadow-glass bg-white/60 backdrop-blur-md transition-all hover:scale-[1.02]"
       >
         <CardContent class="p-6">
           <div class="flex items-center justify-between">
@@ -176,7 +178,7 @@ function openActivity(activity: { filename: string | null; type: string }) {
       </Card>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <Card class="app-surface border-none lg:col-span-2">
+      <Card class="lg:col-span-2 border-none shadow-glass bg-white/60 backdrop-blur-md">
         <CardHeader class="flex flex-col gap-4 border-b border-slate-100/60 pb-5 md:flex-row md:items-start md:justify-between">
           <div class="space-y-2">
             <CardTitle class="text-lg font-bold text-slate-800">
@@ -200,30 +202,30 @@ function openActivity(activity: { filename: string | null; type: string }) {
               <article
                 v-for="card in insightCards"
                 :key="card.label"
-                class="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 shadow-sm"
+                class="rounded-[24px] border border-white/70 bg-white/70 p-4 shadow-[0_12px_30px_rgba(92,68,36,0.06)] backdrop-blur"
               >
-                <p class="text-xs uppercase tracking-[0.18em] text-slate-500">{{ card.label }}</p>
-                <p class="mt-3 text-2xl font-semibold text-slate-900">{{ card.value }}</p>
-                <p class="mt-2 text-xs text-slate-500">{{ card.hint }}</p>
+                <p class="text-xs uppercase tracking-[0.22em] text-[#9b7a5b]">{{ card.label }}</p>
+                <p class="mt-3 text-2xl font-semibold text-[#231d18]">{{ card.value }}</p>
+                <p class="mt-2 text-xs text-[#7a6855]">{{ card.hint }}</p>
               </article>
             </div>
             <PriceTrendChart :points="focusInsights?.daily_trend || []" />
-            <div class="grid gap-3 rounded-[28px] border border-slate-200/70 bg-white/80 p-5 shadow-sm md:grid-cols-3">
-              <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div class="grid gap-3 rounded-[28px] border border-[#d8c7b5] bg-white/80 p-5 shadow-[0_12px_30px_rgba(92,68,36,0.06)] md:grid-cols-3">
+              <div class="rounded-2xl bg-[#f8f1e5] px-4 py-3 text-sm text-[#5e5043]">
                 {{ t('dashboard.focus.currentMedian') }}
-                <span class="font-semibold text-slate-900">
+                <span class="font-semibold text-[#2d261f]">
                   {{ focusInsights?.market_summary.median_price ? `¥${focusInsights.market_summary.median_price}` : '—' }}
                 </span>
               </div>
-              <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div class="rounded-2xl bg-[#f4ece2] px-4 py-3 text-sm text-[#5e5043]">
                 {{ t('dashboard.focus.historyMin') }}
-                <span class="font-semibold text-slate-900">
+                <span class="font-semibold text-[#2d261f]">
                   {{ focusInsights?.history_summary.min_price ? `¥${focusInsights.history_summary.min_price}` : '—' }}
                 </span>
               </div>
-              <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <div class="rounded-2xl bg-[#eee4d7] px-4 py-3 text-sm text-[#5e5043]">
                 {{ t('dashboard.focus.historyMax') }}
-                <span class="font-semibold text-slate-900">
+                <span class="font-semibold text-[#2d261f]">
                   {{ focusInsights?.history_summary.max_price ? `¥${focusInsights.history_summary.max_price}` : '—' }}
                 </span>
               </div>
@@ -232,7 +234,7 @@ function openActivity(activity: { filename: string | null; type: string }) {
         </CardContent>
       </Card>
       <div class="space-y-8">
-        <Card class="app-surface border-none">
+        <Card class="border-none shadow-glass bg-white/60 backdrop-blur-md">
           <CardHeader>
             <CardTitle class="text-lg font-bold text-slate-800 flex items-center gap-2">
               <Activity class="w-5 h-5 text-rose-500" />
@@ -276,14 +278,15 @@ function openActivity(activity: { filename: string | null; type: string }) {
             </button>
           </CardContent>
         </Card>
-        <div class="app-surface border-none p-6">
-          <div class="mb-4 flex items-center gap-2">
-            <Zap class="w-6 h-6 text-primary" />
+        <!-- AI Strategy Card - Only show when AI is enabled -->
+        <div v-if="isAiEnabledGlobal" class="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-6 text-white shadow-lg shadow-indigo-200">
+          <div class="flex items-center gap-2 mb-4">
+            <Zap class="w-6 h-6 text-amber-300" />
             <h4 class="font-bold text-lg">{{ t('dashboard.suggestion.sectionTitle') }}</h4>
           </div>
-          <p class="mb-2 text-sm leading-relaxed text-slate-800">{{ suggestion.title }}</p>
-          <p class="mb-6 text-sm leading-relaxed text-slate-500">{{ suggestion.description }}</p>
-          <Button class="w-full" @click="openSuggestion">
+          <p class="text-indigo-100 text-sm leading-relaxed mb-2">{{ suggestion.title }}</p>
+          <p class="text-indigo-100/90 text-sm leading-relaxed mb-6">{{ suggestion.description }}</p>
+          <Button variant="secondary" class="w-full bg-white text-indigo-700 font-bold hover:bg-indigo-50" @click="openSuggestion">
             <Sparkles class="mr-2 h-4 w-4" />
             {{ suggestion.actionLabel }}
           </Button>

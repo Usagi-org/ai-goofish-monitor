@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "task_name": "测试任务",
+    "enabled": true,
+    "keyword": "MacBook",
+    "description": "测试监控任务",
+    "max_pages": 5,
+    "personal_only": true,
+    "min_price": "1000",
+    "max_price": "5000",
+    "cron": null,
+    "ai_prompt_base_file": "prompts/base_prompt.txt",
+    "ai_prompt_criteria_file": "prompts/default_criteria.txt",
+    "account_state_file": "state/default.json",
+    "free_shipping": false,
+    "new_publish_option": null,
+    "region": null,
+    "is_running": false
+  }
+]

@@ -9,12 +9,14 @@ from fastapi.templating import Jinja2Templates
 
 from src.api.routes import (
     dashboard,
-    tasks,
     logs,
-    settings,
+    login_state,
+    metrics,
     prompts,
     results,
-    login_state,
+    sellers,
+    settings,
+    tasks,
     websocket,
     accounts,
 )
@@ -112,6 +114,8 @@ app.include_router(results.router)
 app.include_router(login_state.router)
 app.include_router(websocket.router)
 app.include_router(accounts.router)
+app.include_router(metrics.router)
+app.include_router(sellers.router)
 
 # 挂载静态文件
 # 旧的静态文件目录（用于截图等）

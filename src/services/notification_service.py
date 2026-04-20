@@ -3,6 +3,7 @@
 统一管理所有通知渠道
 """
 import asyncio
+import logging
 from typing import Dict, List
 
 from src.infrastructure.external.notification_clients.base import NotificationClient
@@ -10,9 +11,14 @@ from src.infrastructure.external.notification_clients.factory import build_notif
 from src.services.notification_config_service import load_notification_settings
 from src.infrastructure.config.settings import NotificationSettings
 
+logger = logging.getLogger(__name__)
+
 
 class NotificationService:
     """通知服务"""
+
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # 秒
 
     def __init__(self, clients: List[NotificationClient]):
         self.clients = [client for client in clients if client.is_enabled()]
@@ -32,7 +38,7 @@ class NotificationService:
             return {}
 
         tasks = [
-            self._send_with_result(client, product_data, reason)
+            self._send_with_retry(client, product_data, reason)
             for client in self.clients
         ]
         results = await asyncio.gather(*tasks)
@@ -49,12 +55,50 @@ class NotificationService:
             "这是一条测试通知，用于验证推送渠道是否可用。",
         )
 
+    async def _send_with_retry(
+        self,
+        client: NotificationClient,
+        product_data: Dict,
+        reason: str,
+    ) -> Dict[str, str | bool]:
+        """带重试机制的发送方法"""
+        last_error = None
+
+        for attempt in range(1, self.MAX_RETRIES + 1):
+            try:
+                await client.send(product_data, reason)
+                return {
+                    "channel": client.channel_key,
+                    "label": client.display_name,
+                    "success": True,
+                    "message": "发送成功",
+                }
+            except Exception as exc:
+                last_error = exc
+                if attempt < self.MAX_RETRIES:
+                    logger.warning(
+                        f"通知发送失败 ({client.channel_key}), 第 {attempt} 次重试，延迟 {self.RETRY_DELAY} 秒：{exc}"
+                    )
+                    await asyncio.sleep(self.RETRY_DELAY * attempt)  # 指数退避
+                else:
+                    logger.error(
+                        f"通知发送失败 ({client.channel_key}), 已达到最大重试次数：{exc}"
+                    )
+
+        return {
+            "channel": client.channel_key,
+            "label": client.display_name,
+            "success": False,
+            "message": f"发送失败 (已重试{self.MAX_RETRIES}次): {last_error}",
+        }
+
     async def _send_with_result(
         self,
         client: NotificationClient,
         product_data: Dict,
         reason: str,
     ) -> Dict[str, str | bool]:
+        """（旧方法，保留以兼容）无重试的发送方法"""
         try:
             await client.send(product_data, reason)
             return {

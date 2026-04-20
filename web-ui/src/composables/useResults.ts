@@ -6,6 +6,7 @@ import * as resultsApi from '@/api/results'
 import type { GetResultContentParams } from '@/api/results'
 import { useWebSocket } from '@/composables/useWebSocket'
 import * as tasksApi from '@/api/tasks'
+import { toast } from '@/components/ui/toast'
 
 export function useResults() {
   const { t } = useI18n()
@@ -24,7 +25,7 @@ export function useResults() {
   const hasFetchedTasks = ref(false)
   const readyDelayMs = 200
   let readyTimer: ReturnType<typeof setTimeout> | null = null
-  
+
   const filters = reactive<Required<Omit<GetResultContentParams, 'page' | 'limit'>>>({
     recommended_only: false,
     ai_recommended_only: false,
@@ -152,6 +153,43 @@ export function useResults() {
 
   on('tasks_updated', () => {
     fetchTaskNameMap()
+  })
+
+  // 任务完成后自动刷新
+  on('task_completed', async (data: { task_id: number; task_name: string; items_count: number; want_count_total?: number; want_count_diff?: number; price_changes?: string[]; price_diff?: number }) => {
+    // 显示 Toast 通知
+    let description = `任务 "${data.task_name}" 已完成，发现 ${data.items_count} 个商品`
+
+    // 想要数变化
+    if (data.want_count_total && data.want_count_total > 0) {
+      if (data.want_count_diff !== undefined && data.want_count_diff !== 0) {
+        const diffSign = data.want_count_diff > 0 ? '+' : ''
+        const diffText = data.want_count_diff > 0 ? '↑' : '↓'
+        description += `，总想要数 ${data.want_count_total} (${diffText}${diffSign}${Math.abs(data.want_count_diff)})`
+      } else {
+        description += `，总想要数 ${data.want_count_total}`
+      }
+    }
+
+    // 价格变化
+    if (data.price_diff !== undefined && data.price_diff !== 0) {
+      const priceSign = data.price_diff > 0 ? '+' : ''
+      const priceIcon = data.price_diff > 0 ? '↑' : '↓'
+      description += `，价格 ${priceIcon}${priceSign}¥${Math.abs(data.price_diff)}`
+    }
+
+    toast({
+      title: '任务完成',
+      description,
+    })
+
+    // 刷新文件列表和结果
+    await fetchFiles()
+    // 如果文件列表有新的文件，自动刷新
+    if (files.value.length > 0) {
+      await fetchResults()
+      await fetchInsights()
+    }
   })
 
   async function refreshResults() {

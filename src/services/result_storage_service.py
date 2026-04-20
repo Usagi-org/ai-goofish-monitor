@@ -83,7 +83,7 @@ def _save_result_record_sync(record: dict, keyword: str) -> bool:
     with sqlite_connection() as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO result_items (
+            INSERT OR REPLACE INTO result_items (
                 result_filename, keyword, task_name, crawl_time, publish_time, price,
                 price_display, item_id, title, link, link_unique_key, seller_nickname,
                 is_recommended, analysis_source, keyword_hit_count, raw_json

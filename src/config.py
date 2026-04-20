@@ -8,10 +8,32 @@ from openai import AsyncOpenAI
 load_dotenv()
 
 # --- File Paths & Directories ---
-STATE_FILE = "xianyu_state.json"
+STATE_DIR = "state"
 IMAGE_SAVE_DIR = "images"
 CONFIG_FILE = "config.json"
 os.makedirs(IMAGE_SAVE_DIR, exist_ok=True)
+os.makedirs(STATE_DIR, exist_ok=True)
+
+# 动态获取状态文件（优先使用 state/ 目录下的账户文件）
+STATE_FILE = None  # 运行时通过 get_state_file() 获取
+
+
+def get_state_file() -> str:
+    """
+    获取当前使用的状态文件
+    优先返回 state/ 目录下的第一个账户文件，如果没有则返回 xianyu_state.json
+    """
+    import glob
+    # 优先使用 state/ 目录下的账户文件
+    state_files = glob.glob(os.path.join(STATE_DIR, "*.json"))
+    if state_files:
+        # 返回第一个账户文件
+        return sorted(state_files)[0]
+    # 回退到旧的 xianyu_state.json
+    legacy_file = "xianyu_state.json"
+    if os.path.exists(legacy_file):
+        return legacy_file
+    return os.path.join(STATE_DIR, "default.json")
 
 # 任务隔离的临时图片目录前缀
 TASK_IMAGE_DIR_PREFIX = "task_images_"
@@ -46,6 +68,22 @@ AI_DEBUG_MODE = os.getenv("AI_DEBUG_MODE", "false").lower() == "true"
 SKIP_AI_ANALYSIS = os.getenv("SKIP_AI_ANALYSIS", "false").lower() == "true"
 ENABLE_THINKING = os.getenv("ENABLE_THINKING", "false").lower() == "true"
 ENABLE_RESPONSE_FORMAT = os.getenv("ENABLE_RESPONSE_FORMAT", "true").lower() == "true"
+
+
+def is_ai_enabled() -> bool:
+    """检查 AI 功能是否启用（结合环境变量和数据库开关）"""
+    # 首先检查环境变量 SKIP_AI_ANALYSIS（优先级更高）
+    if os.getenv("SKIP_AI_ANALYSIS", "false").lower() == "true":
+        return False
+
+    # 然后检查数据库中的开关状态
+    try:
+        from src.services.ai_toggle_service import get_ai_toggle_service
+        service = get_ai_toggle_service()
+        return service.get_ai_enabled()
+    except Exception:
+        # 如果数据库不可用，返回默认值 True
+        return True
 
 # --- Headers ---
 IMAGE_DOWNLOAD_HEADERS = {
