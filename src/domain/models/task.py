@@ -130,6 +130,9 @@ class Task(BaseModel):
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
     is_running: bool = False
+    auto_order_enabled: bool = False
+    auto_order_target_price: Optional[str] = None
+    auto_order_action: Literal["notify_only", "generate_link", "auto_buy"] = "notify_only"
 
     @model_validator(mode="before")
     @classmethod
@@ -156,7 +159,7 @@ class Task(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    """创建任务的DTO"""
+    """创建任务的 DTO"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -179,6 +182,9 @@ class TaskCreate(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    auto_order_enabled: bool = False
+    auto_order_target_price: Optional[str] = None
+    auto_order_action: Literal["notify_only", "generate_link", "auto_buy"] = "notify_only"
 
     @model_validator(mode="before")
     @classmethod
@@ -223,7 +229,7 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    """更新任务的DTO"""
+    """更新任务的 DTO"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -247,6 +253,9 @@ class TaskUpdate(BaseModel):
     decision_mode: Optional[Literal["ai", "keyword"]] = None
     keyword_rules: Optional[List[str]] = None
     is_running: Optional[bool] = None
+    auto_order_enabled: Optional[bool] = None
+    auto_order_target_price: Optional[str] = None
+    auto_order_action: Optional[Literal["notify_only", "generate_link", "auto_buy"]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -290,7 +299,7 @@ class TaskUpdate(BaseModel):
 
 
 class TaskGenerateRequest(BaseModel):
-    """任务创建请求DTO（AI模式支持自动生成标准）"""
+    """任务创建请求 DTO（AI 模式支持自动生成标准）"""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -310,6 +319,9 @@ class TaskGenerateRequest(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    auto_order_enabled: bool = False
+    auto_order_target_price: Optional[str] = None
+    auto_order_action: Literal["notify_only", "generate_link", "auto_buy"] = "notify_only"
 
     @model_validator(mode="before")
     @classmethod

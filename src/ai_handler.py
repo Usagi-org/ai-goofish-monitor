@@ -47,6 +47,7 @@ from src.services.ai_request_compat import (
     remove_temperature_param,
 )
 from src.services.notification_service import build_notification_service
+from src.services.auto_order_service import AutoOrderService
 from src.utils import convert_goofish_link, retry_on_failure
 
 

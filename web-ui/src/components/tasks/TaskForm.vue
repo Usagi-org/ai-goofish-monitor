@@ -135,6 +135,9 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       new_publish_option: '__none__',
       region: '',
       decision_mode: 'ai',
+      auto_order_enabled: false,
+      auto_order_target_price: undefined,
+      auto_order_action: 'notify_only',
       ...defaultValues,
     }
     if (!form.value.account_strategy) {
@@ -252,6 +255,13 @@ function handleSubmit() {
   if (decisionMode === 'keyword' && !submitData.description) {
     submitData.description = ''
   }
+  
+  // 确保自动下单字段被包含
+  if (!submitData.auto_order_enabled) {
+    submitData.auto_order_enabled = false
+    submitData.auto_order_target_price = null
+    submitData.auto_order_action = 'notify_only'
+  }
 
   emit('submit', submitData)
 }
@@ -325,6 +335,50 @@ function handleSubmit() {
           <Input type="number" v-model="form.min_price as any" :aria-label="t('tasks.form.minPrice')" :placeholder="t('tasks.form.minPrice')" />
           <span>-</span>
           <Input type="number" v-model="form.max_price as any" :aria-label="t('tasks.form.maxPrice')" :placeholder="t('tasks.form.maxPrice')" />
+        </div>
+      </div>
+      
+      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4 border-t pt-4">
+        <Label class="sm:text-right font-semibold">{{ t('tasks.form.autoOrder.title') }}</Label>
+        <div class="sm:col-span-3">
+          <Switch v-model="form.auto_order_enabled" />
+          <span class="ml-2 text-sm">{{ t('tasks.form.autoOrder.enabled') }}</span>
+          <p class="text-xs text-gray-500 mt-1">
+            {{ t('tasks.form.autoOrder.enabledHint') }}
+          </p>
+        </div>
+      </div>
+      
+      <div v-if="form.auto_order_enabled" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label for="auto-order-target-price" class="sm:text-right">{{ t('tasks.form.autoOrder.targetPrice') }}</Label>
+        <Input 
+          id="auto-order-target-price" 
+          v-model="form.auto_order_target_price as any" 
+          type="number" 
+          class="sm:col-span-3" 
+          :placeholder="t('tasks.form.autoOrder.targetPricePlaceholder')" 
+        />
+        <p class="text-xs text-gray-500 sm:col-start-2 sm:col-span-3">
+          {{ t('tasks.form.autoOrder.targetPriceHint') }}
+        </p>
+      </div>
+      
+      <div v-if="form.auto_order_enabled" class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+        <Label class="sm:text-right">{{ t('tasks.form.autoOrder.action') }}</Label>
+        <div class="sm:col-span-3">
+          <Select v-model="form.auto_order_action">
+            <SelectTrigger>
+              <SelectValue :placeholder="t('tasks.form.autoOrder.actionPlaceholder')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="notify_only">{{ t('tasks.form.autoOrder.actions.notifyOnly') }}</SelectItem>
+              <SelectItem value="generate_link">{{ t('tasks.form.autoOrder.actions.generateLink') }}</SelectItem>
+              <SelectItem value="auto_buy">{{ t('tasks.form.autoOrder.actions.autoBuy') }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-gray-500 mt-1">
+            {{ t('tasks.form.autoOrder.actionHint') }}
+          </p>
         </div>
       </div>
       <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
@@ -430,6 +484,26 @@ function handleSubmit() {
         </div>
       </div>
       <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
+      <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4 border-t pt-4 mt-2">
+        <Label class="sm:text-right font-semibold">{{ t('tasks.form.sellerActive.title') }}</Label>
+        <div class="sm:col-span-3">
+          <Select v-model="form.seller_active_option as any">
+            <SelectTrigger>
+              <SelectValue :placeholder="t('tasks.form.sellerActive.placeholder')" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">{{ t('tasks.form.sellerActive.options.none') }}</SelectItem>
+              <SelectItem value="1 小时内">{{ t('tasks.form.sellerActive.options.within1Hour') }}</SelectItem>
+              <SelectItem value="24 小时内">{{ t('tasks.form.sellerActive.options.within24Hours') }}</SelectItem>
+              <SelectItem value="3 天内">{{ t('tasks.form.sellerActive.options.within3Days') }}</SelectItem>
+              <SelectItem value="7 天内">{{ t('tasks.form.sellerActive.options.within7Days') }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p class="text-xs text-gray-500 mt-1">
+            {{ t('tasks.form.sellerActive.hint') }}
+          </p>
+        </div>
+      </div>
         <Label class="sm:text-right">{{ t('tasks.form.region') }}</Label>
         <div class="space-y-1 sm:col-span-3">
           <TaskRegionSelector v-model="form.region as any" />

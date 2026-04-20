@@ -122,7 +122,7 @@ async def _parse_user_items_data(items_json: list) -> list:
 
 
 async def parse_user_head_data(head_json: dict) -> dict:
-    """解析用户头部API的JSON数据。"""
+    """解析用户头部 API 的 JSON 数据。"""
     data = head_json.get('data', {})
     ylz_tags = await safe_get(data, 'module', 'base', 'ylzTags', default=[])
     seller_credit, buyer_credit = {}, {}
@@ -131,6 +131,12 @@ async def parse_user_head_data(head_json: dict) -> dict:
             seller_credit = {'level': await safe_get(tag, 'attributes', 'level'), 'text': tag.get('text')}
         elif await safe_get(tag, 'attributes', 'role') == 'buyer':
             buyer_credit = {'level': await safe_get(tag, 'attributes', 'level'), 'text': tag.get('text')}
+    
+    # 提取用户活跃时间相关信息
+    user_info = await safe_get(data, 'module', 'base', 'userInfo', default={})
+    last_active_time = await safe_get(user_info, 'lastActiveTime')
+    online_status = await safe_get(user_info, 'onlineStatus')
+    
     return {
         "卖家昵称": await safe_get(data, 'module', 'base', 'displayName'),
         "卖家头像链接": await safe_get(data, 'module', 'base', 'avatar', 'avatar'),
@@ -138,7 +144,9 @@ async def parse_user_head_data(head_json: dict) -> dict:
         "卖家在售/已售商品数": await safe_get(data, 'module', 'tabs', 'item', 'number'),
         "卖家收到的评价总数": await safe_get(data, 'module', 'tabs', 'rate', 'number'),
         "卖家信用等级": seller_credit.get('text', '暂无'),
-        "买家信用等级": buyer_credit.get('text', '暂无')
+        "买家信用等级": buyer_credit.get('text', '暂无'),
+        "卖家最后活跃时间": last_active_time,
+        "卖家在线状态": online_status,
     }
 
 

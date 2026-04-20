@@ -61,6 +61,7 @@ from src.services.search_pagination import (
     advance_search_page,
     is_search_results_response,
 )
+from src.services.auto_order_service import AutoOrderService
 
 
 class RiskControlError(Exception):
@@ -464,6 +465,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     if new_publish_option == "__none__":
         new_publish_option = ""
     region_filter = (task_config.get("region") or "").strip()
+    
+    # 自动下单配置
+    auto_order_enabled = task_config.get("auto_order_enabled", False)
+    auto_order_target_price = task_config.get("auto_order_target_price")
+    auto_order_action = task_config.get("auto_order_action", "notify_only")
+    auto_order_service = AutoOrderService() if auto_order_enabled else None
 
     processed_links = set()
     history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -605,6 +612,8 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 ai_analyzer=get_ai_analysis,
                 notifier=send_ntfy_notification,
                 saver=save_to_jsonl,
+                auto_order_service=auto_order_service,
+                task_config=task_config,
             )
 
             # 增强反检测脚本（模拟真实移动设备）
@@ -1032,6 +1041,17 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     seller_do, "zhimaLevelInfo", "levelName"
                                 )
 
+                                # 1.5 提取卖家的活跃时间信息
+                                seller_last_active_time = await safe_get(
+                                    seller_do, "lastActiveTime"
+                                )
+                                seller_online_status = await safe_get(
+                                    seller_do, "onlineStatus"
+                                )
+                                seller_active_type = await safe_get(
+                                    seller_do, "activeType"
+                                )
+
                                 # 2. 提取该商品的完整图片列表
                                 image_infos = await safe_get(
                                     item_do, "imageInfos", default=[]
@@ -1097,6 +1117,8 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         seller_id=str(user_id) if user_id else None,
                                         zhima_credit_text=zhima_credit_text,
                                         registration_duration_text=registration_duration_text,
+                                        seller_last_active_time=seller_last_active_time,
+                                        seller_online_status=seller_online_status,
                                     )
                                 )
 

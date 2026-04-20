@@ -9,6 +9,11 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
 from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
+from src.services.auto_order_service import AutoOrderService
+from src.services.seller_active_service import (
+    format_active_time,
+    get_active_level,
+)
 
 
 SellerLoader = Callable[[str], Awaitable[dict]]
@@ -30,6 +35,8 @@ class ItemAnalysisJob:
     seller_id: Optional[str]
     zhima_credit_text: Optional[str]
     registration_duration_text: str
+    seller_last_active_time: Optional[str] = None
+    seller_online_status: Optional[str] = None
 
 
 class ItemAnalysisDispatcher:
@@ -45,6 +52,8 @@ class ItemAnalysisDispatcher:
         ai_analyzer: AIAnalyzer,
         notifier: Notifier,
         saver: Saver,
+        auto_order_service: Optional[AutoOrderService] = None,
+        task_config: Optional[dict] = None,
     ) -> None:
         self._semaphore = asyncio.Semaphore(max(1, concurrency))
         self._skip_ai_analysis = skip_ai_analysis
@@ -53,6 +62,8 @@ class ItemAnalysisDispatcher:
         self._ai_analyzer = ai_analyzer
         self._notifier = notifier
         self._saver = saver
+        self._auto_order_service = auto_order_service
+        self._task_config = task_config or {}
         self._tasks: set[asyncio.Task] = set()
         self.completed_count = 0
 
@@ -76,7 +87,16 @@ class ItemAnalysisDispatcher:
         record["ai_analysis"] = await self._build_analysis_result(job, record)
         if await self._saver(record, job.keyword):
             self.completed_count += 1
-        await self._notify_if_recommended(item_data, record["ai_analysis"])
+        
+        # 检查自动下单逻辑
+        auto_order_result = None
+        if self._auto_order_service:
+            auto_order_result = await self._auto_order_service.process_auto_order(
+                item_data=item_data,
+                task_config=self._task_config,
+            )
+        
+        await self._notify_with_auto_order(item_data, record["ai_analysis"], auto_order_result)
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:
         seller_info = {}
@@ -84,10 +104,20 @@ class ItemAnalysisDispatcher:
             try:
                 seller_info = await self._seller_loader(job.seller_id)
             except Exception as exc:
-                print(f"   [卖家] 采集卖家 {job.seller_id} 信息失败: {exc}")
+                print(f"   [卖家] 采集卖家 {job.seller_id} 信息失败：{exc}")
+        
         merged = copy.deepcopy(seller_info or {})
         merged["卖家芝麻信用"] = job.zhima_credit_text
         merged["卖家注册时长"] = job.registration_duration_text
+        
+        # 添加活跃时间信息
+        if job.seller_last_active_time:
+            merged["卖家最后活跃时间"] = job.seller_last_active_time
+            merged["卖家活跃时间格式化"] = format_active_time(job.seller_last_active_time)
+            merged["卖家活跃等级"] = get_active_level(job.seller_last_active_time)
+        if job.seller_online_status:
+            merged["卖家在线状态"] = job.seller_online_status
+        
         return merged
 
     async def _build_analysis_result(self, job: ItemAnalysisJob, record: dict) -> dict:
@@ -105,7 +135,7 @@ class ItemAnalysisDispatcher:
         return {
             "analysis_source": "ai",
             "is_recommended": True,
-            "reason": "商品已跳过AI分析，直接通知",
+            "reason": "商品已跳过 AI 分析，直接通知",
             "keyword_hit_count": 0,
         }
 
@@ -125,7 +155,7 @@ class ItemAnalysisDispatcher:
         try:
             image_paths = await self._download_images(job, record)
             if not job.prompt_text:
-                return self._build_ai_error_result("任务未配置AI prompt，跳过分析。")
+                return self._build_ai_error_result("任务未配置 AI prompt，跳过分析。")
             ai_result = await self._ai_analyzer(record, image_paths, job.prompt_text)
             if not ai_result:
                 return self._build_ai_error_result(
@@ -137,7 +167,7 @@ class ItemAnalysisDispatcher:
             return ai_result
         except Exception as exc:
             return self._build_ai_error_result(
-                f"AI分析异常: {exc}",
+                f"AI 分析异常：{exc}",
                 error=str(exc),
             )
         finally:
@@ -151,7 +181,7 @@ class ItemAnalysisDispatcher:
         if not image_urls:
             return []
         return await self._image_downloader(
-            item_data["商品ID"],
+            item_data["商品 ID"],
             image_urls,
             job.task_name,
         )
@@ -162,12 +192,59 @@ class ItemAnalysisDispatcher:
                 if os.path.exists(img_path):
                     os.remove(img_path)
             except Exception as exc:
-                print(f"   [图片] 删除图片文件时出错: {exc}")
+                print(f"   [图片] 删除图片文件时出错：{exc}")
 
-    async def _notify_if_recommended(self, item_data: dict, analysis_result: dict) -> None:
+    async def _notify_with_auto_order(
+        self,
+        item_data: dict,
+        analysis_result: dict,
+        auto_order_result: Optional[dict] = None,
+    ) -> None:
+        """
+        发送通知（支持自动下单）
+        
+        Args:
+            item_data: 商品数据
+            analysis_result: AI 分析结果
+            auto_order_result: 自动下单结果（如果有）
+        """
+        # 如果不推荐，直接跳过
         if not analysis_result.get("is_recommended"):
             return
-        try:
-            await self._notifier(item_data, analysis_result.get("reason", "无"))
-        except Exception as exc:
-            print(f"   [通知] 发送推荐通知失败: {exc}")
+        
+        # 准备通知数据
+        notification_data = dict(item_data)
+        reason = analysis_result.get("reason", "无")
+        
+        # 如果有自动下单结果，附加相关信息
+        if auto_order_result:
+            if auto_order_result.get("should_notify"):
+                # 附加下单链接
+                if auto_order_result.get("order_link"):
+                    notification_data["下单链接 (PC)"] = auto_order_result["order_link"]
+                if auto_order_result.get("mobile_order_link"):
+                    notification_data["下单链接 (手机)"] = auto_order_result["mobile_order_link"]
+                
+                # 更新原因
+                action_taken = auto_order_result.get("action_taken", "none")
+                if action_taken == "link_generated":
+                    reason = f"{reason}\n\n[自动下单] 价格匹配，已生成下单链接，请点击链接购买。"
+                elif action_taken == "auto_buy_pending":
+                    reason = f"{reason}\n\n[自动下单] 价格匹配，自动购买功能暂未完全实现，请手动点击链接购买。"
+                elif action_taken == "notify_only":
+                    reason = f"{reason}\n\n[自动下单] 价格匹配（仅通知模式）。"
+                
+                # 发送通知
+                try:
+                    await self._notifier(notification_data, reason)
+                except Exception as exc:
+                    print(f"   [通知] 发送推荐通知失败：{exc}")
+            else:
+                # 价格不匹配，不发送通知
+                print(f"   [自动下单] 价格不匹配，跳过通知：{auto_order_result.get('reason', '')}")
+        else:
+            # 没有自动下单服务，直接发送通知
+            try:
+                await self._notifier(notification_data, reason)
+            except Exception as exc:
+                print(f"   [通知] 发送推荐通知失败：{exc}")
