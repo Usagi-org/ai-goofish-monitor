@@ -23,11 +23,20 @@ def enrich_records_with_price_insight(records: list[dict], filename: str) -> lis
     enriched = []
     for record in records:
         info = record.get("商品信息", {}) or {}
+        item_id = str(info.get("商品 ID") or "")
+
+        # 优先从价格快照中获取最新价格，而不是使用结果文件中的旧价格
+        price_from_snapshot = None
+        if snapshots and item_id:
+            item_snapshots = [s for s in snapshots if str(s.get("item_id")) == item_id]
+            if item_snapshots:
+                price_from_snapshot = item_snapshots[-1].get("price")
+
         clone = dict(record)
         clone["price_insight"] = build_item_price_context(
             snapshots,
-            item_id=str(info.get("商品ID") or ""),
-            current_price=parse_price_value(info.get("当前售价")),
+            item_id=item_id,
+            current_price=price_from_snapshot,
         )
         enriched.append(clone)
     return enriched

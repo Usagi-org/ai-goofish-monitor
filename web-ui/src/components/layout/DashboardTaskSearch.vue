@@ -50,7 +50,7 @@ function matchesTask(task: Task, value: string) {
     task.description || '',
     task.region || '',
   ]
-  return fields.some((field) => field.toLowerCase().includes(value))
+  return fields.some((field) => field && field.toLowerCase().includes(value))
 }
 
 function getTaskStatus(task: Task) {

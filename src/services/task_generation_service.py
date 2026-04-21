@@ -55,6 +55,10 @@ class TaskGenerationService:
         def runner() -> None:
             try:
                 asyncio.run(coroutine)
+            except Exception as e:
+                print(f"TaskGenerationService 异步任务异常：{e}")
+                import traceback
+                traceback.print()
             finally:
                 if thread is None:
                     return

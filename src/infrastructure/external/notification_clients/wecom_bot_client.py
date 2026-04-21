@@ -24,12 +24,16 @@ class WeComBotClient(NotificationClient):
             raise RuntimeError("企业微信 未启用")
 
         message = self._build_message(product_data, reason)
-        markdown_lines = [f"## {message.notification_title}", ""]
-        markdown_lines.append(f"- 价格: {message.price}")
-        markdown_lines.append(f"- 原因: {message.reason}")
+        markdown_lines = [
+            f"## {message.notification_title}",
+            "",
+            f"- 商品标题：{message.title}",
+            message.content,
+        ]
         if message.mobile_link:
-            markdown_lines.append(f"- 手机端链接: [{message.mobile_link}]({message.mobile_link})")
-        markdown_lines.append(f"- 电脑端链接: [{message.desktop_link}]({message.desktop_link})")
+            markdown_lines.append(f"- 手机端链接：[{message.mobile_link}]({message.mobile_link})")
+        else:
+            markdown_lines.append(f"- 商品链接：[{message.desktop_link}]({message.desktop_link})")
         payload = {
             "msgtype": "markdown",
             "markdown": {"content": "\n".join(markdown_lines)},

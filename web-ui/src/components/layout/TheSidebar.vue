@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { 
-  LayoutDashboard, 
-  ListTodo, 
-  Users, 
-  Layers, 
-  Terminal, 
+import {
+  LayoutDashboard,
+  ListTodo,
+  Users,
+  Layers,
+  Terminal,
   Settings2,
+  ShieldAlert,
   ChevronRight
 } from 'lucide-vue-next'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -22,6 +23,7 @@ const { t } = useI18n()
 const navItems = computed(() => [
   { to: '/dashboard', label: t('sidebar.dashboard'), icon: LayoutDashboard },
   { to: '/tasks', label: t('sidebar.tasks'), icon: ListTodo },
+  { to: '/sellers', label: t('sidebar.sellers'), icon: ShieldAlert },
   { to: '/accounts', label: t('sidebar.accounts'), icon: Users },
   { to: '/results', label: t('sidebar.results'), icon: Layers },
   { to: '/logs', label: t('sidebar.logs'), icon: Terminal },

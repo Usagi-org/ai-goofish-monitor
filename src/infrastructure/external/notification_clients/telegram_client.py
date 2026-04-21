@@ -42,8 +42,7 @@ class TelegramClient(NotificationClient):
             "",
             f"<b>{message.title[:50]}{'...' if len(message.title) > 50 else ''}</b>",
             "",
-            f"💰 价格: {message.price}",
-            f"📝 原因: {message.reason}",
+            message.content.replace("\n", "<br>"),
         ]
         if message.mobile_link:
             telegram_message.append(f"📱 <a href='{message.mobile_link}'>手机端链接</a>")

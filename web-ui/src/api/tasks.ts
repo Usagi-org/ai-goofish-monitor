@@ -48,3 +48,13 @@ export async function stopTask(taskId: number): Promise<void> {
 export async function deleteTask(taskId: number): Promise<void> {
   await http(`/api/tasks/${taskId}`, { method: 'DELETE' })
 }
+
+
+export async function pauseTask(taskId: number): Promise<void> {
+  await http(`/api/tasks/pause/${taskId}`, { method: "POST" })
+}
+
+export async function resumeTask(taskId: number): Promise<void> {
+  await http(`/api/tasks/resume/${taskId}`, { method: "POST" })
+}
+

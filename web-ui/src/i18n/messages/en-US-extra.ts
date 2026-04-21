@@ -44,6 +44,13 @@ const enUSExtra = {
       maxPages: 'Up to {count} pages',
     },
     form: {
+      taskType: 'Task Type',
+      taskTypePlaceholder: 'Select a task type',
+      taskTypeKeyword: 'Keyword Monitoring',
+      taskTypeItemId: 'Item ID Monitoring',
+      itemIdListLabel: 'Item ID List',
+      itemIdListPlaceholder: 'Enter item IDs, one per line\nExample:\n1026885870648\n1234567890123',
+      itemIdListHint: 'Item IDs must be pure numbers, found in the Xianyu item detail page URL',
       taskName: 'Task Name',
       taskNamePlaceholder: 'Example: Sony A7M4 Camera',
       keyword: 'Search Keyword',
@@ -247,6 +254,10 @@ const enUSExtra = {
       description: 'The bot token is sensitive, while Chat ID and API base URL can be viewed and updated directly.',
       chatIdPlaceholder: 'Example: 123456789',
       apiBaseUrl: 'API / Proxy Base URL',
+    },
+    feishu: {
+      description: 'Feishu (Lark) bot webhook with rich text card messages.',
+      configuredHint: 'Feishu webhook URL is already stored.',
     },
     webhook: {
       title: 'Generic Webhook',

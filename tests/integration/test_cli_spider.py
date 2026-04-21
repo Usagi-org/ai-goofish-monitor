@@ -38,9 +38,12 @@ def test_cli_runs_single_task_with_prompt(tmp_path, load_json_fixture, monkeypat
     state_path = tmp_path / "state.json"
     state_path.write_text("{}", encoding="utf-8")
 
-    monkeypatch.setattr(spider_v2, "STATE_FILE", str(state_path))
-
     called = []
+
+    def mock_get_state_file():
+        return str(state_path)
+
+    monkeypatch.setattr(spider_v2, "get_state_file", mock_get_state_file)
 
     async def fake_scrape_xianyu(task_config, debug_limit):
         called.append(task_config["task_name"])
@@ -79,7 +82,11 @@ def test_cli_runs_keyword_mode_without_prompt_files(tmp_path, load_json_fixture,
 
     state_path = tmp_path / "state.json"
     state_path.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(spider_v2, "STATE_FILE", str(state_path))
+
+    def mock_get_state_file():
+        return str(state_path)
+
+    monkeypatch.setattr(spider_v2, "get_state_file", mock_get_state_file)
 
     captured = []
 

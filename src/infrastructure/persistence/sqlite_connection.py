@@ -25,8 +25,10 @@ SCHEMA_STATEMENTS = (
     CREATE TABLE IF NOT EXISTS tasks (
         id INTEGER PRIMARY KEY,
         task_name TEXT NOT NULL,
+        task_type TEXT NOT NULL DEFAULT 'keyword',
         enabled INTEGER NOT NULL,
-        keyword TEXT NOT NULL,
+        keyword TEXT,
+        item_id_list_json TEXT NOT NULL DEFAULT '[]',
         description TEXT,
         analyze_images INTEGER NOT NULL,
         max_pages INTEGER NOT NULL,
@@ -43,7 +45,8 @@ SCHEMA_STATEMENTS = (
         region TEXT,
         decision_mode TEXT NOT NULL,
         keyword_rules_json TEXT NOT NULL,
-        is_running INTEGER NOT NULL
+        is_running INTEGER NOT NULL,
+        is_paused INTEGER NOT NULL DEFAULT 0
     )
     """,
     """
@@ -114,6 +117,82 @@ SCHEMA_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS idx_snapshots_keyword_item_time
     ON price_snapshots(keyword_slug, item_id, snapshot_time DESC)
     """,
+    # ===== 新增表：卖家信息表 =====
+    """
+    CREATE TABLE IF NOT EXISTS seller_info (
+        seller_id TEXT PRIMARY KEY,
+        seller_nickname TEXT,
+        seller_avatar TEXT,
+        zhima_credit TEXT,
+        registration_days INTEGER,
+        good_rate TEXT,
+        total_items INTEGER,
+        total_ratings INTEGER,
+        last_updated TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_seller_info_nickname ON seller_info(seller_nickname)
+    """,
+    # ===== 新增表：商品指标历史记录表 =====
+    """
+    CREATE TABLE IF NOT EXISTS item_metrics_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        snapshot_time TEXT NOT NULL,
+        price REAL,
+        price_display TEXT,
+        want_count INTEGER,
+        browse_count INTEGER,
+        seller_id TEXT,
+        link TEXT,
+        UNIQUE(item_id, snapshot_time)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_metrics_item_time ON item_metrics_history(item_id, snapshot_time DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_metrics_seller_time ON item_metrics_history(seller_id, snapshot_time DESC)
+    """,
+    # ===== 新增表：卖家黑名单/白名单 =====
+    """
+    CREATE TABLE IF NOT EXISTS seller_list (
+        seller_id TEXT PRIMARY KEY,
+        list_type TEXT NOT NULL CHECK(list_type IN ('blacklist', 'whitelist')),
+        reason TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_seller_list_type ON seller_list(list_type)
+    """,
+    # ===== 新增表：商品 ID 搜索历史 =====
+    """
+    CREATE TABLE IF NOT EXISTS search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        search_type TEXT NOT NULL DEFAULT 'item_id',
+        search_value TEXT NOT NULL,
+        result_json TEXT,
+        searched_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_search_history_type_time ON search_history(search_type, searched_at DESC)
+    """,
+    # ===== 新增表：应用设置表 =====
+    """
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key)
+    """,
 )
 
 
@@ -134,6 +213,11 @@ def _apply_pragmas(conn: sqlite3.Connection) -> None:
 def init_schema(conn: sqlite3.Connection) -> None:
     for statement in SCHEMA_STATEMENTS:
         conn.execute(statement)
+    # 初始化 AI 开关默认值
+    conn.execute("""
+        INSERT OR IGNORE INTO app_settings (key, value, updated_at)
+        VALUES ('ai_enabled', 'true', datetime('now'))
+    """)
     conn.commit()
 
 

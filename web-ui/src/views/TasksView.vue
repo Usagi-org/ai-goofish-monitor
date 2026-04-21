@@ -31,6 +31,8 @@ const {
   updateTask,
   startTask,
   stopTask,
+  pauseTask,
+  resumeTask,
   stoppingTaskIds,
 } = useTasks()
 const route = useRoute()
@@ -172,6 +174,32 @@ async function handleStopTask(taskId: number) {
   }
 }
 
+async function handlePauseTask(taskId: number) {
+  try {
+    await pauseTask(taskId)
+    toast({ title: '任务已暂停' })
+  } catch (e) {
+    toast({
+      title: t('tasks.toasts.stopFailed'),
+      description: (e as Error).message,
+      variant: 'destructive',
+    })
+  }
+}
+
+async function handleResumeTask(taskId: number) {
+  try {
+    await resumeTask(taskId)
+    toast({ title: '任务已恢复' })
+  } catch (e) {
+    toast({
+      title: '恢复任务失败',
+      description: (e as Error).message,
+      variant: 'destructive',
+    })
+  }
+}
+
 async function handleToggleEnabled(task: Task, enabled: boolean) {
   const previous = task.enabled
   task.enabled = enabled
@@ -274,6 +302,8 @@ onMounted(fetchAccountOptions)
       @edit-task="handleEditTask"
       @run-task="handleStartTask"
       @stop-task="handleStopTask"
+      @pause-task="handlePauseTask"
+      @resume-task="handleResumeTask"
       @refresh-criteria="handleOpenCriteriaDialog"
       @toggle-enabled="handleToggleEnabled"
     />

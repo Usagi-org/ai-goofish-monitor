@@ -2,7 +2,7 @@ import enUSExtra from '@/i18n/messages/en-US-extra'
 
 const enUS = {
   app: {
-    name: 'Goofish Monitor',
+    name: 'AI Xianyu Hunter PRO',
   },
   locale: {
     switchLabel: 'Switch language',
@@ -17,6 +17,7 @@ const enUS = {
     results: 'Results',
     logs: 'Logs',
     settings: 'Settings',
+    sellers: 'Sellers',
   },
   common: {
     cancel: 'Cancel',
@@ -72,6 +73,7 @@ const enUS = {
     accounts: 'Accounts',
     results: 'Results',
     logs: 'Logs',
+    sellers: 'Sellers',
     settings: 'Settings',
     systemStatus: 'System Status',
     backendConnected: 'Realtime backend connected',

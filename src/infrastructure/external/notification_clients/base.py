@@ -4,6 +4,7 @@
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict
 
 from src.utils import convert_goofish_link
@@ -36,7 +37,7 @@ class NotificationClient(ABC):
         return self._enabled
 
     @abstractmethod
-    async def send(self, product_data: Dict, reason: str) -> bool:
+    async def send(self, product_data: Dict, reason: str) -> None:
         """
         发送通知
 
@@ -56,22 +57,36 @@ class NotificationClient(ABC):
         desktop_link = product_data.get('商品链接', '#')
         mobile_link = None
 
+        # 想要数
+        want_count = product_data.get('想要人数', product_data.get('想要数'))
+        # 价格变化
+        price_change = product_data.get('price_change_display', '')
+        # 想要数变化
+        want_count_change = product_data.get('want_count_change_display', '')
+
         if self._pcurl_to_mobile and desktop_link and desktop_link != "#":
             mobile_link = convert_goofish_link(desktop_link)
 
         content_lines = [
-            f"价格: {price}",
-            f"原因: {reason}",
+            f"价格：{price}",
         ]
-        if mobile_link:
-            content_lines.append(f"手机端链接: {mobile_link}")
-            content_lines.append(f"电脑端链接: {desktop_link}")
-        else:
-            content_lines.append(f"链接: {desktop_link}")
+        # 卖家昵称
+        seller_nickname = product_data.get('卖家昵称')
+        if seller_nickname:
+            content_lines.insert(0, f"卖家：{seller_nickname}")
+        if want_count:
+            content_lines.append(f"想要数：{want_count}")
+        if price_change:
+            content_lines.append(f"价格变化：{price_change}")
+        if want_count_change:
+            content_lines.append(f"想要数变化：{want_count_change}")
+        # 添加当前时间
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        content_lines.append(f"时间：{now}")
 
         short_title = title[:30]
         suffix = "..." if len(title) > 30 else ""
-        notification_title = f"🚨 新推荐! {short_title}{suffix}"
+        notification_title = f"🚨 新推荐！{short_title}{suffix}"
 
         main_image = product_data.get('商品主图链接')
         if not main_image:

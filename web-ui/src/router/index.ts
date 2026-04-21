@@ -52,6 +52,12 @@ const routes = [
         component: () => import('@/views/SettingsView.vue'),
         meta: { titleKey: 'routes.settings', requiresAuth: true },
       },
+      {
+        path: 'sellers',
+        name: 'Sellers',
+        component: () => import('@/views/SellersView.vue'),
+        meta: { titleKey: 'routes.sellers', requiresAuth: true },
+      },
     ],
   },
   {

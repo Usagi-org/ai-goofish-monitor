@@ -35,9 +35,27 @@ def bootstrap_sqlite_storage(
     with BOOTSTRAP_LOCK:
         with sqlite_connection(db_path) as conn:
             init_schema(conn)
+            _migrate_tasks_add_task_type_field(conn)
             _import_tasks_if_needed(conn, legacy_config_file)
             _import_results_if_needed(conn, legacy_result_dir)
             _import_price_snapshots_if_needed(conn, legacy_price_history_dir)
+
+
+def _migrate_tasks_add_task_type_field(conn) -> None:
+    """为现有 tasks 表添加 task_type 和 item_id_list_json 字段（如果不存在）"""
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN task_type TEXT NOT NULL DEFAULT 'keyword'")
+    except Exception:
+        pass  # 字段已存在
+    try:
+        conn.execute("ALTER TABLE tasks ADD COLUMN item_id_list_json TEXT NOT NULL DEFAULT '[]'")
+    except Exception:
+        pass  # 字段已存在
+
+    # 修改 keyword 字段为可空（SQLite 不支持直接修改字段约束，需要重建表）
+    # 但我们可以通过 UPDATE 来确保现有记录有值
+    conn.execute("UPDATE tasks SET keyword = '' WHERE keyword IS NULL")
+    conn.commit()
 
 
 def _table_is_empty(conn, table_name: str) -> bool:
@@ -75,21 +93,25 @@ def _import_tasks_if_needed(conn, legacy_config_file: str | None) -> None:
     for index, raw_task in enumerate(tasks):
         if not isinstance(raw_task, dict):
             continue
+        task_type = raw_task.get("task_type", "keyword")
+        item_id_list = raw_task.get("item_id_list") or []
         conn.execute(
             """
             INSERT INTO tasks (
-                id, task_name, enabled, keyword, description, analyze_images,
-                max_pages, personal_only, min_price, max_price, cron,
+                id, task_name, task_type, enabled, keyword, item_id_list_json, description,
+                analyze_images, max_pages, personal_only, min_price, max_price, cron,
                 ai_prompt_base_file, ai_prompt_criteria_file, account_state_file,
                 account_strategy, free_shipping, new_publish_option, region,
                 decision_mode, keyword_rules_json, is_running
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 index,
                 raw_task.get("task_name", ""),
+                task_type,
                 _as_int(raw_task.get("enabled", True)),
                 raw_task.get("keyword", ""),
+                json.dumps(item_id_list, ensure_ascii=False),
                 raw_task.get("description", ""),
                 _as_int(raw_task.get("analyze_images", True)),
                 int(raw_task.get("max_pages", 1) or 1),

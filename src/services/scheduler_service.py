@@ -55,7 +55,8 @@ class SchedulerService:
         self.scheduler.remove_all_jobs()
 
         for task in tasks:
-            if task.enabled and task.cron:
+            # 暂停的任务不添加到调度器
+            if task.enabled and task.cron and not task.is_paused:
                 try:
                     trigger = build_cron_trigger(
                         task.cron,
@@ -69,13 +70,42 @@ class SchedulerService:
                         name=f"Scheduled: {task.task_name}",
                         replace_existing=True
                     )
-                    print(f"  -> 已为任务 '{task.task_name}' 添加定时规则: '{task.cron}'")
+                    print(f"  -> 已为任务 '{task.task_name}' 添加定时规则：'{task.cron}'")
                 except ValueError as e:
-                    print(f"  -> [警告] 任务 '{task.task_name}' 的 Cron 表达式无效: {e}")
+                    print(f"  -> [警告] 任务 '{task.task_name}' 的 Cron 表达式无效：{e}")
 
         print("定时任务加载完成")
 
     async def _run_task(self, task_id: int, task_name: str):
         """执行定时任务"""
-        print(f"定时任务触发: 正在为任务 '{task_name}' 启动爬虫...")
+        print(f"定时任务触发：正在为任务 '{task_name}' 启动爬虫...")
         await self.process_service.start_task(task_id, task_name)
+
+    async def pause_task(self, task_id: int, task: Task):
+        """暂停定时任务"""
+        job_id = f"task_{task_id}"
+        if self.scheduler.get_job(job_id):
+            self.scheduler.remove_job(job_id)
+            print(f"定时任务已暂停：{task.task_name}")
+
+    async def resume_task(self, task_id: int, task: Task):
+        """恢复定时任务"""
+        if not task.cron:
+            raise ValueError("任务没有配置 cron 表达式")
+
+        try:
+            trigger = build_cron_trigger(
+                task.cron,
+                timezone=self.scheduler.timezone,
+            )
+            self.scheduler.add_job(
+                self._run_task,
+                trigger=trigger,
+                args=[task_id, task.task_name],
+                id=f"task_{task_id}",
+                name=f"Scheduled: {task.task_name}",
+                replace_existing=True
+            )
+            print(f"定时任务已恢复：{task.task_name}")
+        except ValueError as e:
+            raise ValueError(f"Cron 表达式无效：{e}")

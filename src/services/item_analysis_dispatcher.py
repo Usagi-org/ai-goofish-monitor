@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
 from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
+from src.services.metrics_tracking_service import get_metrics_service
 
 
 SellerLoader = Callable[[str], Awaitable[dict]]
@@ -76,6 +77,71 @@ class ItemAnalysisDispatcher:
         record["ai_analysis"] = await self._build_analysis_result(job, record)
         if await self._saver(record, job.keyword):
             self.completed_count += 1
+
+        # 解析当前价格和想要数（用于比较和记录）
+        item_id = str(item_data.get("商品 ID", ""))
+        price_raw = item_data.get("当前售价")
+        want_count_raw = item_data.get("想要人数")
+        browse_count_raw = item_data.get("浏览量")
+
+        # 解析价格为数值
+        price_value = None
+        if price_raw:
+            try:
+                price_value = float(str(price_raw).replace("¥", "").strip())
+            except (ValueError, TypeError):
+                price_value = None
+
+        # 解析想要数为整数
+        want_count_value = None
+        browse_count_value = None
+        if want_count_raw:
+            try:
+                want_count_value = int(str(want_count_raw).replace("想要", "").strip())
+            except (ValueError, TypeError):
+                pass
+        if browse_count_raw:
+            try:
+                browse_count_value = int(str(browse_count_raw).replace("浏览", "").strip())
+            except (ValueError, TypeError):
+                pass
+
+        # 先比较当前值和数据库最新记录（写入之前）
+        if item_id:
+            metrics_service = get_metrics_service()
+            changes = metrics_service.compare_with_latest(
+                item_id=item_id,
+                current_price=price_value,
+                current_price_display=str(price_raw) if price_raw else None,
+                current_want_count=want_count_value,
+            )
+            # 设置或清除变化字段
+            if changes and "price_change_display" in changes:
+                item_data["price_change_display"] = changes["price_change_display"]
+            else:
+                item_data.pop("price_change_display", None)
+            if changes and "want_count_change_display" in changes:
+                item_data["want_count_change_display"] = changes["want_count_change_display"]
+            else:
+                item_data.pop("want_count_change_display", None)
+
+        # 记录指标快照（价格、想要数）
+        if item_id:
+            try:
+                metrics_service = get_metrics_service()
+                metrics_service.record_metrics(
+                    item_id=item_id,
+                    title=item_data.get("商品标题", "")[:200],
+                    price=price_value,
+                    price_display=str(price_raw) if price_raw else None,
+                    want_count=want_count_value,
+                    browse_count=browse_count_value,
+                    seller_id=item_data.get("卖家 ID"),
+                    link=item_data.get("商品链接"),
+                )
+            except Exception as e:
+                print(f"   [指标] 记录指标快照失败：{e}")
+
         await self._notify_if_recommended(item_data, record["ai_analysis"])
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:
@@ -84,7 +150,7 @@ class ItemAnalysisDispatcher:
             try:
                 seller_info = await self._seller_loader(job.seller_id)
             except Exception as exc:
-                print(f"   [卖家] 采集卖家 {job.seller_id} 信息失败: {exc}")
+                print(f"   [卖家] 采集卖家 {job.seller_id} 信息失败：{exc}")
         merged = copy.deepcopy(seller_info or {})
         merged["卖家芝麻信用"] = job.zhima_credit_text
         merged["卖家注册时长"] = job.registration_duration_text
@@ -105,7 +171,7 @@ class ItemAnalysisDispatcher:
         return {
             "analysis_source": "ai",
             "is_recommended": True,
-            "reason": "商品已跳过AI分析，直接通知",
+            "reason": "商品已跳过 AI 分析，直接通知",
             "keyword_hit_count": 0,
         }
 
@@ -125,7 +191,7 @@ class ItemAnalysisDispatcher:
         try:
             image_paths = await self._download_images(job, record)
             if not job.prompt_text:
-                return self._build_ai_error_result("任务未配置AI prompt，跳过分析。")
+                return self._build_ai_error_result("任务未配置 AI prompt，跳过分析。")
             ai_result = await self._ai_analyzer(record, image_paths, job.prompt_text)
             if not ai_result:
                 return self._build_ai_error_result(
@@ -137,7 +203,7 @@ class ItemAnalysisDispatcher:
             return ai_result
         except Exception as exc:
             return self._build_ai_error_result(
-                f"AI分析异常: {exc}",
+                f"AI 分析异常：{exc}",
                 error=str(exc),
             )
         finally:
@@ -151,7 +217,7 @@ class ItemAnalysisDispatcher:
         if not image_urls:
             return []
         return await self._image_downloader(
-            item_data["商品ID"],
+            item_data["商品 ID"],
             image_urls,
             job.task_name,
         )
@@ -162,7 +228,7 @@ class ItemAnalysisDispatcher:
                 if os.path.exists(img_path):
                     os.remove(img_path)
             except Exception as exc:
-                print(f"   [图片] 删除图片文件时出错: {exc}")
+                print(f"   [图片] 删除图片文件时出错：{exc}")
 
     async def _notify_if_recommended(self, item_data: dict, analysis_result: dict) -> None:
         if not analysis_result.get("is_recommended"):
@@ -170,4 +236,4 @@ class ItemAnalysisDispatcher:
         try:
             await self._notifier(item_data, analysis_result.get("reason", "无"))
         except Exception as exc:
-            print(f"   [通知] 发送推荐通知失败: {exc}")
+            print(f"   [通知] 发送推荐通知失败：{exc}")

@@ -1,5 +1,6 @@
 """
 设置管理路由
+只保留飞书通知渠道
 """
 import os
 from typing import Optional
@@ -24,6 +25,7 @@ from src.services.ai_request_compat import (
     is_responses_api_unsupported_error,
 )
 from src.services.ai_response_parser import extract_ai_response_content
+from src.services.ai_toggle_service import get_ai_toggle_service
 from src.services.notification_config_service import (
     NotificationSettingsValidationError,
     build_configured_channels,
@@ -70,22 +72,9 @@ def _normalize_bool_value(value: bool) -> str:
 
 
 class NotificationSettingsModel(BaseModel):
-    """通知设置模型"""
+    """通知设置模型 - 只保留飞书"""
 
-    NTFY_TOPIC_URL: Optional[str] = None
-    GOTIFY_URL: Optional[str] = None
-    GOTIFY_TOKEN: Optional[str] = None
-    BARK_URL: Optional[str] = None
-    WX_BOT_URL: Optional[str] = None
-    TELEGRAM_BOT_TOKEN: Optional[str] = None
-    TELEGRAM_CHAT_ID: Optional[str] = None
-    TELEGRAM_API_BASE_URL: Optional[str] = None
-    WEBHOOK_URL: Optional[str] = None
-    WEBHOOK_METHOD: Optional[str] = None
-    WEBHOOK_HEADERS: Optional[str] = None
-    WEBHOOK_CONTENT_TYPE: Optional[str] = None
-    WEBHOOK_QUERY_PARAMETERS: Optional[str] = None
-    WEBHOOK_BODY: Optional[str] = None
+    FEISHU_WEBHOOK_URL: Optional[str] = None
     PCURL_TO_MOBILE: Optional[bool] = None
 
 
@@ -97,7 +86,7 @@ class NotificationTestRequest(BaseModel):
 
 
 class AISettingsModel(BaseModel):
-    """AI设置模型"""
+    """AI 设置模型"""
 
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
@@ -278,14 +267,14 @@ async def update_ai_settings(settings: AISettingsModel):
 
     success = env_manager.update_values(updates)
     if not success:
-        raise HTTPException(status_code=500, detail="更新AI设置失败")
+        raise HTTPException(status_code=500, detail="更新 AI 设置失败")
     _reload_env()
-    return {"message": "AI设置已成功更新"}
+    return {"message": "AI 设置已成功更新"}
 
 
 @router.post("/ai/test")
 async def test_ai_settings(settings: dict):
-    """测试AI模型设置是否有效"""
+    """测试 AI 模型设置是否有效"""
     try:
         from openai import OpenAI
         import httpx
@@ -337,11 +326,34 @@ async def test_ai_settings(settings: dict):
 
         return {
             "success": True,
-            "message": "AI模型连接测试成功！",
+            "message": "AI 模型连接测试成功！",
             "response": extract_ai_response_content(response),
         }
     except Exception as exc:
         return {
             "success": False,
-            "message": f"AI模型连接测试失败: {exc}",
+            "message": f"AI 模型连接测试失败：{exc}",
         }
+
+
+from pydantic import BaseModel
+
+# ... (existing imports)
+
+class AiEnabledRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/ai-enabled")
+async def get_ai_enabled():
+    """获取 AI 功能开关状态"""
+    service = get_ai_toggle_service()
+    return {"ai_enabled": service.get_ai_enabled()}
+
+
+@router.put("/ai-enabled")
+async def set_ai_enabled(request: AiEnabledRequest):
+    """设置 AI 功能开关状态"""
+    service = get_ai_toggle_service()
+    service.set_ai_enabled(request.enabled)
+    return {"message": "AI 功能开关已更新", "ai_enabled": request.enabled}
