@@ -5,7 +5,10 @@
 import asyncio
 from typing import Dict, List
 
-from src.infrastructure.external.notification_clients.base import NotificationClient
+from src.infrastructure.external.notification_clients.base import (
+    AlertNotificationData,
+    NotificationClient,
+)
 from src.infrastructure.external.notification_clients.factory import build_notification_clients
 from src.services.notification_config_service import load_notification_settings
 from src.infrastructure.config.settings import NotificationSettings
@@ -23,7 +26,7 @@ class NotificationService:
         reason: str,
     ) -> Dict[str, Dict[str, str | bool]]:
         """
-        发送通知到所有启用的渠道
+        发送商品推荐通知到所有启用的渠道
 
         Returns:
             各渠道发送结果，包含成功状态和消息
@@ -33,6 +36,29 @@ class NotificationService:
 
         tasks = [
             self._send_with_result(client, product_data, reason)
+            for client in self.clients
+        ]
+        results = await asyncio.gather(*tasks)
+        return {result["channel"]: result for result in results}
+
+    async def send_price_drop_alert(
+        self,
+        alert_data: AlertNotificationData,
+    ) -> Dict[str, Dict[str, str | bool]]:
+        """
+        发送价格下跌预警通知到所有启用的渠道
+
+        Args:
+            alert_data: 预警通知数据
+
+        Returns:
+            各渠道发送结果，包含成功状态和消息
+        """
+        if not self.clients:
+            return {}
+
+        tasks = [
+            self._send_alert_with_result(client, alert_data)
             for client in self.clients
         ]
         results = await asyncio.gather(*tasks)
@@ -62,6 +88,27 @@ class NotificationService:
                 "label": client.display_name,
                 "success": True,
                 "message": "发送成功",
+            }
+        except Exception as exc:
+            return {
+                "channel": client.channel_key,
+                "label": client.display_name,
+                "success": False,
+                "message": str(exc),
+            }
+
+    async def _send_alert_with_result(
+        self,
+        client: NotificationClient,
+        alert_data: AlertNotificationData,
+    ) -> Dict[str, str | bool]:
+        try:
+            await client.send_alert(alert_data)
+            return {
+                "channel": client.channel_key,
+                "label": client.display_name,
+                "success": True,
+                "message": "预警通知发送成功",
             }
         except Exception as exc:
             return {

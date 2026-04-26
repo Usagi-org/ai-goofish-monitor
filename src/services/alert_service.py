@@ -17,6 +17,7 @@ from src.domain.models.alert import (
     AlertLevel,
     PriceDropAlertDetails,
 )
+from src.infrastructure.external.notification_clients.base import AlertNotificationData
 from src.infrastructure.persistence.sqlite_bootstrap import bootstrap_sqlite_storage
 from src.infrastructure.persistence.sqlite_connection import sqlite_connection
 from src.services.price_history_service import analyze_price_trend
@@ -391,22 +392,18 @@ class AlertService:
         Returns:
             各渠道发送结果
         """
-        product_data = {
-            "商品标题": f"[价格预警] {alert.task_name}",
-            "当前售价": f"¥{alert.current_avg_price:.2f}" if alert.current_avg_price else "N/A",
-            "商品链接": "#",
-        }
+        alert_data = AlertNotificationData(
+            task_name=alert.task_name,
+            keyword=alert.keyword,
+            alert_level=alert.alert_level.value,
+            previous_avg_price=alert.previous_avg_price,
+            current_avg_price=alert.current_avg_price,
+            drop_percentage=alert.drop_percentage,
+            consecutive_scans=alert.consecutive_scans,
+            message=alert.message,
+        )
 
-        reason_parts = [alert.message]
-        if alert.drop_percentage:
-            reason_parts.append(f"下跌幅度: {alert.drop_percentage:.1f}%")
-        if alert.previous_avg_price and alert.current_avg_price:
-            reason_parts.append(
-                f"价格变化: ¥{alert.previous_avg_price:.2f} → ¥{alert.current_avg_price:.2f}"
-            )
-
-        reason = "\n".join(reason_parts)
-        return await self.notification_service.send_notification(product_data, reason)
+        return await self.notification_service.send_price_drop_alert(alert_data)
 
 
 def build_alert_service(

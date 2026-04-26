@@ -535,7 +535,6 @@ def analyze_price_trend(
         ))
     
     consecutive_drop_count = 0
-    max_drop_percentage = 0.0
     baseline_avg_price = None
     
     for i in range(1, len(run_summaries)):
@@ -547,26 +546,23 @@ def analyze_price_trend(
         
         if prev_avg > 0 and curr_avg < prev_avg:
             consecutive_drop_count += 1
-            drop_percent = ((prev_avg - curr_avg) / prev_avg) * 100
-            max_drop_percentage = max(max_drop_percentage, drop_percent)
             
             if baseline_avg_price is None:
                 baseline_avg_price = prev_avg
         else:
             consecutive_drop_count = 0
             baseline_avg_price = None
-            max_drop_percentage = 0.0
     
     current_avg_price = run_summaries[-1].get("avg_price") if run_summaries else None
-    
-    has_significant_drop = (
-        consecutive_drop_count >= consecutive_scans_threshold and
-        max_drop_percentage >= drop_percentage_threshold
-    )
     
     total_drop_percentage = 0.0
     if baseline_avg_price and current_avg_price and baseline_avg_price > 0:
         total_drop_percentage = ((baseline_avg_price - current_avg_price) / baseline_avg_price) * 100
+    
+    has_significant_drop = (
+        consecutive_drop_count >= consecutive_scans_threshold and
+        total_drop_percentage >= drop_percentage_threshold
+    )
     
     should_alert = has_significant_drop
     
