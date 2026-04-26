@@ -10,6 +10,7 @@ import PriceTrendChart from '@/components/results/PriceTrendChart.vue'
 import { formatNumber, formatRelativeTimeFromNow } from '@/i18n'
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   Compass,
   LayoutDashboard,
@@ -31,43 +32,63 @@ const {
   error,
 } = useDashboard()
 
-const statCards = computed(() => [
-  {
-    label: t('dashboard.stats.activeTasks'),
-    value: String(stats.value.enabledTasks),
-    detail: t('dashboard.stats.runningCount', { count: stats.value.runningTasks }),
-    icon: Activity,
-    color: 'text-blue-500',
-    bg: 'bg-blue-500/10',
-  },
-  {
-    label: t('dashboard.stats.scannedItems'),
-    value: formatNumber(stats.value.scannedItems),
-    detail: t('dashboard.stats.resultFiles', { count: stats.value.resultFiles }),
-    icon: Search,
-    color: 'text-emerald-500',
-    bg: 'bg-emerald-500/10',
-  },
-  {
-    label: t('dashboard.stats.recommendedItems'),
-    value: String(stats.value.recommendedItems),
-    detail: t('dashboard.stats.recommendedBreakdown', {
-      ai: stats.value.aiRecommendedItems,
-      keyword: stats.value.keywordRecommendedItems,
-    }),
-    icon: Target,
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10',
-  },
-  {
-    label: t('dashboard.stats.monitoredTasks'),
-    value: String(stats.value.totalTasks),
-    detail: t('dashboard.stats.showAllTasks'),
-    icon: Compass,
-    color: 'text-purple-500',
-    bg: 'bg-purple-500/10',
-  },
-])
+const statCards = computed(() => {
+  const baseCards = [
+    {
+      label: t('dashboard.stats.activeTasks'),
+      value: String(stats.value.enabledTasks),
+      detail: t('dashboard.stats.runningCount', { count: stats.value.runningTasks }),
+      icon: Activity,
+      color: 'text-blue-500',
+      bg: 'bg-blue-500/10',
+    },
+    {
+      label: t('dashboard.stats.scannedItems'),
+      value: formatNumber(stats.value.scannedItems),
+      detail: t('dashboard.stats.resultFiles', { count: stats.value.resultFiles }),
+      icon: Search,
+      color: 'text-emerald-500',
+      bg: 'bg-emerald-500/10',
+    },
+    {
+      label: t('dashboard.stats.recommendedItems'),
+      value: String(stats.value.recommendedItems),
+      detail: t('dashboard.stats.recommendedBreakdown', {
+        ai: stats.value.aiRecommendedItems,
+        keyword: stats.value.keywordRecommendedItems,
+      }),
+      icon: Target,
+      color: 'text-amber-500',
+      bg: 'bg-amber-500/10',
+    },
+    {
+      label: t('dashboard.stats.monitoredTasks'),
+      value: String(stats.value.totalTasks),
+      detail: t('dashboard.stats.showAllTasks'),
+      icon: Compass,
+      color: 'text-purple-500',
+      bg: 'bg-purple-500/10',
+    },
+  ]
+
+  if (stats.value.activeAlertCount > 0) {
+    const alertDetail = stats.value.criticalAlertCount > 0
+      ? `价格下跌预警: ${stats.value.criticalAlertCount} 个严重, ${stats.value.warningAlertCount} 个警告`
+      : `价格下跌预警: ${stats.value.activeAlertCount} 个`
+
+    baseCards.splice(0, 0, {
+      label: '价格预警',
+      value: String(stats.value.activeAlertCount),
+      detail: alertDetail,
+      icon: AlertTriangle,
+      color: 'text-red-500',
+      bg: 'bg-red-500/10',
+      animate: true,
+    })
+  }
+
+  return baseCards
+})
 
 const focusTitle = computed(() => focusTask.value?.task_name || t('dashboard.focus.defaultTitle'))
 const focusMeta = computed(() => {
@@ -166,7 +187,10 @@ function openActivity(activity: { filename: string | null; type: string }) {
               <h3 class="text-2xl font-black text-slate-800 mt-1">{{ stat.value }}</h3>
             </div>
             <div :class="[stat.bg, 'p-3 rounded-2xl']">
-              <component :is="stat.icon" :class="['w-6 h-6', stat.color]" />
+              <component
+                :is="stat.icon"
+                :class="['w-6 h-6', stat.color, stat.animate ? 'animate-pulse' : '']"
+              />
             </div>
           </div>
           <div class="mt-4 text-xs font-bold text-slate-500">

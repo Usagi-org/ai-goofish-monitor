@@ -1,5 +1,16 @@
 // Based on the Pydantic model in the backend
 
+export type AlertLevel = 'info' | 'warning' | 'critical';
+
+export interface AlertSummary {
+  task_name: string;
+  has_active_alert: boolean;
+  active_alert_count: number;
+  latest_alert_level: AlertLevel | null;
+  latest_alert_message: string | null;
+  latest_alert_time: string | null;
+}
+
 export interface Task {
   id: number;
   task_name: string;
@@ -23,6 +34,7 @@ export interface Task {
   decision_mode: 'ai' | 'keyword';
   keyword_rules: string[];
   is_running: boolean;
+  alert_summary?: AlertSummary;
 }
 
 export type TaskGenerationStatus = 'queued' | 'running' | 'completed' | 'failed';

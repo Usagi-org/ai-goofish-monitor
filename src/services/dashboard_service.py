@@ -7,6 +7,8 @@ from __future__ import annotations
 from typing import Any
 
 from src.domain.models.task import Task
+from src.domain.models.alert import AlertLevel
+from src.services.alert_service import build_alert_service
 from src.services.dashboard_payloads import (
     build_empty_summary,
     build_task_state_activities,
@@ -21,7 +23,38 @@ from src.services.result_storage_service import list_result_filenames
 MAX_RECENT_ACTIVITIES = 8
 
 
+def _get_alert_summary_metrics(tasks: list[Task]) -> dict[str, int]:
+    """获取预警统计指标"""
+    try:
+        alert_service = build_alert_service()
+        active_alert_count = 0
+        critical_alert_count = 0
+        warning_alert_count = 0
+
+        for task in tasks:
+            summary = alert_service.get_task_alert_summary(task.task_name)
+            if summary.has_active_alert:
+                active_alert_count += 1
+                if summary.latest_alert_level == AlertLevel.CRITICAL:
+                    critical_alert_count += 1
+                elif summary.latest_alert_level == AlertLevel.WARNING:
+                    warning_alert_count += 1
+
+        return {
+            "active_alert_count": active_alert_count,
+            "critical_alert_count": critical_alert_count,
+            "warning_alert_count": warning_alert_count,
+        }
+    except Exception:
+        return {
+            "active_alert_count": 0,
+            "critical_alert_count": 0,
+            "warning_alert_count": 0,
+        }
+
+
 def _build_summary_metrics(tasks: list[Task], summary_list: list[dict[str, Any]], last_updated_at: Any) -> dict[str, Any]:
+    alert_metrics = _get_alert_summary_metrics(tasks)
     return {
         "enabled_tasks": sum(1 for task in tasks if task.enabled),
         "running_tasks": sum(1 for task in tasks if task.is_running),
@@ -31,6 +64,7 @@ def _build_summary_metrics(tasks: list[Task], summary_list: list[dict[str, Any]]
         "ai_recommended_items": sum(int(item["ai_recommended_items"]) for item in summary_list),
         "keyword_recommended_items": sum(int(item["keyword_recommended_items"]) for item in summary_list),
         "last_updated_at": serialize_timestamp(last_updated_at),
+        **alert_metrics,
     }
 
 

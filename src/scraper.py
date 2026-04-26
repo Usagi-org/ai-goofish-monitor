@@ -55,6 +55,11 @@ from src.services.price_history_service import (
     load_price_snapshots,
     record_market_snapshots,
 )
+from src.services.alert_service import (
+    build_alert_service,
+    DEFAULT_CONSECUTIVE_SCANS,
+    DEFAULT_DROP_THRESHOLD,
+)
 from src.services.result_storage_service import load_processed_link_keys
 from src.services.seller_profile_cache import SellerProfileCache
 from src.services.search_pagination import (
@@ -1167,6 +1172,34 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 if analysis_dispatcher is not None:
                     log_time("等待后台分析任务完成...")
                     await analysis_dispatcher.join()
+                
+                task_name = task_config.get("task_name", "未命名任务")
+                current_keyword = task_config.get("keyword", "")
+                try:
+                    log_time(f"检测价格趋势预警: 任务 '{task_name}', 关键词 '{current_keyword}'")
+                    alert_service = build_alert_service(
+                        consecutive_scans_threshold=DEFAULT_CONSECUTIVE_SCANS,
+                        drop_percentage_threshold=DEFAULT_DROP_THRESHOLD,
+                    )
+                    
+                    alert = alert_service.check_and_create_price_drop_alert(
+                        task_name=task_name,
+                        keyword=current_keyword,
+                        force_create=False,
+                    )
+                    
+                    if alert:
+                        log_time(f"[预警] 已创建价格下跌预警: {alert.message}")
+                        try:
+                            notification_results = await alert_service.send_alert_notification(alert)
+                            log_time(f"[预警] 通知发送结果: {notification_results}")
+                        except Exception as notify_exc:
+                            print(f"[预警] 发送通知失败: {notify_exc}")
+                    else:
+                        log_time(f"价格趋势正常，未触发预警条件")
+                except Exception as alert_exc:
+                    print(f"[预警] 检测价格趋势时出错: {alert_exc}")
+                
                 log_time("任务执行完毕，浏览器将在5秒后自动关闭...")
                 await asyncio.sleep(5)
                 if debug_limit:

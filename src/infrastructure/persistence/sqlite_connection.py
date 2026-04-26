@@ -89,6 +89,26 @@ SCHEMA_STATEMENTS = (
         UNIQUE(keyword_slug, run_id, item_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS alert_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_name TEXT NOT NULL,
+        keyword TEXT NOT NULL,
+        alert_type TEXT NOT NULL,
+        alert_level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        previous_avg_price REAL,
+        current_avg_price REAL,
+        drop_percentage REAL,
+        consecutive_scans INTEGER NOT NULL DEFAULT 0,
+        snapshot_time TEXT NOT NULL,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        is_dismissed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        details_json TEXT
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_tasks_name ON tasks(task_name)",
     """
     CREATE INDEX IF NOT EXISTS idx_results_filename_crawl
@@ -114,6 +134,9 @@ SCHEMA_STATEMENTS = (
     CREATE INDEX IF NOT EXISTS idx_snapshots_keyword_item_time
     ON price_snapshots(keyword_slug, item_id, snapshot_time DESC)
     """,
+    "CREATE INDEX IF NOT EXISTS idx_alerts_task_name ON alert_records(task_name)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_created ON alert_records(created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_unread ON alert_records(is_read, is_dismissed)",
 )
 
 

@@ -81,6 +81,9 @@ export function useDashboard() {
       aiRecommendedItems: summary?.ai_recommended_items || 0,
       keywordRecommendedItems: summary?.keyword_recommended_items || 0,
       resultFiles: summary?.result_files || 0,
+      activeAlertCount: summary?.active_alert_count || 0,
+      criticalAlertCount: summary?.critical_alert_count || 0,
+      warningAlertCount: summary?.warning_alert_count || 0,
     }
   })
 

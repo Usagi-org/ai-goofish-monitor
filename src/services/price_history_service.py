@@ -393,3 +393,194 @@ def build_price_history_insights(
         "daily_trend": _build_daily_trend(recent_snapshots),
         "latest_snapshot_at": snapshots[-1].get("snapshot_time"),
     }
+
+
+def _group_snapshots_by_run_id(snapshots: list[dict]) -> dict[str, list[dict]]:
+    """
+    按 run_id 分组快照记录
+    """
+    grouped: dict[str, list[dict]] = {}
+    for snapshot in snapshots:
+        run_id = str(snapshot.get("run_id") or "")
+        if run_id not in grouped:
+            grouped[run_id] = []
+        grouped[run_id].append(snapshot)
+    return grouped
+
+
+def _get_run_order(snapshots: list[dict]) -> list[str]:
+    """
+    按时间顺序获取 run_id 列表（从旧到新）
+    """
+    run_times: dict[str, str] = {}
+    for snapshot in snapshots:
+        run_id = str(snapshot.get("run_id") or "")
+        snapshot_time = str(snapshot.get("snapshot_time") or "")
+        if run_id not in run_times or snapshot_time < run_times[run_id]:
+            run_times[run_id] = snapshot_time
+    
+    sorted_runs = sorted(run_times.items(), key=lambda x: x[1])
+    return [run_id for run_id, _ in sorted_runs]
+
+
+def _calculate_run_summary(snapshots: list[dict]) -> dict:
+    """
+    计算单次扫描的价格汇总信息
+    """
+    deduped = _dedupe_latest(snapshots, "item_id")
+    summary = _summarize_prices(deduped)
+    
+    if not snapshots:
+        return {
+            "run_id": "",
+            "snapshot_time": None,
+            "avg_price": None,
+            "median_price": None,
+            "min_price": None,
+            "max_price": None,
+            "sample_count": 0,
+        }
+    
+    sorted_by_time = sorted(snapshots, key=lambda x: x.get("snapshot_time") or "")
+    latest_time = sorted_by_time[-1].get("snapshot_time")
+    
+    return {
+        "run_id": str(snapshots[0].get("run_id") or ""),
+        "snapshot_time": latest_time,
+        "avg_price": summary.get("avg_price"),
+        "median_price": summary.get("median_price"),
+        "min_price": summary.get("min_price"),
+        "max_price": summary.get("max_price"),
+        "sample_count": summary.get("sample_count", 0),
+    }
+
+
+def analyze_price_trend(
+    keyword: str,
+    task_name: str,
+    *,
+    consecutive_scans_threshold: int = 3,
+    drop_percentage_threshold: float = 10.0,
+) -> dict:
+    """
+    分析价格趋势，检测连续下跌情况
+    
+    Args:
+        keyword: 搜索关键词
+        task_name: 任务名称
+        consecutive_scans_threshold: 连续扫描次数阈值（默认3次）
+        drop_percentage_threshold: 下跌百分比阈值（默认10%）
+    
+    Returns:
+        包含趋势分析结果的字典
+    """
+    from src.domain.models.alert import PriceTrendAnalysisResult, PriceTrendInfo
+    
+    snapshots = load_price_snapshots(keyword)
+    
+    if not snapshots:
+        return PriceTrendAnalysisResult(
+            keyword=keyword,
+            task_name=task_name,
+            has_significant_drop=False,
+            consecutive_drop_count=0,
+            drop_percentage=0.0,
+            threshold_percent=drop_percentage_threshold,
+            should_alert=False,
+        ).model_dump()
+    
+    grouped = _group_snapshots_by_run_id(snapshots)
+    run_order = _get_run_order(snapshots)
+    
+    if len(run_order) < 2:
+        return PriceTrendAnalysisResult(
+            keyword=keyword,
+            task_name=task_name,
+            has_significant_drop=False,
+            consecutive_drop_count=0,
+            drop_percentage=0.0,
+            threshold_percent=drop_percentage_threshold,
+            should_alert=False,
+        ).model_dump()
+    
+    run_summaries: list[dict] = []
+    for run_id in run_order:
+        run_snapshots = grouped.get(run_id, [])
+        if run_snapshots:
+            summary = _calculate_run_summary(run_snapshots)
+            if summary.get("avg_price") is not None:
+                run_summaries.append(summary)
+    
+    if len(run_summaries) < 2:
+        return PriceTrendAnalysisResult(
+            keyword=keyword,
+            task_name=task_name,
+            has_significant_drop=False,
+            consecutive_drop_count=0,
+            drop_percentage=0.0,
+            threshold_percent=drop_percentage_threshold,
+            should_alert=False,
+        ).model_dump()
+    
+    trend_history: list[PriceTrendInfo] = []
+    for summary in run_summaries:
+        trend_history.append(PriceTrendInfo(
+            run_id=summary["run_id"],
+            snapshot_time=str(summary.get("snapshot_time") or ""),
+            avg_price=float(summary.get("avg_price") or 0),
+            sample_count=int(summary.get("sample_count") or 0),
+            median_price=summary.get("median_price"),
+            min_price=summary.get("min_price"),
+            max_price=summary.get("max_price"),
+        ))
+    
+    consecutive_drop_count = 0
+    max_drop_percentage = 0.0
+    baseline_avg_price = None
+    
+    for i in range(1, len(run_summaries)):
+        prev_avg = run_summaries[i-1].get("avg_price")
+        curr_avg = run_summaries[i].get("avg_price")
+        
+        if prev_avg is None or curr_avg is None:
+            continue
+        
+        if prev_avg > 0 and curr_avg < prev_avg:
+            consecutive_drop_count += 1
+            drop_percent = ((prev_avg - curr_avg) / prev_avg) * 100
+            max_drop_percentage = max(max_drop_percentage, drop_percent)
+            
+            if baseline_avg_price is None:
+                baseline_avg_price = prev_avg
+        else:
+            consecutive_drop_count = 0
+            baseline_avg_price = None
+            max_drop_percentage = 0.0
+    
+    current_avg_price = run_summaries[-1].get("avg_price") if run_summaries else None
+    
+    has_significant_drop = (
+        consecutive_drop_count >= consecutive_scans_threshold and
+        max_drop_percentage >= drop_percentage_threshold
+    )
+    
+    total_drop_percentage = 0.0
+    if baseline_avg_price and current_avg_price and baseline_avg_price > 0:
+        total_drop_percentage = ((baseline_avg_price - current_avg_price) / baseline_avg_price) * 100
+    
+    should_alert = has_significant_drop
+    
+    result = PriceTrendAnalysisResult(
+        keyword=keyword,
+        task_name=task_name,
+        has_significant_drop=has_significant_drop,
+        consecutive_drop_count=consecutive_drop_count,
+        drop_percentage=round(total_drop_percentage, 2),
+        threshold_percent=drop_percentage_threshold,
+        baseline_avg_price=baseline_avg_price,
+        current_avg_price=current_avg_price,
+        trend_history=trend_history,
+        should_alert=should_alert,
+    )
+    
+    return result.model_dump()

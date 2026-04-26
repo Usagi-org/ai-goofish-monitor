@@ -1,4 +1,5 @@
 import type { ResultInsights } from '@/types/result.d.ts'
+import type { AlertSummary, AlertLevel } from '@/types/task.d.ts'
 
 export interface DashboardSummary {
   enabled_tasks: number
@@ -9,6 +10,9 @@ export interface DashboardSummary {
   ai_recommended_items: number
   keyword_recommended_items: number
   last_updated_at: string | null
+  active_alert_count: number
+  critical_alert_count: number
+  warning_alert_count: number
 }
 
 export interface DashboardTaskSummary {
@@ -28,6 +32,7 @@ export interface DashboardTaskSummary {
   latest_crawl_time: string | null
   latest_recommended_title: string | null
   latest_recommended_price: number | null
+  alert_summary?: AlertSummary
 }
 
 export interface DashboardActivity {

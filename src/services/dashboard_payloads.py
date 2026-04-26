@@ -34,6 +34,24 @@ def serialize_timestamp(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _get_alert_summary_for_task(task_name: str) -> dict[str, Any]:
+    """获取任务的预警摘要"""
+    try:
+        from src.services.alert_service import build_alert_service
+        alert_service = build_alert_service()
+        summary = alert_service.get_task_alert_summary(task_name)
+        return summary.model_dump()
+    except Exception:
+        return {
+            "task_name": task_name,
+            "has_active_alert": False,
+            "active_alert_count": 0,
+            "latest_alert_level": None,
+            "latest_alert_message": None,
+            "latest_alert_time": None,
+        }
+
+
 def build_empty_summary(task: Task) -> dict[str, Any]:
     return {
         "task_id": task.id,
@@ -52,6 +70,7 @@ def build_empty_summary(task: Task) -> dict[str, Any]:
         "latest_crawl_time": None,
         "latest_recommended_title": None,
         "latest_recommended_price": None,
+        "alert_summary": _get_alert_summary_for_task(task.task_name),
     }
 
 
@@ -108,6 +127,7 @@ def _build_fallback_summary(task_name: str, keyword: str) -> dict[str, Any]:
         "latest_crawl_time": None,
         "latest_recommended_title": None,
         "latest_recommended_price": None,
+        "alert_summary": _get_alert_summary_for_task(task_name),
     }
 
 

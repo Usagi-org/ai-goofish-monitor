@@ -25,8 +25,10 @@ import {
   Layers,
   MapPin,
   RefreshCcw,
-  Search
+  Search,
+  AlertTriangle
 } from 'lucide-vue-next'
+import type { AlertLevel, AlertSummary } from '@/types/task.d.ts'
 import { formatCountdown, formatNextRunAbsolute } from '@/lib/taskSchedule'
 
 interface Props {
@@ -84,6 +86,63 @@ const resolveNextRunLabel = (task: Task) => {
   return formatNextRunAbsolute(task.next_run_at)
 }
 
+const hasActiveAlert = (task: Task) => {
+  return task.alert_summary?.has_active_alert ?? false
+}
+
+const getAlertLevelColor = (level: AlertLevel | null | undefined): string => {
+  switch (level) {
+    case 'critical':
+      return 'text-red-500'
+    case 'warning':
+      return 'text-amber-500'
+    case 'info':
+      return 'text-blue-500'
+    default:
+      return 'text-red-500'
+  }
+}
+
+const getAlertLevelBg = (level: AlertLevel | null | undefined): string => {
+  switch (level) {
+    case 'critical':
+      return 'bg-red-50 border-red-200'
+    case 'warning':
+      return 'bg-amber-50 border-amber-200'
+    case 'info':
+      return 'bg-blue-50 border-blue-200'
+    default:
+      return 'bg-red-50 border-red-200'
+  }
+}
+
+const getAlertBadgeClass = (level: AlertLevel | null | undefined): string => {
+  switch (level) {
+    case 'critical':
+      return 'bg-red-500 text-white'
+    case 'warning':
+      return 'bg-amber-500 text-white'
+    case 'info':
+      return 'bg-blue-500 text-white'
+    default:
+      return 'bg-red-500 text-white'
+  }
+}
+
+const getAlertTitle = (task: Task): string => {
+  const summary = task.alert_summary
+  if (!summary) return ''
+  
+  const parts: string[] = []
+  if (summary.latest_alert_message) {
+    parts.push(summary.latest_alert_message)
+  }
+  if (summary.active_alert_count > 1) {
+    parts.push(`共 ${summary.active_alert_count} 条预警`)
+  }
+  return parts.join(' | ')
+}
+
 const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
   (e: 'run-task', taskId: number): void
@@ -121,6 +180,17 @@ const emit = defineEmits<{
                 <h3 class="truncate text-base font-black tracking-tight text-slate-900">
                   {{ task.task_name }}
                 </h3>
+                <Badge
+                  v-if="hasActiveAlert(task)"
+                  :class="[
+                    'border-none px-2 py-0.5 text-[10px] font-black flex items-center gap-1',
+                    getAlertBadgeClass(task.alert_summary?.latest_alert_level),
+                  ]"
+                  :title="getAlertTitle(task)"
+                >
+                  <AlertTriangle class="w-3 h-3" />
+                  {{ task.alert_summary?.active_alert_count > 1 ? `${task.alert_summary.active_alert_count}条预警` : '预警' }}
+                </Badge>
                 <Badge
                   variant="outline"
                   :class="[
@@ -345,6 +415,17 @@ const emit = defineEmits<{
               <div class="flex flex-col gap-1.5 py-1">
                 <div class="flex items-center gap-2">
                   <span class="text-base font-black text-slate-800 tracking-tight group-hover:text-primary transition-colors">{{ task.task_name }}</span>
+                  <Badge
+                    v-if="hasActiveAlert(task)"
+                    :class="[
+                      'h-4 px-1.5 text-[9px] font-black border-none tracking-tighter flex items-center gap-1',
+                      getAlertBadgeClass(task.alert_summary?.latest_alert_level),
+                    ]"
+                    :title="getAlertTitle(task)"
+                  >
+                    <AlertTriangle class="w-2.5 h-2.5" />
+                    {{ task.alert_summary?.active_alert_count > 1 ? `${task.alert_summary.active_alert_count}预警` : '预警' }}
+                  </Badge>
                   <Badge 
                     variant="outline" 
                     :class="[
