@@ -132,14 +132,12 @@ class NotificationClient(ABC):
         level_emoji = {
             "critical": "🔴",
             "warning": "🟠",
-            "info": "🔵",
-        }.get(alert_level.lower(), "⚠️")
+        }.get(alert_level.lower(), "🟠")
 
         level_label = {
             "critical": "严重",
             "warning": "警告",
-            "info": "一般",
-        }.get(alert_level.lower(), "预警")
+        }.get(alert_level.lower(), "警告")
 
         notification_title = f"📉 价格下跌预警 - {level_emoji} {level_label}"
 

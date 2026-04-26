@@ -1,6 +1,6 @@
 // Based on the Pydantic model in the backend
 
-export type AlertLevel = 'info' | 'warning' | 'critical';
+export type AlertLevel = 'warning' | 'critical';
 
 export interface AlertSummary {
   task_name: string;

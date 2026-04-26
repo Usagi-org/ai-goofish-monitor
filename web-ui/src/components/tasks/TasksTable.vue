@@ -96,8 +96,6 @@ const getAlertLevelColor = (level: AlertLevel | null | undefined): string => {
       return 'text-red-500'
     case 'warning':
       return 'text-amber-500'
-    case 'info':
-      return 'text-blue-500'
     default:
       return 'text-red-500'
   }
@@ -109,8 +107,6 @@ const getAlertLevelBg = (level: AlertLevel | null | undefined): string => {
       return 'bg-red-50 border-red-200'
     case 'warning':
       return 'bg-amber-50 border-amber-200'
-    case 'info':
-      return 'bg-blue-50 border-blue-200'
     default:
       return 'bg-red-50 border-red-200'
   }
@@ -122,8 +118,6 @@ const getAlertBadgeClass = (level: AlertLevel | null | undefined): string => {
       return 'bg-red-500 text-white'
     case 'warning':
       return 'bg-amber-500 text-white'
-    case 'info':
-      return 'bg-blue-500 text-white'
     default:
       return 'bg-red-500 text-white'
   }

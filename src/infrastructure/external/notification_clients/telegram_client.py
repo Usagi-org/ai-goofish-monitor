@@ -8,7 +8,10 @@ import requests
 
 from src.infrastructure.config.settings import DEFAULT_TELEGRAM_API_BASE_URL
 
-from .base import NotificationClient
+from .base import (
+    AlertNotificationData,
+    NotificationClient,
+)
 
 
 class TelegramClient(NotificationClient):
@@ -72,3 +75,78 @@ class TelegramClient(NotificationClient):
         result = response.json()
         if not result.get("ok"):
             raise RuntimeError(result.get("description", "Telegram 返回未知错误"))
+
+    async def send_alert(self, alert_data: AlertNotificationData) -> bool:
+        """
+        发送价格预警通知到 Telegram
+        
+        Args:
+            alert_data: 预警通知数据
+            
+        Returns:
+            是否发送成功
+        """
+        if not self.is_enabled():
+            return False
+
+        level_label = {
+            "critical": "严重",
+            "warning": "警告",
+        }.get(alert_data.alert_level.lower(), "警告")
+
+        level_emoji = {
+            "critical": "🔴",
+            "warning": "🟠",
+        }.get(alert_data.alert_level.lower(), "🟠")
+
+        telegram_message = [
+            f"📉 <b>价格下跌预警</b>",
+            "",
+            f"<b>{level_emoji} 预警级别: {level_label}</b>",
+            "",
+            f"<b>📦 任务:</b> {alert_data.task_name}",
+            f"<b>🔍 关键词:</b> {alert_data.keyword}",
+            f"<b>📊 连续下跌:</b> {alert_data.consecutive_scans} 次扫描",
+        ]
+
+        if alert_data.previous_avg_price is not None:
+            telegram_message.append(f"<b>📈 基准均价:</b> ¥{alert_data.previous_avg_price:.2f}")
+        if alert_data.current_avg_price is not None:
+            telegram_message.append(f"<b>📉 当前均价:</b> ¥{alert_data.current_avg_price:.2f}")
+        if alert_data.drop_percentage is not None:
+            telegram_message.append(f"<b>🔥 累计跌幅:</b> {alert_data.drop_percentage:.1f}%")
+
+        if alert_data.message:
+            telegram_message.extend([
+                "",
+                "<b>📝 详情:</b>",
+                f"{alert_data.message}",
+            ])
+
+        telegram_api_url = f"{self.api_base_url}/bot{self.bot_token}/sendMessage"
+        telegram_payload = {
+            "chat_id": self.chat_id,
+            "text": "\n".join(telegram_message),
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+
+        try:
+            headers = {"Content-Type": "application/json"}
+            loop = asyncio.get_running_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.post(
+                    telegram_api_url,
+                    json=telegram_payload,
+                    headers=headers,
+                    timeout=10
+                )
+            )
+            response.raise_for_status()
+            result = response.json()
+            if not result.get("ok"):
+                raise RuntimeError(result.get("description", "Telegram 返回未知错误"))
+            return True
+        except Exception:
+            return False
