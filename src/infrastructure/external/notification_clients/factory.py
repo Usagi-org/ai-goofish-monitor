@@ -7,6 +7,7 @@ from .bark_client import BarkClient
 from .gotify_client import GotifyClient
 from .ntfy_client import NtfyClient
 from .telegram_client import TelegramClient
+from .wecom_app_client import WeComAppClient
 from .wecom_bot_client import WeComBotClient
 from .webhook_client import WebhookClient
 
@@ -22,6 +23,13 @@ def build_notification_clients(settings: NotificationSettings):
             pcurl_to_mobile=pcurl_to_mobile,
         ),
         WeComBotClient(settings.wx_bot_url, pcurl_to_mobile=pcurl_to_mobile),
+        WeComAppClient(
+            corpid=settings.wecom_app_corpid,
+            corpsecret=settings.wecom_app_secret,
+            agentid=settings.wecom_app_agentid,
+            touser=settings.wecom_app_touser,
+            pcurl_to_mobile=pcurl_to_mobile,
+        ),
         TelegramClient(
             settings.telegram_bot_token,
             settings.telegram_chat_id,
