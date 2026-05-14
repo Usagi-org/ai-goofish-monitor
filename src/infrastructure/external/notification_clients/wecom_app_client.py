@@ -3,6 +3,7 @@
 通过企微应用 API 推送消息到指定用户（非群机器人 Webhook）
 """
 import asyncio
+import html
 import time
 from typing import Dict
 
@@ -21,7 +22,7 @@ class WeComAppClient(NotificationClient):
         self,
         corpid: str | None = None,
         corpsecret: str | None = None,
-        agentid: str | None = None,
+        agentid: int | str | None = None,
         touser: str | None = None,
         pcurl_to_mobile: bool = True,
     ):
@@ -54,16 +55,20 @@ class WeComAppClient(NotificationClient):
         self._token_expires_at = now + data.get("expires_in", 7200) - 300
         return self._access_token
 
-    async def send(self, product_data: Dict, reason: str) -> None:
+    async def send(self, product_data: Dict, reason: str) -> bool:
         if not self.is_enabled():
             raise RuntimeError("企微应用 未启用")
 
         message = self._build_message(product_data, reason)
 
+        # HTML-escape user-provided data to prevent injection
+        safe_price = html.escape(str(message.price))
+        safe_reason = html.escape(str(message.reason))
+
         # 构建 text card 消息（支持点击跳转）
         description_lines = [
-            f"<div class=\"normal\">💰 价格: {message.price}</div>",
-            f"<div class=\"normal\">📝 原因: {message.reason}</div>",
+            f"<div class=\"normal\">💰 价格: {safe_price}</div>",
+            f"<div class=\"normal\">📝 原因: {safe_reason}</div>",
         ]
         if message.mobile_link:
             description_lines.append(
@@ -113,3 +118,4 @@ class WeComAppClient(NotificationClient):
                 raise RuntimeError(
                     f"企微应用消息发送失败: {result.get('errmsg', '未知错误')}"
                 )
+        return True

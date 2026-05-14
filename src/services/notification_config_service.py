@@ -58,6 +58,7 @@ SECRET_NOTIFICATION_FIELDS = {
     "BARK_URL",
     "GOTIFY_TOKEN",
     "WX_BOT_URL",
+    "WECOM_APP_SECRET",
     "TELEGRAM_BOT_TOKEN",
     "WEBHOOK_URL",
     "WEBHOOK_HEADERS",
@@ -102,6 +103,10 @@ def build_notification_settings_response(
         "GOTIFY_TOKEN": "",
         "BARK_URL": "",
         "WX_BOT_URL": "",
+        "WECOM_APP_CORPID": notification_settings.wecom_app_corpid or "",
+        "WECOM_APP_SECRET": "",
+        "WECOM_APP_AGENTID": notification_settings.wecom_app_agentid or "",
+        "WECOM_APP_TOUSER": notification_settings.wecom_app_touser or "",
         "TELEGRAM_BOT_TOKEN": "",
         "TELEGRAM_CHAT_ID": notification_settings.telegram_chat_id or "",
         "TELEGRAM_API_BASE_URL": (
