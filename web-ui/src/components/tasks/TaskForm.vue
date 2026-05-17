@@ -501,13 +501,13 @@ function handleSubmit() {
           <div
             v-for="(target, index) in form.notification_targets || []"
             :key="index"
-            class="grid gap-2 rounded-md border p-3 md:grid-cols-[150px_1fr_150px_auto]"
+            class="grid gap-2 rounded-md border p-3 md:grid-cols-[150px_minmax(260px,1fr)_150px_auto]"
           >
             <Select v-model="target.channel">
               <SelectTrigger>
                 <SelectValue :placeholder="t('tasks.form.notifications.channel')" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent class="z-[100] w-[220px]">
                 <SelectItem v-for="option in notificationChannelOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </SelectItem>
