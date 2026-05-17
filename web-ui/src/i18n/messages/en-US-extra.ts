@@ -95,6 +95,25 @@ const enUSExtra = {
       newPublish: 'Fresh Listing Window',
       region: 'Region Filter (optional)',
       regionHint: 'Region filters can significantly reduce the number of matching items.',
+      notifications: {
+        title: 'Notification Targets',
+        hint: 'Leave empty to use all global notification channels; once added, only these targets receive item alerts.',
+        add: 'Add Target',
+        channel: 'Select Channel',
+        labelPlaceholder: 'Label (optional)',
+        channels: {
+          telegram: 'Telegram',
+          wecomApp: 'WeCom App',
+          wecom: 'WeCom Group Bot',
+          default: 'Global Default',
+        },
+        placeholders: {
+          telegram: 'Telegram chat_id',
+          wecomApp: '@all or member UserID; separate multiple users with |',
+          wecom: 'WeCom group bot webhook URL',
+          default: 'Use global notification settings',
+        },
+      },
       accountStrategy: {
         auto: 'Auto',
         autoDescription: 'Prefer the default login state; fallback to the account pool.',

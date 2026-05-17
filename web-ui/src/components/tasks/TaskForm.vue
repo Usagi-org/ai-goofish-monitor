@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { Task, TaskGenerateRequest } from '@/types/task.d.ts'
+import type { NotificationChannel, NotificationTarget, Task, TaskGenerateRequest } from '@/types/task.d.ts'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -34,6 +35,12 @@ const accountStrategy = ref<'auto' | 'fixed' | 'rotate'>('auto')
 const selectedAccountStateFile = ref(AUTO_ACCOUNT_VALUE)
 const keywordRulesInput = ref('')
 const cronMode = ref<'preset' | 'custom'>('preset')
+const notificationChannelOptions = computed(() => [
+  { value: 'telegram', label: t('tasks.form.notifications.channels.telegram') },
+  { value: 'wecom_app', label: t('tasks.form.notifications.channels.wecomApp') },
+  { value: 'wecom', label: t('tasks.form.notifications.channels.wecom') },
+  { value: 'default', label: t('tasks.form.notifications.channels.default') },
+])
 
 // 常用 cron 预设选项
 const cronPresets = computed(() => [
@@ -93,6 +100,52 @@ function parseKeywordText(text: string): string[] {
   return deduped
 }
 
+function normalizeNotificationTargets(value: unknown): NotificationTarget[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const targets: NotificationTarget[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Partial<NotificationTarget>
+    const channel = String(raw.channel || '').trim() as NotificationChannel
+    const recipient = channel === 'default' ? '' : String(raw.recipient || '').trim()
+    const label = String(raw.label || '').trim()
+    if (!channel && !recipient) continue
+    if (!['telegram', 'wecom_app', 'wecom', 'default'].includes(channel)) continue
+    if (channel !== 'default' && !recipient) continue
+    const key = `${channel}:${recipient}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    targets.push({ channel, recipient, ...(label ? { label } : {}) })
+  }
+  return targets
+}
+
+function addNotificationTarget() {
+  const targets = Array.isArray(form.value.notification_targets)
+    ? [...form.value.notification_targets]
+    : []
+  targets.push({ channel: 'telegram', recipient: '', label: '' })
+  form.value.notification_targets = targets
+}
+
+function removeNotificationTarget(index: string | number) {
+  const numericIndex = Number(index)
+  if (!Number.isFinite(numericIndex)) return
+  const targets = Array.isArray(form.value.notification_targets)
+    ? [...form.value.notification_targets]
+    : []
+  targets.splice(numericIndex, 1)
+  form.value.notification_targets = targets
+}
+
+function notificationRecipientPlaceholder(channel: NotificationChannel) {
+  if (channel === 'telegram') return t('tasks.form.notifications.placeholders.telegram')
+  if (channel === 'wecom_app') return t('tasks.form.notifications.placeholders.wecomApp')
+  if (channel === 'wecom') return t('tasks.form.notifications.placeholders.wecom')
+  return t('tasks.form.notifications.placeholders.default')
+}
+
 watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAccount], () => {
   const defaultValues = props.defaultValues || {}
   if (props.mode === 'edit' && props.initialData) {
@@ -113,6 +166,9 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
         defaultValues.new_publish_option || props.initialData.new_publish_option || '__none__',
       region: defaultValues.region || props.initialData.region || '',
       decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
+      notification_targets: normalizeNotificationTargets(
+        defaultValues.notification_targets || props.initialData.notification_targets || [],
+      ),
     }
     keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
     // 编辑模式下，根据 cron 值判断模式
@@ -135,6 +191,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       new_publish_option: '__none__',
       region: '',
       decision_mode: 'ai',
+      notification_targets: [],
       ...defaultValues,
     }
     if (!form.value.account_strategy) {
@@ -249,6 +306,7 @@ function handleSubmit() {
   submitData.account_strategy = currentAccountStrategy
   submitData.analyze_images = submitData.analyze_images !== false
   submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
+  submitData.notification_targets = normalizeNotificationTargets(submitData.notification_targets)
   if (decisionMode === 'keyword' && !submitData.description) {
     submitData.description = ''
   }
@@ -434,6 +492,40 @@ function handleSubmit() {
         <div class="space-y-1 sm:col-span-3">
           <TaskRegionSelector v-model="form.region as any" />
           <p class="text-xs text-gray-500">{{ t('tasks.form.regionHint') }}</p>
+        </div>
+      </div>
+      <div class="grid gap-2 sm:grid-cols-4 sm:gap-4">
+        <Label class="pt-1 sm:pt-2 sm:text-right">{{ t('tasks.form.notifications.title') }}</Label>
+        <div class="space-y-3 sm:col-span-3">
+          <p class="text-xs text-gray-500">{{ t('tasks.form.notifications.hint') }}</p>
+          <div
+            v-for="(target, index) in form.notification_targets || []"
+            :key="index"
+            class="grid gap-2 rounded-md border p-3 md:grid-cols-[150px_1fr_150px_auto]"
+          >
+            <Select v-model="target.channel">
+              <SelectTrigger>
+                <SelectValue :placeholder="t('tasks.form.notifications.channel')" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="option in notificationChannelOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              v-model="target.recipient"
+              :disabled="target.channel === 'default'"
+              :placeholder="notificationRecipientPlaceholder(target.channel)"
+            />
+            <Input v-model="target.label" :placeholder="t('tasks.form.notifications.labelPlaceholder')" />
+            <Button type="button" variant="outline" size="sm" @click="removeNotificationTarget(index)">
+              {{ t('common.delete') }}
+            </Button>
+          </div>
+          <Button type="button" variant="outline" size="sm" @click="addNotificationTarget">
+            {{ t('tasks.form.notifications.add') }}
+          </Button>
         </div>
       </div>
     </div>

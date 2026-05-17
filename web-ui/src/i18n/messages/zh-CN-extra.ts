@@ -95,6 +95,25 @@ const zhCNExtra = {
       newPublish: '新发布范围',
       region: '区域筛选（默认不填）',
       regionHint: '区域筛选会导致满足条件的商品数量很少。',
+      notifications: {
+        title: '推送对象',
+        hint: '不添加则使用全局默认通知渠道；添加后仅推送给这些对象。',
+        add: '添加推送对象',
+        channel: '选择渠道',
+        labelPlaceholder: '展示名（可选）',
+        channels: {
+          telegram: 'Telegram',
+          wecomApp: '企业微信应用',
+          wecom: '企业微信群机器人',
+          default: '全局默认',
+        },
+        placeholders: {
+          telegram: 'Telegram chat_id',
+          wecomApp: '@all 或成员 UserID，多个用 | 分隔',
+          wecom: '企业微信群机器人 webhook URL',
+          default: '使用全局默认通知配置',
+        },
+      },
       accountStrategy: {
         auto: '自动选择',
         autoDescription: '优先使用默认登录态；无默认时使用账号池。',

@@ -82,6 +82,42 @@ def _normalize_payload_keywords(payload: Any) -> Any:
     return values
 
 
+ALLOWED_NOTIFICATION_CHANNELS = {"telegram", "wecom_app", "wecom", "default"}
+
+
+def _normalize_notification_targets(value, *, allow_none: bool = False):
+    if value is None:
+        return None if allow_none else []
+    if not isinstance(value, list):
+        raise ValueError("notification_targets must be a list.")
+
+    normalized: List[dict] = []
+    seen = set()
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("notification_targets items must be objects.")
+        channel = str(item.get("channel") or "").strip()
+        recipient = str(item.get("recipient") or "").strip()
+        label = str(item.get("label") or "").strip()
+        if not channel and not recipient:
+            continue
+        if channel not in ALLOWED_NOTIFICATION_CHANNELS:
+            raise ValueError(f"Unsupported notification channel: {channel}")
+        if channel == "default":
+            recipient = ""
+        if channel != "default" and not recipient:
+            continue
+        dedup_key = (channel, recipient)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        target = {"channel": channel, "recipient": recipient}
+        if label:
+            target["label"] = label
+        normalized.append(target)
+    return normalized
+
+
 def _has_keyword_rules(keyword_rules: List[str]) -> bool:
     return bool(keyword_rules and len(keyword_rules) > 0)
 
@@ -129,6 +165,7 @@ class Task(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    notification_targets: List[dict] = Field(default_factory=list)
     is_running: bool = False
 
     @model_validator(mode="before")
@@ -140,6 +177,11 @@ class Task(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("notification_targets", mode="before")
+    @classmethod
+    def normalize_notification_targets(cls, value):
+        return _normalize_notification_targets(value)
 
     def can_start(self) -> bool:
         """检查任务是否可以启动"""
@@ -179,6 +221,7 @@ class TaskCreate(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    notification_targets: List[dict] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -209,6 +252,11 @@ class TaskCreate(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("notification_targets", mode="before")
+    @classmethod
+    def normalize_notification_targets(cls, value):
+        return _normalize_notification_targets(value)
 
     @model_validator(mode="after")
     def validate_decision_mode_payload(self):
@@ -246,6 +294,7 @@ class TaskUpdate(BaseModel):
     region: Optional[str] = None
     decision_mode: Optional[Literal["ai", "keyword"]] = None
     keyword_rules: Optional[List[str]] = None
+    notification_targets: Optional[List[dict]] = None
     is_running: Optional[bool] = None
 
     @model_validator(mode="before")
@@ -277,6 +326,11 @@ class TaskUpdate(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("notification_targets", mode="before")
+    @classmethod
+    def normalize_notification_targets(cls, value):
+        return _normalize_notification_targets(value, allow_none=True)
 
     @model_validator(mode="after")
     def validate_partial_keyword_payload(self):
@@ -310,6 +364,7 @@ class TaskGenerateRequest(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    notification_targets: List[dict] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -345,6 +400,11 @@ class TaskGenerateRequest(BaseModel):
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
+
+    @field_validator("notification_targets", mode="before")
+    @classmethod
+    def normalize_notification_targets(cls, value):
+        return _normalize_notification_targets(value)
 
     @model_validator(mode="after")
     def validate_decision_mode_payload(self):
