@@ -54,6 +54,9 @@ def test_wecom_app_textcard_description_uses_card_url_without_anchor(monkeypatch
     assert payload["msgtype"] == "textcard"
     assert textcard["url"] == expected_mobile_link
     assert textcard["btntxt"] == "查看详情"
+    assert "<div" not in description
+    assert "</div>" not in description
+    assert "class=" not in description
     assert "<a " not in description
     assert "href=" not in description
     assert "goofish.com" not in description

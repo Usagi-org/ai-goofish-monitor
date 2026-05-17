@@ -61,6 +61,19 @@ export interface NotificationTestResponse {
   }>
 }
 
+export interface WeComAppDepartment {
+  id: number
+  name: string
+  parentid: number
+  order: number
+}
+
+export interface WeComAppUser {
+  userid: string
+  name: string
+  department: number[]
+}
+
 export interface AiSettings {
   OPENAI_API_KEY?: string
   OPENAI_BASE_URL?: string
@@ -133,6 +146,22 @@ export async function testNotificationSettings(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
+  })
+}
+
+export async function fetchWeComAppDepartments(): Promise<{ departments: WeComAppDepartment[] }> {
+  return await http('/api/settings/notifications/wecom-app/departments')
+}
+
+export async function fetchWeComAppUsers(
+  departmentId: number | string,
+  fetchChild = true
+): Promise<{ users: WeComAppUser[] }> {
+  return await http('/api/settings/notifications/wecom-app/users', {
+    params: {
+      department_id: departmentId,
+      fetch_child: fetchChild ? 1 : 0,
+    },
   })
 }
 

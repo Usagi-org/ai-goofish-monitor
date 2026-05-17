@@ -27,6 +27,10 @@ _SETTINGS_ENV_KEYS = [
     "GOTIFY_TOKEN",
     "BARK_URL",
     "WX_BOT_URL",
+    "WECOM_APP_CORPID",
+    "WECOM_APP_SECRET",
+    "WECOM_APP_AGENTID",
+    "WECOM_APP_TOUSER",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
     "TELEGRAM_API_BASE_URL",
@@ -231,6 +235,99 @@ def test_update_notification_settings_persists_wecom_app_config(tmp_path, monkey
     assert "WECOM_APP_SECRET=app-secret" in latest
     assert "WECOM_APP_AGENTID=1000001" in latest
     assert "WECOM_APP_TOUSER=user1|user2" in latest
+
+
+def test_wecom_app_departments_and_users_use_configured_app_credentials(
+    tmp_path, monkeypatch
+):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "WECOM_APP_CORPID=corp-id",
+                "WECOM_APP_SECRET=app-secret",
+                "WECOM_APP_AGENTID=1000001",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    requests_seen = []
+
+    class _FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    def _fake_get(url, params=None, timeout=None):
+        requests_seen.append((url, params, timeout))
+        if url.endswith("/gettoken"):
+            return _FakeResponse({"errcode": 0, "access_token": "token-1"})
+        if url.endswith("/department/list"):
+            return _FakeResponse(
+                {
+                    "errcode": 0,
+                    "department": [
+                        {"id": 1, "name": "总部", "parentid": 0, "order": 10},
+                    ],
+                }
+            )
+        if url.endswith("/user/simplelist"):
+            return _FakeResponse(
+                {
+                    "errcode": 0,
+                    "userlist": [
+                        {"userid": "zhangsan", "name": "张三", "department": [1]},
+                    ],
+                }
+            )
+        raise AssertionError(f"unexpected url: {url}")
+
+    monkeypatch.setattr("requests.get", _fake_get)
+    client = _build_settings_client()
+
+    departments_response = client.get("/api/settings/notifications/wecom-app/departments")
+    users_response = client.get(
+        "/api/settings/notifications/wecom-app/users",
+        params={"department_id": 1, "fetch_child": 1},
+    )
+
+    assert departments_response.status_code == 200
+    assert departments_response.json() == {
+        "departments": [{"id": 1, "name": "总部", "parentid": 0, "order": 10}]
+    }
+    assert users_response.status_code == 200
+    assert users_response.json() == {
+        "users": [{"userid": "zhangsan", "name": "张三", "department": [1]}]
+    }
+    assert requests_seen[0][1] == {"corpid": "corp-id", "corpsecret": "app-secret"}
+    assert requests_seen[1][1] == {"access_token": "token-1"}
+    assert requests_seen[2][1] == {"corpid": "corp-id", "corpsecret": "app-secret"}
+    assert requests_seen[3][1] == {
+        "access_token": "token-1",
+        "department_id": 1,
+        "fetch_child": 1,
+    }
+    assert all(item[2] == settings.WECOM_API_TIMEOUT_SECONDS for item in requests_seen)
+
+
+def test_wecom_app_contacts_require_app_credentials(tmp_path, monkeypatch):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+
+    response = client.get("/api/settings/notifications/wecom-app/departments")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "企业微信应用未完整配置"
 
 
 def test_system_status_includes_notification_channel_flags(tmp_path, monkeypatch):

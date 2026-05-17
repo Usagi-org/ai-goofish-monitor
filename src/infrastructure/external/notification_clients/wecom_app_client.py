@@ -68,10 +68,10 @@ class WeComAppClient(NotificationClient):
 
         # 构建 text card 消息（支持点击卡片或按钮跳转）
         description_lines = [
-            f"<div class=\"normal\">📦 商品: {safe_title}</div>",
-            f"<div class=\"normal\">💰 价格: {safe_price}</div>",
-            f"<div class=\"normal\">📝 原因: {safe_reason}</div>",
-            "<div class=\"normal\">📱 点击卡片或下方按钮查看详情</div>",
+            f"📦 商品: {safe_title}",
+            f"💰 价格: {safe_price}",
+            f"📝 原因: {safe_reason}",
+            "📱 点击卡片或下方按钮查看详情",
         ]
 
         payload = {

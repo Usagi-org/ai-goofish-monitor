@@ -109,10 +109,19 @@ const enUSExtra = {
         },
         placeholders: {
           telegram: 'Telegram chat_id',
-          wecomApp: '@all or member UserID; separate multiple users with |',
+          wecomApp: '{at}all or member UserID; separate multiple users with |',
           wecom_app: '{at}all or member UserID; separate multiple users with |',
           wecom: 'WeCom group bot webhook URL',
           default: 'Use global notification settings',
+        },
+        wecomAppPicker: {
+          loadContacts: 'Load Contacts',
+          reloadContacts: 'Reload',
+          allMembers: '{at}all All',
+          loading: 'Loading WeCom contacts...',
+          loadFailed: 'Failed to load WeCom contacts.',
+          noUsers: 'No selectable members in this department.',
+          manualFallback: 'If contact permissions are unavailable, enter UserIDs manually.',
         },
       },
       accountStrategy: {

@@ -109,10 +109,19 @@ const zhCNExtra = {
         },
         placeholders: {
           telegram: 'Telegram chat_id',
-          wecomApp: '@all 或成员 UserID，多个用 | 分隔',
+          wecomApp: '{at}all 或成员 UserID，多个用 | 分隔',
           wecom_app: '{at}all 或成员 UserID，多个用 | 分隔',
           wecom: '企业微信群机器人 webhook URL',
           default: '使用全局默认通知配置',
+        },
+        wecomAppPicker: {
+          loadContacts: '加载通讯录',
+          reloadContacts: '重新加载',
+          allMembers: '{at}all 全员',
+          loading: '正在加载企业微信通讯录...',
+          loadFailed: '加载企业微信通讯录失败',
+          noUsers: '该部门暂无可选成员。',
+          manualFallback: '如果通讯录权限不足，可继续手动填写 UserID。',
         },
       },
       accountStrategy: {
