@@ -19,6 +19,7 @@ const EMPTY_CRON_VALUE = '__manual__'
 
 const props = defineProps<{
   mode: FormMode
+  formId?: string
   initialData?: Task | null
   accountOptions?: { name: string; path: string }[]
   defaultAccount?: string
@@ -136,6 +137,26 @@ function removeNotificationTarget(index: string | number) {
     ? [...form.value.notification_targets]
     : []
   targets.splice(numericIndex, 1)
+  form.value.notification_targets = targets
+}
+
+function updateNotificationTargetChannel(index: string | number, value: unknown) {
+  const numericIndex = Number(index)
+  if (!Number.isFinite(numericIndex)) return
+  const channel = String(value || '').trim() as NotificationChannel
+  if (!['telegram', 'wecom_app', 'wecom', 'default'].includes(channel)) return
+
+  const targets = Array.isArray(form.value.notification_targets)
+    ? [...form.value.notification_targets]
+    : []
+  const current = targets[numericIndex]
+  if (!current) return
+
+  targets[numericIndex] = {
+    ...current,
+    channel,
+    recipient: channel === 'default' ? '' : (current.recipient || ''),
+  }
   form.value.notification_targets = targets
 }
 
@@ -328,7 +349,7 @@ function handleRemoveNotificationTarget(event: Event, index: string | number) {
 </script>
 
 <template>
-  <form id="task-form" @submit.prevent="handleSubmit">
+  <form :id="formId || 'task-form'" @submit.prevent="handleSubmit">
     <div class="grid gap-6 py-4">
       <div class="grid gap-2 sm:grid-cols-4 sm:items-center sm:gap-4">
         <Label for="task-name" class="sm:text-right">{{ t('tasks.form.taskName') }}</Label>
@@ -515,7 +536,10 @@ function handleRemoveNotificationTarget(event: Event, index: string | number) {
             :key="index"
             class="grid gap-2 rounded-md border p-3 md:grid-cols-[150px_minmax(260px,1fr)_150px_auto]"
           >
-            <Select v-model="target.channel">
+            <Select
+              :model-value="target.channel"
+              @update:model-value="(value) => updateNotificationTargetChannel(index, value)"
+            >
               <SelectTrigger>
                 <SelectValue :placeholder="t('tasks.form.notifications.channel')" />
               </SelectTrigger>
