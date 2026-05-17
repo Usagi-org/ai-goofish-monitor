@@ -536,19 +536,15 @@ function handleRemoveNotificationTarget(event: Event, index: string | number) {
             :key="index"
             class="grid gap-2 rounded-md border p-3 md:grid-cols-[150px_minmax(260px,1fr)_150px_auto]"
           >
-            <Select
-              :model-value="target.channel"
-              @update:model-value="(value) => updateNotificationTargetChannel(index, value)"
+            <select
+              :value="target.channel"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              @change="(event) => updateNotificationTargetChannel(index, (event.target as HTMLSelectElement).value)"
             >
-              <SelectTrigger>
-                <SelectValue :placeholder="t('tasks.form.notifications.channel')" />
-              </SelectTrigger>
-              <SelectContent class="z-[100] w-[220px]">
-                <SelectItem v-for="option in notificationChannelOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              <option v-for="option in notificationChannelOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
             <Input
               v-model="target.recipient"
               :disabled="target.channel === 'default'"
