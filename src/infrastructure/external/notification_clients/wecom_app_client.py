@@ -61,19 +61,18 @@ class WeComAppClient(NotificationClient):
 
         message = self._build_message(product_data, reason)
 
-        # HTML-escape user-provided data to prevent injection
+        # HTML-escape user-provided data before rendering the TextCard description.
+        safe_title = html.escape(str(message.title))
         safe_price = html.escape(str(message.price))
         safe_reason = html.escape(str(message.reason))
 
-        # 构建 text card 消息（支持点击跳转）
+        # 构建 text card 消息（支持点击卡片或按钮跳转）
         description_lines = [
+            f"<div class=\"normal\">📦 商品: {safe_title}</div>",
             f"<div class=\"normal\">💰 价格: {safe_price}</div>",
             f"<div class=\"normal\">📝 原因: {safe_reason}</div>",
+            "<div class=\"normal\">📱 点击卡片或下方按钮查看详情</div>",
         ]
-        if message.mobile_link:
-            description_lines.append(
-                f"<div class=\"normal\">📱 <a href=\"{message.mobile_link}\">手机端打开</a></div>"
-            )
 
         payload = {
             "touser": self.touser,
