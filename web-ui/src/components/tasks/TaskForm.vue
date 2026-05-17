@@ -313,6 +313,18 @@ function handleSubmit() {
 
   emit('submit', submitData)
 }
+
+function handleAddNotificationTarget(event?: Event) {
+  event?.preventDefault()
+  event?.stopPropagation()
+  addNotificationTarget()
+}
+
+function handleRemoveNotificationTarget(event: Event, index: string | number) {
+  event.preventDefault()
+  event.stopPropagation()
+  removeNotificationTarget(index)
+}
 </script>
 
 <template>
@@ -519,11 +531,11 @@ function handleSubmit() {
               :placeholder="notificationRecipientPlaceholder(target.channel)"
             />
             <Input v-model="target.label" :placeholder="t('tasks.form.notifications.labelPlaceholder')" />
-            <Button type="button" variant="outline" size="sm" @click="removeNotificationTarget(index)">
+            <Button type="button" variant="outline" size="sm" @click="handleRemoveNotificationTarget($event, index)">
               {{ t('common.delete') }}
             </Button>
           </div>
-          <Button type="button" variant="outline" size="sm" @click="addNotificationTarget">
+          <Button type="button" variant="outline" size="sm" @click="handleAddNotificationTarget">
             {{ t('tasks.form.notifications.add') }}
           </Button>
         </div>
