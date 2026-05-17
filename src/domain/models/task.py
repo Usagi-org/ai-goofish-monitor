@@ -300,7 +300,27 @@ class TaskUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_keyword_payload(cls, values):
-        return _normalize_payload_keywords(values)
+        if values is None or not isinstance(values, dict):
+            return values
+        normalized = dict(values)
+        if "account_state_file" in normalized:
+            normalized["account_state_file"] = clean_account_state_file(
+                normalized.get("account_state_file")
+            )
+        if "account_strategy" in normalized or "account_state_file" in normalized:
+            normalized["account_strategy"] = normalize_account_strategy(
+                normalized.get("account_strategy"),
+                normalized.get("account_state_file"),
+            )
+        if "keyword_rules" in normalized:
+            normalized["keyword_rules"] = _normalize_keyword_values(
+                normalized.get("keyword_rules")
+            )
+        elif "keyword_rule_groups" in normalized:
+            normalized["keyword_rules"] = _extract_keywords_from_legacy_groups(
+                normalized.get("keyword_rule_groups")
+            )
+        return normalized
 
     @field_validator("min_price", "max_price", mode="before")
     @classmethod
