@@ -110,6 +110,7 @@ const enUSExtra = {
         placeholders: {
           telegram: 'Telegram chat_id',
           wecomApp: '@all or member UserID; separate multiple users with |',
+          wecom_app: '{at}all or member UserID; separate multiple users with |',
           wecom: 'WeCom group bot webhook URL',
           default: 'Use global notification settings',
         },

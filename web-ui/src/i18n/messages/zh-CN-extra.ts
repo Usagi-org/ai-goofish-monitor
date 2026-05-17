@@ -110,6 +110,7 @@ const zhCNExtra = {
         placeholders: {
           telegram: 'Telegram chat_id',
           wecomApp: '@all 或成员 UserID，多个用 | 分隔',
+          wecom_app: '{at}all 或成员 UserID，多个用 | 分隔',
           wecom: '企业微信群机器人 webhook URL',
           default: '使用全局默认通知配置',
         },

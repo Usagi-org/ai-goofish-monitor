@@ -162,7 +162,7 @@ function updateNotificationTargetChannel(index: string | number, value: unknown)
 
 function notificationRecipientPlaceholder(channel: NotificationChannel) {
   if (channel === 'telegram') return t('tasks.form.notifications.placeholders.telegram')
-  if (channel === 'wecom_app') return t('tasks.form.notifications.placeholders.wecomApp')
+  if (channel === 'wecom_app') return t('tasks.form.notifications.placeholders.wecom_app', { at: '@' })
   if (channel === 'wecom') return t('tasks.form.notifications.placeholders.wecom')
   return t('tasks.form.notifications.placeholders.default')
 }
