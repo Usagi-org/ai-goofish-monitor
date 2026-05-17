@@ -365,6 +365,13 @@ def _validate_notification_settings(settings: NotificationSettings) -> None:
         "TELEGRAM_CHAT_ID",
         settings.telegram_chat_id,
     )
+    _validate_required_group(
+        {
+            "WECOM_APP_CORPID": settings.wecom_app_corpid,
+            "WECOM_APP_SECRET": settings.wecom_app_secret,
+            "WECOM_APP_AGENTID": settings.wecom_app_agentid,
+        }
+    )
 
     if settings.webhook_method not in ALLOWED_WEBHOOK_METHODS:
         allowed = ", ".join(sorted(ALLOWED_WEBHOOK_METHODS))
@@ -416,6 +423,14 @@ def _validate_pair(
     raise NotificationSettingsValidationError(
         f"{left_name} 与 {right_name} 必须成对配置"
     )
+
+
+def _validate_required_group(fields: dict[str, str | None]) -> None:
+    present = [name for name, value in fields.items() if value]
+    if not present or len(present) == len(fields):
+        return
+    required = "、".join(fields.keys())
+    raise NotificationSettingsValidationError(f"{required} 必须一起配置")
 
 
 def _parse_json_field(

@@ -262,6 +262,13 @@ const zhCNExtra = {
       urlLabel: '企业微信 Bot URL',
       configuredHint: '已保存机器人地址。',
     },
+    wecomApp: {
+      title: '企业微信应用',
+      description: '使用企业微信自建应用推送，Corp Secret 不回显，Corp ID、Agent ID 和默认接收人可直接修改。',
+      corpidPlaceholder: '企业 ID',
+      touserLabel: '默认接收人',
+      configuredHint: '已保存应用密钥。',
+    },
     telegram: {
       description: 'Bot Token 属于敏感字段，Chat ID 与反代地址可直接查看和修改。',
       chatIdPlaceholder: '例如：123456789',

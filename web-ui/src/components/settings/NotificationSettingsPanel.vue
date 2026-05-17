@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { BellRing, Radio, ShieldCheck, Send, TestTube2, Trash2, Webhook } from 'lucide-vue-next'
+import { BellRing, Building2, Radio, ShieldCheck, Send, TestTube2, Trash2, Webhook } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import type { NotificationSettings, NotificationSettingsUpdate, NotificationTestResponse } from '@/api/settings'
 
-type ChannelKey = 'ntfy' | 'bark' | 'gotify' | 'wecom' | 'telegram' | 'webhook'
+type ChannelKey = 'ntfy' | 'bark' | 'gotify' | 'wecom' | 'wecom_app' | 'telegram' | 'webhook'
 
 const props = defineProps<{
   settings: NotificationSettings
@@ -37,12 +37,13 @@ const mutableInitialValues = initialValues as Record<string, string | boolean | 
 const mutableForm = form as Record<string, string | boolean | null | undefined>
 const mutableClearedFields = clearedFields as Record<string, boolean>
 
-const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS'] as const
+const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'WECOM_APP_SECRET', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS'] as const
 const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = {
   ntfy: ['NTFY_TOPIC_URL'],
   bark: ['BARK_URL'],
   gotify: ['GOTIFY_URL', 'GOTIFY_TOKEN'],
   wecom: ['WX_BOT_URL'],
+  wecom_app: ['WECOM_APP_CORPID', 'WECOM_APP_SECRET', 'WECOM_APP_AGENTID', 'WECOM_APP_TOUSER'],
   telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL'],
   webhook: ['WEBHOOK_URL', 'WEBHOOK_METHOD', 'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_HEADERS', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY'],
 }
@@ -50,6 +51,9 @@ const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = 
 function syncFromSettings(settings: NotificationSettings) {
   initialValues.NTFY_TOPIC_URL = settings.NTFY_TOPIC_URL ?? ''
   initialValues.GOTIFY_URL = settings.GOTIFY_URL ?? ''
+  initialValues.WECOM_APP_CORPID = settings.WECOM_APP_CORPID ?? ''
+  initialValues.WECOM_APP_AGENTID = settings.WECOM_APP_AGENTID ?? ''
+  initialValues.WECOM_APP_TOUSER = settings.WECOM_APP_TOUSER ?? ''
   initialValues.TELEGRAM_CHAT_ID = settings.TELEGRAM_CHAT_ID ?? ''
   initialValues.TELEGRAM_API_BASE_URL = settings.TELEGRAM_API_BASE_URL ?? 'https://api.telegram.org'
   initialValues.WEBHOOK_METHOD = settings.WEBHOOK_METHOD ?? 'POST'
@@ -62,6 +66,7 @@ function syncFromSettings(settings: NotificationSettings) {
     BARK_URL: '',
     GOTIFY_TOKEN: '',
     WX_BOT_URL: '',
+    WECOM_APP_SECRET: '',
     TELEGRAM_BOT_TOKEN: '',
     WEBHOOK_URL: '',
     WEBHOOK_HEADERS: '',
@@ -70,6 +75,7 @@ function syncFromSettings(settings: NotificationSettings) {
   secretConfigured.BARK_URL = !!settings.BARK_URL_SET
   secretConfigured.GOTIFY_TOKEN = !!settings.GOTIFY_TOKEN_SET
   secretConfigured.WX_BOT_URL = !!settings.WX_BOT_URL_SET
+  secretConfigured.WECOM_APP_SECRET = !!settings.WECOM_APP_SECRET_SET
   secretConfigured.TELEGRAM_BOT_TOKEN = !!settings.TELEGRAM_BOT_TOKEN_SET
   secretConfigured.WEBHOOK_URL = !!settings.WEBHOOK_URL_SET
   secretConfigured.WEBHOOK_HEADERS = !!settings.WEBHOOK_HEADERS_SET
@@ -123,7 +129,8 @@ function buildScopedPayload(channel?: ChannelKey): NotificationSettingsUpdate {
     ? new Set<string>([...channelFields[channel].map((field) => field as string), 'PCURL_TO_MOBILE'])
     : null
   const textFields: (keyof NotificationSettingsUpdate)[] = [
-    'NTFY_TOPIC_URL', 'GOTIFY_URL', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL', 'WEBHOOK_METHOD',
+    'NTFY_TOPIC_URL', 'GOTIFY_URL', 'WECOM_APP_CORPID', 'WECOM_APP_AGENTID', 'WECOM_APP_TOUSER',
+    'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL', 'WEBHOOK_METHOD',
     'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY',
   ]
 
@@ -267,6 +274,17 @@ function resolveChannelBadge(channel: ChannelKey) {
           <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('wecom') ? 'default' : 'outline'">{{ resolveChannelBadge('wecom') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('wecom')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('wecom')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
         </Card>
 
+        <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-lime-500">
+          <CardHeader><CardTitle class="flex items-center gap-2"><Building2 class="h-4 w-4 text-lime-600" /> {{ t('notifyPanel.wecomApp.title') }}</CardTitle><CardDescription>{{ t('notifyPanel.wecomApp.description') }}</CardDescription></CardHeader>
+          <CardContent class="grid gap-4 md:grid-cols-2">
+            <div class="grid gap-2"><Label>Corp ID</Label><Input :model-value="form.WECOM_APP_CORPID ?? ''" :placeholder="t('notifyPanel.wecomApp.corpidPlaceholder')" @update:model-value="(value) => updateField('WECOM_APP_CORPID', String(value))" /></div>
+            <div class="grid gap-2"><Label>Agent ID</Label><Input :model-value="form.WECOM_APP_AGENTID ?? ''" placeholder="1000001" @update:model-value="(value) => updateField('WECOM_APP_AGENTID', String(value))" /></div>
+            <div class="grid gap-2"><Label>Corp Secret</Label><Input type="password" :model-value="form.WECOM_APP_SECRET ?? ''" :placeholder="t('notifyPanel.secretKeepPlaceholder')" @update:model-value="(value) => updateSecretField('WECOM_APP_SECRET', String(value))" /><p class="text-xs text-slate-500">{{ secretConfigured.WECOM_APP_SECRET ? t('notifyPanel.wecomApp.configuredHint') : t('notifyPanel.notConfigured') }}</p></div>
+            <div class="grid gap-2"><Label>{{ t('notifyPanel.wecomApp.touserLabel') }}</Label><Input :model-value="form.WECOM_APP_TOUSER ?? ''" placeholder="@all" @update:model-value="(value) => updateField('WECOM_APP_TOUSER', String(value))" /></div>
+          </CardContent>
+          <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('wecom_app') ? 'default' : 'outline'">{{ resolveChannelBadge('wecom_app') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('wecom_app')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('wecom_app')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
+        </Card>
+
         <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-cyan-500">
           <CardHeader><CardTitle>Telegram</CardTitle><CardDescription>{{ t('notifyPanel.telegram.description') }}</CardDescription></CardHeader>
           <CardContent class="grid gap-4 md:grid-cols-3">
@@ -301,7 +319,7 @@ function resolveChannelBadge(channel: ChannelKey) {
         <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('webhook') ? 'default' : 'outline'">{{ resolveChannelBadge('webhook') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('webhook')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('webhook')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
       </Card>
 
-      <div v-for="channel in ['ntfy', 'bark', 'gotify', 'wecom', 'telegram', 'webhook']" :key="channel">
+      <div v-for="channel in ['ntfy', 'bark', 'gotify', 'wecom', 'wecom_app', 'telegram', 'webhook']" :key="channel">
         <div v-if="testResults[channel]" class="rounded-2xl border px-4 py-3 text-sm" :class="resultClass(channel as ChannelKey)">
           {{ testResults[channel].label }}：{{ testResults[channel].message }}
         </div>

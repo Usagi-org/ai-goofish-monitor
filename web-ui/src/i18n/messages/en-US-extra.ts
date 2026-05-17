@@ -262,6 +262,13 @@ const enUSExtra = {
       urlLabel: 'WeCom Bot URL',
       configuredHint: 'Bot URL is already stored.',
     },
+    wecomApp: {
+      title: 'WeCom App',
+      description: 'Send through a WeCom custom app. Corp Secret is hidden; Corp ID, Agent ID, and default recipients can be edited directly.',
+      corpidPlaceholder: 'Corp ID',
+      touserLabel: 'Default Recipients',
+      configuredHint: 'App secret is already stored.',
+    },
     telegram: {
       description: 'The bot token is sensitive, while Chat ID and API base URL can be viewed and updated directly.',
       chatIdPlaceholder: 'Example: 123456789',

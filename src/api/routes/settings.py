@@ -77,6 +77,10 @@ class NotificationSettingsModel(BaseModel):
     GOTIFY_TOKEN: Optional[str] = None
     BARK_URL: Optional[str] = None
     WX_BOT_URL: Optional[str] = None
+    WECOM_APP_CORPID: Optional[str] = None
+    WECOM_APP_SECRET: Optional[str] = None
+    WECOM_APP_AGENTID: Optional[str] = None
+    WECOM_APP_TOUSER: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
     TELEGRAM_API_BASE_URL: Optional[str] = None

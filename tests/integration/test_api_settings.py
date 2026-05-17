@@ -118,6 +118,10 @@ def test_notification_settings_redact_sensitive_values_and_expose_flags(tmp_path
                 "GOTIFY_TOKEN=secret-token",
                 "BARK_URL=https://api.day.app/private-key/",
                 "WX_BOT_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
+                "WECOM_APP_CORPID=corp-id",
+                "WECOM_APP_SECRET=app-secret",
+                "WECOM_APP_AGENTID=1000001",
+                "WECOM_APP_TOUSER=user1|user2",
                 "TELEGRAM_BOT_TOKEN=telegram-secret",
                 "TELEGRAM_CHAT_ID=123456",
                 "TELEGRAM_API_BASE_URL=https://tg.example.com/proxy",
@@ -139,14 +143,19 @@ def test_notification_settings_redact_sensitive_values_and_expose_flags(tmp_path
     assert payload["GOTIFY_URL"] == "https://gotify.example.com"
     assert payload["TELEGRAM_CHAT_ID"] == "123456"
     assert payload["TELEGRAM_API_BASE_URL"] == "https://tg.example.com/proxy"
+    assert payload["WECOM_APP_CORPID"] == "corp-id"
+    assert payload["WECOM_APP_AGENTID"] == "1000001"
+    assert payload["WECOM_APP_TOUSER"] == "user1|user2"
     assert payload["BARK_URL"] == ""
     assert payload["WX_BOT_URL"] == ""
+    assert payload["WECOM_APP_SECRET"] == ""
     assert payload["GOTIFY_TOKEN"] == ""
     assert payload["TELEGRAM_BOT_TOKEN"] == ""
     assert payload["WEBHOOK_URL"] == ""
     assert payload["WEBHOOK_HEADERS"] == ""
     assert payload["BARK_URL_SET"] is True
     assert payload["WX_BOT_URL_SET"] is True
+    assert payload["WECOM_APP_SECRET_SET"] is True
     assert payload["GOTIFY_TOKEN_SET"] is True
     assert payload["TELEGRAM_BOT_TOKEN_SET"] is True
     assert payload["WEBHOOK_URL_SET"] is True
@@ -187,6 +196,42 @@ def test_update_notification_settings_rejects_invalid_channel_config(tmp_path, m
     assert webhook_response.status_code == 422
     assert "WEBHOOK_HEADERS" in webhook_response.text
 
+    wecom_app_response = client.put(
+        "/api/settings/notifications",
+        json={
+            "WECOM_APP_CORPID": "corp-id",
+            "WECOM_APP_AGENTID": "1000001",
+        },
+    )
+    assert wecom_app_response.status_code == 422
+    assert "WECOM_APP_SECRET" in wecom_app_response.text
+
+
+def test_update_notification_settings_persists_wecom_app_config(tmp_path, monkeypatch):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+
+    response = client.put(
+        "/api/settings/notifications",
+        json={
+            "WECOM_APP_CORPID": "corp-id",
+            "WECOM_APP_SECRET": "app-secret",
+            "WECOM_APP_AGENTID": "1000001",
+            "WECOM_APP_TOUSER": "user1|user2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "wecom_app" in response.json()["configured_channels"]
+    latest = env_file.read_text(encoding="utf-8")
+    assert "WECOM_APP_CORPID=corp-id" in latest
+    assert "WECOM_APP_SECRET=app-secret" in latest
+    assert "WECOM_APP_AGENTID=1000001" in latest
+    assert "WECOM_APP_TOUSER=user1|user2" in latest
+
 
 def test_system_status_includes_notification_channel_flags(tmp_path, monkeypatch):
     _clear_settings_env(monkeypatch)
@@ -199,6 +244,10 @@ def test_system_status_includes_notification_channel_flags(tmp_path, monkeypatch
                 "GOTIFY_TOKEN=secret-token",
                 "BARK_URL=https://api.day.app/private-key/",
                 "WX_BOT_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=secret",
+                "WECOM_APP_CORPID=corp-id",
+                "WECOM_APP_SECRET=app-secret",
+                "WECOM_APP_AGENTID=1000001",
+                "WECOM_APP_TOUSER=user1",
                 "TELEGRAM_BOT_TOKEN=telegram-secret",
                 "TELEGRAM_CHAT_ID=123456",
                 "WEBHOOK_URL=https://hooks.example.com/notify",
@@ -218,6 +267,10 @@ def test_system_status_includes_notification_channel_flags(tmp_path, monkeypatch
     assert env_payload["gotify_token_set"] is True
     assert env_payload["bark_url_set"] is True
     assert env_payload["wx_bot_url_set"] is True
+    assert env_payload["wecom_app_corpid_set"] is True
+    assert env_payload["wecom_app_secret_set"] is True
+    assert env_payload["wecom_app_agentid_set"] is True
+    assert env_payload["wecom_app_touser_set"] is True
     assert env_payload["telegram_bot_token_set"] is True
     assert env_payload["telegram_chat_id_set"] is True
     assert env_payload["webhook_url_set"] is True
@@ -360,6 +413,9 @@ def test_notification_settings_fall_back_to_runtime_environment_when_env_file_mi
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "20001")
     monkeypatch.setenv("TELEGRAM_API_BASE_URL", "https://runtime-tg-proxy.example.com")
     monkeypatch.setenv("BARK_URL", "https://api.day.app/runtime-secret/")
+    monkeypatch.setenv("WECOM_APP_CORPID", "runtime-corp")
+    monkeypatch.setenv("WECOM_APP_SECRET", "runtime-secret")
+    monkeypatch.setenv("WECOM_APP_AGENTID", "1000002")
     client = _build_settings_client()
 
     response = client.get("/api/settings/notifications")
@@ -371,8 +427,12 @@ def test_notification_settings_fall_back_to_runtime_environment_when_env_file_mi
     assert payload["TELEGRAM_API_BASE_URL"] == "https://runtime-tg-proxy.example.com"
     assert payload["BARK_URL"] == ""
     assert payload["BARK_URL_SET"] is True
+    assert payload["WECOM_APP_CORPID"] == "runtime-corp"
+    assert payload["WECOM_APP_AGENTID"] == "1000002"
+    assert payload["WECOM_APP_SECRET"] == ""
+    assert payload["WECOM_APP_SECRET_SET"] is True
     assert payload["TELEGRAM_BOT_TOKEN_SET"] is True
-    assert sorted(payload["CONFIGURED_CHANNELS"]) == ["bark", "ntfy", "telegram"]
+    assert sorted(payload["CONFIGURED_CHANNELS"]) == ["bark", "ntfy", "telegram", "wecom_app"]
 
 
 def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
