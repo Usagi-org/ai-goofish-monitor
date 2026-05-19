@@ -32,8 +32,8 @@ def test_item_analysis_dispatcher_uses_bounded_concurrency():
             "keyword_hit_count": 0,
         }
 
-    async def notifier(item_data: dict, reason: str):
-        notifications.append((item_data["商品ID"], reason))
+    async def notifier(item_data: dict, reason: str, notification_targets=None):
+        notifications.append((item_data["商品ID"], reason, notification_targets))
 
     async def saver(record: dict, keyword: str):
         saved_records.append((keyword, record))
@@ -65,6 +65,7 @@ def test_item_analysis_dispatcher_uses_bounded_concurrency():
                     seller_id=f"seller-{index}",
                     zhima_credit_text="优秀",
                     registration_duration_text="来闲鱼1年",
+                    notification_targets=[{"channel": "telegram", "recipient": "123"}],
                 )
             )
         await dispatcher.join()
@@ -74,6 +75,7 @@ def test_item_analysis_dispatcher_uses_bounded_concurrency():
     assert dispatcher.completed_count == 3
     assert len(saved_records) == 3
     assert len(notifications) == 3
+    assert notifications[0][2] == [{"channel": "telegram", "recipient": "123"}]
     assert max_active_ai_calls == 2
     assert saved_records[0][1]["卖家信息"]["卖家ID"].startswith("seller-")
 
@@ -90,7 +92,7 @@ def test_item_analysis_dispatcher_supports_keyword_mode_without_ai():
     async def ai_analyzer(record: dict, image_paths: list[str], prompt_text: str):
         raise AssertionError("关键词模式不应调用 AI")
 
-    async def notifier(item_data: dict, reason: str):
+    async def notifier(item_data: dict, reason: str, notification_targets=None):
         return None
 
     async def saver(record: dict, keyword: str):

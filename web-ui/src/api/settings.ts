@@ -6,6 +6,10 @@ export interface NotificationSettings {
   GOTIFY_TOKEN?: string
   BARK_URL?: string
   WX_BOT_URL?: string
+  WECOM_APP_CORPID?: string
+  WECOM_APP_SECRET?: string
+  WECOM_APP_AGENTID?: string
+  WECOM_APP_TOUSER?: string
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
   TELEGRAM_API_BASE_URL?: string
@@ -19,6 +23,7 @@ export interface NotificationSettings {
   BARK_URL_SET?: boolean
   GOTIFY_TOKEN_SET?: boolean
   WX_BOT_URL_SET?: boolean
+  WECOM_APP_SECRET_SET?: boolean
   TELEGRAM_BOT_TOKEN_SET?: boolean
   WEBHOOK_URL_SET?: boolean
   WEBHOOK_HEADERS_SET?: boolean
@@ -31,6 +36,10 @@ export interface NotificationSettingsUpdate {
   GOTIFY_TOKEN?: string | null
   BARK_URL?: string | null
   WX_BOT_URL?: string | null
+  WECOM_APP_CORPID?: string | null
+  WECOM_APP_SECRET?: string | null
+  WECOM_APP_AGENTID?: string | null
+  WECOM_APP_TOUSER?: string | null
   TELEGRAM_BOT_TOKEN?: string | null
   TELEGRAM_CHAT_ID?: string | null
   TELEGRAM_API_BASE_URL?: string | null
@@ -50,6 +59,19 @@ export interface NotificationTestResponse {
     success: boolean
     message: string
   }>
+}
+
+export interface WeComAppDepartment {
+  id: number
+  name: string
+  parentid: number
+  order: number
+}
+
+export interface WeComAppUser {
+  userid: string
+  name: string
+  department: number[]
 }
 
 export interface AiSettings {
@@ -93,6 +115,10 @@ export interface SystemStatus {
     gotify_token_set: boolean
     bark_url_set: boolean
     wx_bot_url_set: boolean
+    wecom_app_corpid_set: boolean
+    wecom_app_secret_set: boolean
+    wecom_app_agentid_set: boolean
+    wecom_app_touser_set: boolean
     telegram_bot_token_set: boolean
     telegram_chat_id_set: boolean
     webhook_url_set: boolean
@@ -120,6 +146,22 @@ export async function testNotificationSettings(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
+  })
+}
+
+export async function fetchWeComAppDepartments(): Promise<{ departments: WeComAppDepartment[] }> {
+  return await http('/api/settings/notifications/wecom-app/departments')
+}
+
+export async function fetchWeComAppUsers(
+  departmentId: number | string,
+  fetchChild = true
+): Promise<{ users: WeComAppUser[] }> {
+  return await http('/api/settings/notifications/wecom-app/users', {
+    params: {
+      department_id: departmentId,
+      fetch_child: fetchChild ? 1 : 0,
+    },
   })
 }
 

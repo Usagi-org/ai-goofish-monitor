@@ -17,6 +17,10 @@ NOTIFICATION_FIELD_MAP = {
     "GOTIFY_TOKEN": "gotify_token",
     "BARK_URL": "bark_url",
     "WX_BOT_URL": "wx_bot_url",
+    "WECOM_APP_CORPID": "wecom_app_corpid",
+    "WECOM_APP_SECRET": "wecom_app_secret",
+    "WECOM_APP_AGENTID": "wecom_app_agentid",
+    "WECOM_APP_TOUSER": "wecom_app_touser",
     "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
     "TELEGRAM_CHAT_ID": "telegram_chat_id",
     "TELEGRAM_API_BASE_URL": "telegram_api_base_url",
@@ -34,6 +38,7 @@ CHANNEL_NOTIFICATION_FIELDS = {
     "bark": {"BARK_URL"},
     "gotify": {"GOTIFY_URL", "GOTIFY_TOKEN"},
     "wecom": {"WX_BOT_URL"},
+    "wecom_app": {"WECOM_APP_CORPID", "WECOM_APP_SECRET", "WECOM_APP_AGENTID", "WECOM_APP_TOUSER"},
     "telegram": {
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
@@ -53,6 +58,7 @@ SECRET_NOTIFICATION_FIELDS = {
     "BARK_URL",
     "GOTIFY_TOKEN",
     "WX_BOT_URL",
+    "WECOM_APP_SECRET",
     "TELEGRAM_BOT_TOKEN",
     "WEBHOOK_URL",
     "WEBHOOK_HEADERS",
@@ -97,6 +103,10 @@ def build_notification_settings_response(
         "GOTIFY_TOKEN": "",
         "BARK_URL": "",
         "WX_BOT_URL": "",
+        "WECOM_APP_CORPID": notification_settings.wecom_app_corpid or "",
+        "WECOM_APP_SECRET": "",
+        "WECOM_APP_AGENTID": notification_settings.wecom_app_agentid or "",
+        "WECOM_APP_TOUSER": notification_settings.wecom_app_touser or "",
         "TELEGRAM_BOT_TOKEN": "",
         "TELEGRAM_CHAT_ID": notification_settings.telegram_chat_id or "",
         "TELEGRAM_API_BASE_URL": (
@@ -128,6 +138,10 @@ def build_notification_status_flags(
         "gotify_token_set": bool(notification_settings.gotify_token),
         "bark_url_set": bool(notification_settings.bark_url),
         "wx_bot_url_set": bool(notification_settings.wx_bot_url),
+        "wecom_app_corpid_set": bool(notification_settings.wecom_app_corpid),
+        "wecom_app_secret_set": bool(notification_settings.wecom_app_secret),
+        "wecom_app_agentid_set": bool(notification_settings.wecom_app_agentid),
+        "wecom_app_touser_set": bool(notification_settings.wecom_app_touser),
         "telegram_bot_token_set": bool(notification_settings.telegram_bot_token),
         "telegram_chat_id_set": bool(notification_settings.telegram_chat_id),
         "webhook_url_set": bool(notification_settings.webhook_url),
@@ -148,6 +162,10 @@ def build_configured_channels(
         channels.append("gotify")
     if notification_settings.wx_bot_url:
         channels.append("wecom")
+    if (notification_settings.wecom_app_corpid
+            and notification_settings.wecom_app_secret
+            and notification_settings.wecom_app_agentid):
+        channels.append("wecom_app")
     if notification_settings.telegram_bot_token and notification_settings.telegram_chat_id:
         channels.append("telegram")
     if notification_settings.webhook_url:
@@ -257,6 +275,10 @@ def load_notification_settings() -> NotificationSettings:
             "gotify_token": _normalize_existing_text(env_manager.get_value("GOTIFY_TOKEN")),
             "bark_url": _normalize_existing_text(env_manager.get_value("BARK_URL")),
             "wx_bot_url": _normalize_existing_text(env_manager.get_value("WX_BOT_URL")),
+            "wecom_app_corpid": _normalize_existing_text(env_manager.get_value("WECOM_APP_CORPID")),
+            "wecom_app_secret": _normalize_existing_text(env_manager.get_value("WECOM_APP_SECRET")),
+            "wecom_app_agentid": _normalize_existing_text(env_manager.get_value("WECOM_APP_AGENTID")),
+            "wecom_app_touser": _normalize_existing_text(env_manager.get_value("WECOM_APP_TOUSER")),
             "telegram_bot_token": _normalize_existing_text(env_manager.get_value("TELEGRAM_BOT_TOKEN")),
             "telegram_chat_id": _normalize_existing_text(env_manager.get_value("TELEGRAM_CHAT_ID")),
             "telegram_api_base_url": (
@@ -343,6 +365,13 @@ def _validate_notification_settings(settings: NotificationSettings) -> None:
         "TELEGRAM_CHAT_ID",
         settings.telegram_chat_id,
     )
+    _validate_required_group(
+        {
+            "WECOM_APP_CORPID": settings.wecom_app_corpid,
+            "WECOM_APP_SECRET": settings.wecom_app_secret,
+            "WECOM_APP_AGENTID": settings.wecom_app_agentid,
+        }
+    )
 
     if settings.webhook_method not in ALLOWED_WEBHOOK_METHODS:
         allowed = ", ".join(sorted(ALLOWED_WEBHOOK_METHODS))
@@ -394,6 +423,14 @@ def _validate_pair(
     raise NotificationSettingsValidationError(
         f"{left_name} 与 {right_name} 必须成对配置"
     )
+
+
+def _validate_required_group(fields: dict[str, str | None]) -> None:
+    present = [name for name, value in fields.items() if value]
+    if not present or len(present) == len(fields):
+        return
+    required = "、".join(fields.keys())
+    raise NotificationSettingsValidationError(f"{required} 必须一起配置")
 
 
 def _parse_json_field(

@@ -61,6 +61,10 @@ class NotificationSettings(_EnvSettings):
     gotify_token: Optional[str] = _env_field(None, "GOTIFY_TOKEN")
     bark_url: Optional[str] = _env_field(None, "BARK_URL")
     wx_bot_url: Optional[str] = _env_field(None, "WX_BOT_URL")
+    wecom_app_corpid: Optional[str] = _env_field(None, "WECOM_APP_CORPID")
+    wecom_app_secret: Optional[str] = _env_field(None, "WECOM_APP_SECRET")
+    wecom_app_agentid: Optional[str] = _env_field(None, "WECOM_APP_AGENTID")
+    wecom_app_touser: Optional[str] = _env_field(None, "WECOM_APP_TOUSER")
     telegram_bot_token: Optional[str] = _env_field(None, "TELEGRAM_BOT_TOKEN")
     telegram_chat_id: Optional[str] = _env_field(None, "TELEGRAM_CHAT_ID")
     telegram_api_base_url: Optional[str] = _env_field(
@@ -80,6 +84,7 @@ class NotificationSettings(_EnvSettings):
         return any([
             self.ntfy_topic_url,
             self.wx_bot_url,
+            self.wecom_app_corpid and self.wecom_app_secret and self.wecom_app_agentid,
             self.gotify_url and self.gotify_token,
             self.bark_url,
             self.telegram_bot_token and self.telegram_chat_id,

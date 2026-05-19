@@ -43,6 +43,7 @@ SCHEMA_STATEMENTS = (
         region TEXT,
         decision_mode TEXT NOT NULL,
         keyword_rules_json TEXT NOT NULL,
+        notification_targets_json TEXT NOT NULL DEFAULT '[]',
         is_running INTEGER NOT NULL
     )
     """,
@@ -142,8 +143,18 @@ def _apply_pragmas(conn: sqlite3.Connection) -> None:
 def init_schema(conn: sqlite3.Connection) -> None:
     for statement in SCHEMA_STATEMENTS:
         conn.execute(statement)
+    _migrate_tasks_notification_targets(conn)
     _migrate_result_items_status(conn)
     conn.commit()
+
+
+def _migrate_tasks_notification_targets(conn: sqlite3.Connection) -> None:
+    """为 tasks 表添加任务级通知对象列（兼容旧库）。"""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()]
+    if "notification_targets_json" not in cols:
+        conn.execute(
+            "ALTER TABLE tasks ADD COLUMN notification_targets_json TEXT NOT NULL DEFAULT '[]'"
+        )
 
 
 def _migrate_result_items_status(conn: sqlite3.Connection) -> None:

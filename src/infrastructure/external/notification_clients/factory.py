@@ -7,6 +7,7 @@ from .bark_client import BarkClient
 from .gotify_client import GotifyClient
 from .ntfy_client import NtfyClient
 from .telegram_client import TelegramClient
+from .wecom_app_client import WeComAppClient
 from .wecom_bot_client import WeComBotClient
 from .webhook_client import WebhookClient
 
@@ -22,6 +23,13 @@ def build_notification_clients(settings: NotificationSettings):
             pcurl_to_mobile=pcurl_to_mobile,
         ),
         WeComBotClient(settings.wx_bot_url, pcurl_to_mobile=pcurl_to_mobile),
+        WeComAppClient(
+            corpid=settings.wecom_app_corpid,
+            corpsecret=settings.wecom_app_secret,
+            agentid=settings.wecom_app_agentid,
+            touser=settings.wecom_app_touser,
+            pcurl_to_mobile=pcurl_to_mobile,
+        ),
         TelegramClient(
             settings.telegram_bot_token,
             settings.telegram_chat_id,
@@ -38,3 +46,42 @@ def build_notification_clients(settings: NotificationSettings):
             pcurl_to_mobile=pcurl_to_mobile,
         ),
     ]
+
+
+def build_notification_clients_for_targets(settings: NotificationSettings, targets):
+    if not targets:
+        return build_notification_clients(settings)
+
+    pcurl_to_mobile = settings.pcurl_to_mobile
+    clients = []
+    for target in targets:
+        if not isinstance(target, dict):
+            continue
+        channel = str(target.get("channel") or "").strip()
+        recipient = str(target.get("recipient") or "").strip()
+        if channel == "default":
+            clients.extend(build_notification_clients(settings))
+        elif channel == "telegram" and recipient:
+            clients.append(
+                TelegramClient(
+                    settings.telegram_bot_token,
+                    recipient,
+                    settings.telegram_api_base_url,
+                    pcurl_to_mobile=pcurl_to_mobile,
+                )
+            )
+        elif channel == "wecom_app" and recipient:
+            clients.append(
+                WeComAppClient(
+                    corpid=settings.wecom_app_corpid,
+                    corpsecret=settings.wecom_app_secret,
+                    agentid=settings.wecom_app_agentid,
+                    touser=recipient,
+                    pcurl_to_mobile=pcurl_to_mobile,
+                )
+            )
+        elif channel == "wecom" and recipient:
+            clients.append(
+                WeComBotClient(recipient, pcurl_to_mobile=pcurl_to_mobile)
+            )
+    return clients

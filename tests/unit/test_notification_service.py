@@ -1,6 +1,10 @@
 import asyncio
 
 from src.infrastructure.external.notification_clients.base import NotificationClient
+from src.infrastructure.config.settings import NotificationSettings
+from src.infrastructure.external.notification_clients.factory import (
+    build_notification_clients_for_targets,
+)
 from src.infrastructure.external.notification_clients.webhook_client import WebhookClient
 from src.services.notification_service import NotificationService
 
@@ -76,3 +80,49 @@ def test_webhook_client_renders_json_templates(monkeypatch):
     assert captured["json"]["message"].startswith("价格: 9999")
     assert captured["json"]["link"] == "https://www.goofish.com/item/123"
     assert captured["data"] is None
+
+
+def test_target_factory_overrides_telegram_chat_id():
+    settings = NotificationSettings(
+        telegram_bot_token="token",
+        telegram_chat_id="global-chat",
+    )
+
+    clients = build_notification_clients_for_targets(
+        settings,
+        [{"channel": "telegram", "recipient": "task-chat"}],
+    )
+
+    telegram = [client for client in clients if client.channel_key == "telegram"][0]
+    assert telegram.chat_id == "task-chat"
+    assert telegram.bot_token == "token"
+
+
+def test_target_factory_overrides_wecom_app_touser():
+    settings = NotificationSettings(
+        wecom_app_corpid="corp",
+        wecom_app_secret="secret",
+        wecom_app_agentid="1000001",
+        wecom_app_touser="@all",
+    )
+
+    clients = build_notification_clients_for_targets(
+        settings,
+        [{"channel": "wecom_app", "recipient": "user1|user2"}],
+    )
+
+    wecom_app = [client for client in clients if client.channel_key == "wecom_app"][0]
+    assert wecom_app.touser == "user1|user2"
+    assert wecom_app.corpid == "corp"
+
+
+def test_target_factory_empty_targets_uses_global_default():
+    settings = NotificationSettings(
+        telegram_bot_token="token",
+        telegram_chat_id="global-chat",
+    )
+
+    clients = build_notification_clients_for_targets(settings, [])
+
+    telegram = [client for client in clients if client.channel_key == "telegram"][0]
+    assert telegram.chat_id == "global-chat"
