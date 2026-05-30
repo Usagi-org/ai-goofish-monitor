@@ -132,13 +132,14 @@ watch(pollingError, (value) => {
       </DialogHeader>
       <TaskForm
         mode="create"
+        form-id="task-create-form"
         :account-options="accountOptions"
         :default-account="defaultAccountPath"
         :default-values="defaultValues"
         @submit="(data) => handleCreateTask(data as TaskGenerateRequest)"
       />
       <DialogFooter>
-        <Button type="submit" form="task-form" :disabled="isSubmitting">
+        <Button type="submit" form="task-create-form" :disabled="isSubmitting">
           {{ isSubmitting ? t('tasks.createDialog.submitting') : t('tasks.createDialog.submit') }}
         </Button>
       </DialogFooter>

@@ -277,16 +277,20 @@ def validate_ai_response_format(parsed_response):
 
 
 @retry_on_failure(retries=3, delay=5)
-async def send_ntfy_notification(product_data, reason):
+async def send_ntfy_notification(product_data, reason, notification_targets=None):
     """兼容旧调用名，内部统一走 NotificationService。"""
     service = build_notification_service()
-    if not service.clients:
+    if not service.clients and not notification_targets:
         safe_print(
             "警告：未在 .env 文件中配置任何通知服务，跳过通知。"
         )
         return {}
 
-    results = await service.send_notification(product_data, reason)
+    results = await service.send_notification(
+        product_data,
+        reason,
+        targets=notification_targets,
+    )
     for channel, result in results.items():
         if result["success"]:
             safe_print(f"   -> {channel} 通知发送成功。")

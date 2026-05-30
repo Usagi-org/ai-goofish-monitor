@@ -123,3 +123,63 @@ def test_generate_request_requires_state_file_for_fixed_account_strategy():
         return
 
     raise AssertionError("固定账号模式应要求 account_state_file")
+
+
+def test_notification_targets_are_normalized_and_deduped():
+    task = Task(
+        id=1,
+        task_name="Sony A7M4",
+        enabled=True,
+        keyword="sony a7m4",
+        description="body",
+        max_pages=2,
+        personal_only=True,
+        min_price=None,
+        max_price=None,
+        cron=None,
+        ai_prompt_base_file="prompts/base_prompt.txt",
+        ai_prompt_criteria_file="prompts/sony_a7m4_criteria.txt",
+        notification_targets=[
+            {"channel": " telegram ", "recipient": " 123 ", "label": " Me "},
+            {"channel": "telegram", "recipient": "123", "label": "duplicate"},
+            {"channel": "", "recipient": ""},
+            {"channel": "wecom_app", "recipient": "@all"},
+        ],
+        is_running=False,
+    )
+
+    assert task.notification_targets == [
+        {"channel": "telegram", "recipient": "123", "label": "Me"},
+        {"channel": "wecom_app", "recipient": "@all"},
+    ]
+
+
+def test_notification_targets_reject_unknown_channel():
+    try:
+        TaskUpdate(notification_targets=[{"channel": "email", "recipient": "x"}])
+    except ValueError as exc:
+        assert "Unsupported notification channel" in str(exc)
+        return
+
+    raise AssertionError("未知通知渠道应被拒绝")
+
+
+def test_notification_targets_reject_retired_channels():
+    for channel in ["ntfy", "bark", "gotify", "wecom"]:
+        try:
+            TaskUpdate(notification_targets=[{"channel": channel, "recipient": "x"}])
+        except ValueError as exc:
+            assert "Unsupported notification channel" in str(exc)
+            continue
+
+        raise AssertionError(f"{channel} 不应作为任务级通知渠道")
+
+
+def test_task_update_does_not_set_notification_targets_when_omitted():
+    update = TaskUpdate(enabled=False)
+    assert update.model_dump(exclude_unset=True) == {"enabled": False}
+
+
+def test_task_update_can_clear_notification_targets():
+    update = TaskUpdate(notification_targets=[])
+    assert update.model_dump(exclude_unset=True) == {"notification_targets": []}

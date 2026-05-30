@@ -1,8 +1,8 @@
-# Xianyu Intelligent Monitor Bot
+# xianyu-tools / Xianyu Toolbox
 
 [中文](README.md) ｜ [English]
 
-A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲鱼), featuring a complete web management interface.
+A Playwright and AI-powered multi-task toolbox for Xianyu (闲鱼), featuring real-time monitoring and a complete web management interface.
 
 ## Core Features
 
@@ -11,7 +11,7 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 - **Multi-Task Concurrency**: Independent configuration for keywords, prices, filters, and AI prompts
 - **SQLite as Primary Storage**: Tasks, results, and price history are persisted in one embedded database instead of repeatedly scanning `jsonl`
 - **Advanced Filtering**: Free shipping, new listing time range, province/city/district filtering
-- **Instant Notifications**: Supports ntfy.sh, WeChat Work (企业微信), Bark, Telegram, Webhook
+- **Instant Notifications**: Supports WeCom App, Telegram, and advanced Webhook compatibility
 - **Scheduled Tasks**: Cron expression configuration for periodic tasks
 - **Account & Proxy Rotation**: Multi-account management, task-account binding, proxy pool rotation with failure retry
 - **Docker Deployment**: One-click containerized deployment
@@ -33,8 +33,8 @@ A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲
 - Chrome or Edge on desktop systems. On Linux, Chromium also works. `start.sh` checks this prerequisite before continuing
 
 ```bash
-git clone https://github.com/Usagi-org/ai-goofish-monitor
-cd ai-goofish-monitor
+git clone https://github.com/chqchshj/ai-goofish-monitor xianyu-tools
+cd xianyu-tools
 cp .env.example .env
 ```
 
@@ -74,7 +74,7 @@ chmod +x start.sh
 ## 🐳 Docker Deployment (Recommended)
 
 ```bash
-git clone https://github.com/Usagi-org/ai-goofish-monitor && cd ai-goofish-monitor
+git clone https://github.com/chqchshj/ai-goofish-monitor xianyu-tools && cd xianyu-tools
 cp .env.example .env
 vim .env # fill in the required values
 docker compose up -d
@@ -83,8 +83,10 @@ docker compose down
 ```
 
 - Default Web UI: `http://127.0.0.1:8000`
-- The published Docker image already includes Chromium, so no extra browser install is required on the host.
-- Update image: `docker compose pull && docker compose up -d`
+- The default `docker-compose.yaml` builds the local `xianyu-tools:local` image from this source tree, so fork-local changes such as WeCom application messages and task-level notification targets are included.
+- The Docker image includes Chromium, so no extra browser install is required on the host.
+- Update the local image: `docker compose up --build -d`
+- If you switch to the upstream published image `ghcr.io/usagi-org/ai-goofish:latest`, note that it may not include this repository's fork-only features.
 - If you change `SERVER_PORT` in `.env`, update the `ports` mapping in `docker-compose.yaml` as well.
 - `docker-compose.yaml` now mounts the primary SQLite database directory as `./data:/app/data`, with the default database file at `data/app.sqlite3`
 - These paths are persisted by default:
@@ -151,7 +153,7 @@ npm run dev
 - `spider_v2.py` now loads tasks from SQLite by default; JSON config is only used when `--config <path>` is passed explicitly
 - The default local database path is `data/app.sqlite3`
 - The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:8000`.
-- `npm run build` writes `web-ui/dist/`, and `start.sh` copies it to the repository root `dist/`.
+- `npm run build` writes directly to the repository root `dist/` through the Vite configuration.
 - FastAPI serves `dist/index.html` and `dist/assets/` from the repository root.
 - `./start.sh` prints the default app URL `http://localhost:8000` and API docs URL `http://localhost:8000/docs`.
 
@@ -191,12 +193,11 @@ cd web-ui && npm run build
 
 ### Notifications
 
-- `NTFY_TOPIC_URL`
-- `GOTIFY_URL` / `GOTIFY_TOKEN`
-- `BARK_URL`
-- `WX_BOT_URL`
+- `WECOM_APP_CORPID` / `WECOM_APP_SECRET` / `WECOM_APP_AGENTID` / `WECOM_APP_TOUSER`
 - `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` / `TELEGRAM_API_BASE_URL`
 - `WEBHOOK_*`
+
+Tasks can use `notification_targets` for task-level routing: an empty list uses global defaults; task-level targets only support `wecom_app`, `telegram`, and `default`; a `wecom_app` recipient may be `@all` or `userid1|userid2`. Existing `NTFY_TOPIC_URL`, `GOTIFY_*`, `BARK_URL`, and `WX_BOT_URL` env values are not deleted automatically, but they are no longer valid notification channels.
 
 ### Proxy Rotation and Failure Guard
 
@@ -263,7 +264,7 @@ Region filtering can sharply reduce result volume. Leave it empty if you want a 
 
 ### Why does the app say the frontend build artifacts are missing?
 
-It means the repository root `dist/` directory is missing. Run `./start.sh`, or build the frontend in `web-ui/` and make sure the artifacts are copied to the root `dist/`.
+It means the repository root `dist/` directory is missing. Run `./start.sh`, or build the frontend in `web-ui/` and make sure the artifacts are generated in the root `dist/`.
 
 ### Why does `./start.sh` complain about missing Playwright or a browser?
 

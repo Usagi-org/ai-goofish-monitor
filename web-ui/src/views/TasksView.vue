@@ -220,13 +220,14 @@ onMounted(fetchAccountOptions)
         <TaskForm
           v-if="selectedTask"
           mode="edit"
+          form-id="task-edit-form"
           :initial-data="selectedTask"
           :account-options="accountOptions"
           :default-values="editDefaults"
           @submit="(data) => handleUpdateTask(data as TaskUpdate)"
         />
         <DialogFooter>
-          <Button type="submit" form="task-form" :disabled="isEditSubmitting">
+          <Button type="submit" form="task-edit-form" :disabled="isEditSubmitting">
             {{ isEditSubmitting ? t('common.saving') : t('tasks.editDialog.save') }}
           </Button>
         </DialogFooter>

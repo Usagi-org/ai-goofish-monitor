@@ -95,6 +95,33 @@ const enUSExtra = {
       newPublish: 'Fresh Listing Window',
       region: 'Region Filter (optional)',
       regionHint: 'Region filters can significantly reduce the number of matching items.',
+      notifications: {
+        title: 'Notification Targets',
+        hint: 'Leave empty to use all global notification channels; once added, only these targets receive item alerts.',
+        add: 'Add Target',
+        channel: 'Select Channel',
+        labelPlaceholder: 'Label (optional)',
+        channels: {
+          telegram: 'Telegram',
+          wecomApp: 'WeCom App',
+          default: 'Global Default',
+        },
+        placeholders: {
+          telegram: 'Telegram chat_id',
+          wecomApp: '{at}all or member UserID; separate multiple users with |',
+          wecom_app: '{at}all or member UserID; separate multiple users with |',
+          default: 'Use global notification settings',
+        },
+        wecomAppPicker: {
+          loadContacts: 'Load Contacts',
+          reloadContacts: 'Reload',
+          allMembers: '{at}all All',
+          loading: 'Loading WeCom contacts...',
+          loadFailed: 'Failed to load WeCom contacts.',
+          noUsers: 'No selectable members in this department.',
+          manualFallback: 'If contact permissions are unavailable, enter UserIDs manually.',
+        },
+      },
       accountStrategy: {
         auto: 'Auto',
         autoDescription: 'Prefer the default login state; fallback to the account pool.',
@@ -218,6 +245,11 @@ const enUSExtra = {
     configurationNotes: 'Configuration Notes',
     configurationNotesDescription: 'Webhook Query and Body support JSON templates. The test button calls the real backend delivery flow so token, URL, and JSON issues show up early.',
     loading: 'Loading notification settings...',
+    preferredSectionTitle: 'Preferred Channel',
+    preferredSectionDescription: 'Use WeCom App for new notification setup. Task-level recipient selection remains tied to this channel.',
+    preferredBadge: 'Recommended',
+    advancedSectionTitle: 'Advanced Compatibility',
+    advancedSectionDescription: '{channels} remain available for existing integrations and special network environments.',
     clear: 'Clear',
     test: 'Test',
     testThisChannel: 'Test This Channel',
@@ -227,21 +259,13 @@ const enUSExtra = {
     secretPlaceholder: 'Leave blank to keep the current value, or enter a new value to overwrite it',
     secretKeepPlaceholder: 'Leave blank to keep the current value',
     notConfigured: 'Not configured yet.',
-    ntfy: {
-      description: 'Best for lightweight delivery. The topic URL is not sensitive and can be displayed directly.',
-    },
-    bark: {
-      description: 'The URL contains a device key and is intentionally hidden.',
-      configuredHint: 'A sensitive value is configured and hidden on this page.',
-    },
-    gotify: {
-      description: 'URL and token must be configured together.',
-    },
-    wecom: {
-      title: 'WeCom Bot',
-      description: 'The bot URL contains a key, so it is hidden and can only be updated or cleared.',
-      urlLabel: 'WeCom Bot URL',
-      configuredHint: 'Bot URL is already stored.',
+
+    wecomApp: {
+      title: 'WeCom App',
+      description: 'Send through a WeCom custom app. Corp Secret is hidden; Corp ID, Agent ID, and default recipients can be edited directly.',
+      corpidPlaceholder: 'Corp ID',
+      touserLabel: 'Default Recipients',
+      configuredHint: 'App secret is already stored.',
     },
     telegram: {
       description: 'The bot token is sensitive, while Chat ID and API base URL can be viewed and updated directly.',

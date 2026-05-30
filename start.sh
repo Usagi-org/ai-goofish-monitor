@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 闲鱼监控系统本地启动脚本
+# xianyu-tools / 闲鱼工具箱本地启动脚本
 # 功能：清理旧构建、安装依赖、构建前端、启动服务
 
 set -e  # 遇到错误立即退出
@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}闲鱼监控系统 - 本地启动脚本${NC}"
+echo -e "${GREEN}xianyu-tools / 闲鱼工具箱 - 本地启动脚本${NC}"
 echo -e "${GREEN}========================================${NC}"
 
 # 0. 环境与依赖检查

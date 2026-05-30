@@ -28,7 +28,7 @@ API层 (src/api/routes/)
 - `ProcessService` - 爬虫子进程管理
 - `SchedulerService` - APScheduler 定时调度
 - `AIAnalysisService` - 多模态 AI 分析
-- `NotificationService` - 多渠道通知（ntfy/Bark/企业微信/Telegram/Webhook）
+- `NotificationService` - 通知（企业微信应用/Telegram/Webhook）
 
 前端 (`web-ui/`)：Vue 3 + Vite + shadcn-vue + Tailwind CSS
 
@@ -77,7 +77,7 @@ pytest tests/unit/test_utils.py::test_safe_get  # 运行单个测试函数
 
 环境变量 (`.env`)：
 - AI 模型：`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL_NAME`
-- 通知：`NTFY_TOPIC_URL`, `BARK_URL`, `WX_BOT_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- 通知：`WECOM_APP_CORPID`, `WECOM_APP_SECRET`, `WECOM_APP_AGENTID`, `WECOM_APP_TOUSER`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `WEBHOOK_*`
 - 爬虫：`RUN_HEADLESS`, `LOGIN_IS_EDGE`
 - Web 认证：`WEB_USERNAME`, `WEB_PASSWORD`
 - 端口：`SERVER_PORT`

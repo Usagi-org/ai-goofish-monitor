@@ -51,4 +51,9 @@ def test_save_to_jsonl(tmp_path, monkeypatch):
             sort_order="asc",
         )
     )
-    assert records == [record]
+    assert len(records) == 1
+    loaded = records[0]
+    for key, value in record.items():
+        assert loaded[key] == value
+    assert loaded["_status"] == "active"
+    assert loaded["_effective_hidden"] is False

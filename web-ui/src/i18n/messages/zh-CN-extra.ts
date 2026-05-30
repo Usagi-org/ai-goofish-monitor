@@ -95,6 +95,33 @@ const zhCNExtra = {
       newPublish: '新发布范围',
       region: '区域筛选（默认不填）',
       regionHint: '区域筛选会导致满足条件的商品数量很少。',
+      notifications: {
+        title: '推送对象',
+        hint: '不添加则使用全局默认通知渠道；添加后仅推送给这些对象。',
+        add: '添加推送对象',
+        channel: '选择渠道',
+        labelPlaceholder: '展示名（可选）',
+        channels: {
+          telegram: 'Telegram',
+          wecomApp: '企业微信应用',
+          default: '全局默认',
+        },
+        placeholders: {
+          telegram: 'Telegram chat_id',
+          wecomApp: '{at}all 或成员 UserID，多个用 | 分隔',
+          wecom_app: '{at}all 或成员 UserID，多个用 | 分隔',
+          default: '使用全局默认通知配置',
+        },
+        wecomAppPicker: {
+          loadContacts: '加载通讯录',
+          reloadContacts: '重新加载',
+          allMembers: '{at}all 全员',
+          loading: '正在加载企业微信通讯录...',
+          loadFailed: '加载企业微信通讯录失败',
+          noUsers: '该部门暂无可选成员。',
+          manualFallback: '如果通讯录权限不足，可继续手动填写 UserID。',
+        },
+      },
       accountStrategy: {
         auto: '自动选择',
         autoDescription: '优先使用默认登录态；无默认时使用账号池。',
@@ -218,6 +245,11 @@ const zhCNExtra = {
     configurationNotes: '配置说明',
     configurationNotesDescription: 'Webhook 的 Query / Body 支持 JSON 模板，测试按钮会直接调用后端真实发送逻辑，能提前发现 token、URL、JSON 格式问题。',
     loading: '正在加载通知配置...',
+    preferredSectionTitle: '首选通知渠道',
+    preferredSectionDescription: '新配置优先使用企业微信应用，任务级接收人选择也基于该渠道保留。',
+    preferredBadge: '推荐',
+    advancedSectionTitle: '高级兼容渠道',
+    advancedSectionDescription: '{channels} 适合已有集成或特殊网络环境，仍可独立编辑、测试和清空。',
     clear: '清空',
     test: '测试',
     testThisChannel: '测试此渠道',
@@ -227,21 +259,13 @@ const zhCNExtra = {
     secretPlaceholder: '已配置则留空保留，输入新值覆盖',
     secretKeepPlaceholder: '已配置则留空保留',
     notConfigured: '尚未配置。',
-    ntfy: {
-      description: '适合轻量推送，URL 非敏感，可直接回显和修改。',
-    },
-    bark: {
-      description: 'URL 含设备 key，已改为不回显模式。',
-      configuredHint: '已配置敏感值，当前页面不回显。',
-    },
-    gotify: {
-      description: 'URL 与 Token 必须成对配置。',
-    },
-    wecom: {
-      title: '企业微信机器人',
-      description: 'Bot URL 含 key，不回显，仅支持更新或清空。',
-      urlLabel: '企业微信 Bot URL',
-      configuredHint: '已保存机器人地址。',
+
+    wecomApp: {
+      title: '企业微信应用',
+      description: '使用企业微信自建应用推送，Corp Secret 不回显，Corp ID、Agent ID 和默认接收人可直接修改。',
+      corpidPlaceholder: '企业 ID',
+      touserLabel: '默认接收人',
+      configuredHint: '已保存应用密钥。',
     },
     telegram: {
       description: 'Bot Token 属于敏感字段，Chat ID 与反代地址可直接查看和修改。',

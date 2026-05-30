@@ -4,6 +4,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from src.services.search_pagination import advance_search_page
 from src.services.search_pagination import is_search_results_response
+from src.xianyu.search import build_search_url
 
 
 class FakeRequest:
@@ -217,3 +218,11 @@ def test_is_search_results_response_rejects_non_post_request() -> None:
     )
 
     assert is_search_results_response(response) is False
+
+
+def test_build_search_url_encodes_keyword() -> None:
+    assert (
+        build_search_url("MacBook Air M1")
+        == "https://www.goofish.com/search?q=MacBook+Air+M1"
+    )
+    assert build_search_url("相机/镜头") == "https://www.goofish.com/search?q=%E7%9B%B8%E6%9C%BA%2F%E9%95%9C%E5%A4%B4"

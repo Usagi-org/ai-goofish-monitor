@@ -14,7 +14,7 @@ from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
 SellerLoader = Callable[[str], Awaitable[dict]]
 ImageDownloader = Callable[[str, list[str], str], Awaitable[list[str]]]
 AIAnalyzer = Callable[[dict, list[str], str], Awaitable[Optional[dict]]]
-Notifier = Callable[[dict, str], Awaitable[None]]
+Notifier = Callable[[dict, str, Optional[list[dict]]], Awaitable[None]]
 Saver = Callable[[dict, str], Awaitable[bool]]
 
 
@@ -30,6 +30,7 @@ class ItemAnalysisJob:
     seller_id: Optional[str]
     zhima_credit_text: Optional[str]
     registration_duration_text: str
+    notification_targets: Optional[list[dict]] = None
 
 
 class ItemAnalysisDispatcher:
@@ -76,7 +77,11 @@ class ItemAnalysisDispatcher:
         record["ai_analysis"] = await self._build_analysis_result(job, record)
         if await self._saver(record, job.keyword):
             self.completed_count += 1
-        await self._notify_if_recommended(item_data, record["ai_analysis"])
+        await self._notify_if_recommended(
+            item_data,
+            record["ai_analysis"],
+            job.notification_targets,
+        )
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:
         seller_info = {}
@@ -164,10 +169,19 @@ class ItemAnalysisDispatcher:
             except Exception as exc:
                 print(f"   [图片] 删除图片文件时出错: {exc}")
 
-    async def _notify_if_recommended(self, item_data: dict, analysis_result: dict) -> None:
+    async def _notify_if_recommended(
+        self,
+        item_data: dict,
+        analysis_result: dict,
+        notification_targets: Optional[list[dict]],
+    ) -> None:
         if not analysis_result.get("is_recommended"):
             return
         try:
-            await self._notifier(item_data, analysis_result.get("reason", "无"))
+            await self._notifier(
+                item_data,
+                analysis_result.get("reason", "无"),
+                notification_targets,
+            )
         except Exception as exc:
             print(f"   [通知] 发送推荐通知失败: {exc}")

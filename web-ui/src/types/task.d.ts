@@ -1,5 +1,13 @@
 // Based on the Pydantic model in the backend
 
+export type NotificationChannel = 'telegram' | 'wecom_app' | 'default';
+
+export interface NotificationTarget {
+  channel: NotificationChannel;
+  recipient: string;
+  label?: string;
+}
+
 export interface Task {
   id: number;
   task_name: string;
@@ -22,6 +30,7 @@ export interface Task {
   region?: string | null;
   decision_mode: 'ai' | 'keyword';
   keyword_rules: string[];
+  notification_targets: NotificationTarget[];
   is_running: boolean;
 }
 
@@ -73,4 +82,5 @@ export interface TaskGenerateRequest {
   region?: string | null;
   decision_mode?: 'ai' | 'keyword';
   keyword_rules?: string[];
+  notification_targets?: NotificationTarget[];
 }

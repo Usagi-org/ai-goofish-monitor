@@ -4,6 +4,7 @@
 import os
 from typing import Optional
 
+import requests
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -41,6 +42,7 @@ from src.services.process_service import ProcessService
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 AI_TEST_PROMPT = "Reply with OK only."
 AI_TEST_MAX_OUTPUT_TOKENS = 32
+WECOM_API_TIMEOUT_SECONDS = 10
 
 
 def _reload_env() -> None:
@@ -69,14 +71,82 @@ def _normalize_bool_value(value: bool) -> str:
     return "true" if value else "false"
 
 
+def _get_wecom_app_access_token() -> str:
+    corpid = env_manager.get_value("WECOM_APP_CORPID", "")
+    corpsecret = env_manager.get_value("WECOM_APP_SECRET", "")
+    if not corpid or not corpsecret:
+        raise HTTPException(status_code=422, detail="企业微信应用未完整配置")
+
+    try:
+        response = requests.get(
+            "https://qyapi.weixin.qq.com/cgi-bin/gettoken",
+            params={"corpid": corpid, "corpsecret": corpsecret},
+            timeout=WECOM_API_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="获取企业微信通讯录失败：网络请求失败",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="获取企业微信通讯录失败：响应格式异常",
+        ) from exc
+
+    if payload.get("errcode", 0) != 0:
+        raise HTTPException(
+            status_code=502,
+            detail=f"获取企业微信通讯录失败：{payload.get('errmsg', '未知错误')}",
+        )
+    token = payload.get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=502,
+            detail="获取企业微信通讯录失败：响应缺少 access_token",
+        )
+    return str(token)
+
+
+def _fetch_wecom_app_resource(path: str, params: dict) -> dict:
+    token = _get_wecom_app_access_token()
+    request_params = {"access_token": token, **params}
+    try:
+        response = requests.get(
+            f"https://qyapi.weixin.qq.com/cgi-bin/{path}",
+            params=request_params,
+            timeout=WECOM_API_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="获取企业微信通讯录失败：网络请求失败",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="获取企业微信通讯录失败：响应格式异常",
+        ) from exc
+
+    if payload.get("errcode", 0) != 0:
+        raise HTTPException(
+            status_code=502,
+            detail=f"获取企业微信通讯录失败：{payload.get('errmsg', '未知错误')}",
+        )
+    return payload
+
+
 class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
 
-    NTFY_TOPIC_URL: Optional[str] = None
-    GOTIFY_URL: Optional[str] = None
-    GOTIFY_TOKEN: Optional[str] = None
-    BARK_URL: Optional[str] = None
-    WX_BOT_URL: Optional[str] = None
+    WECOM_APP_CORPID: Optional[str] = None
+    WECOM_APP_SECRET: Optional[str] = None
+    WECOM_APP_AGENTID: Optional[str] = None
+    WECOM_APP_TOUSER: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
     TELEGRAM_API_BASE_URL: Optional[str] = None
@@ -178,6 +248,47 @@ async def test_notification_settings(payload: NotificationTestRequest):
         "message": "测试通知已执行",
         "results": results,
     }
+
+
+@router.get("/notifications/wecom-app/departments")
+async def get_wecom_app_departments():
+    payload = _fetch_wecom_app_resource("department/list", {})
+    departments = []
+    for department in payload.get("department", []):
+        if not isinstance(department, dict):
+            continue
+        departments.append(
+            {
+                "id": department.get("id"),
+                "name": department.get("name", ""),
+                "parentid": department.get("parentid", 0),
+                "order": department.get("order", 0),
+            }
+        )
+    return {"departments": departments}
+
+
+@router.get("/notifications/wecom-app/users")
+async def get_wecom_app_users(department_id: int = 1, fetch_child: int = 1):
+    payload = _fetch_wecom_app_resource(
+        "user/simplelist",
+        {
+            "department_id": department_id,
+            "fetch_child": 1 if fetch_child else 0,
+        },
+    )
+    users = []
+    for user in payload.get("userlist", []):
+        if not isinstance(user, dict):
+            continue
+        users.append(
+            {
+                "userid": user.get("userid", ""),
+                "name": user.get("name", ""),
+                "department": user.get("department", []),
+            }
+        )
+    return {"users": users}
 
 
 @router.get("/rotation")
