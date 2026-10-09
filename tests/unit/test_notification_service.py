@@ -1,6 +1,9 @@
 import asyncio
 
+import pytest
+
 from src.infrastructure.external.notification_clients.base import NotificationClient
+from src.infrastructure.external.notification_clients.pushplus_client import PushPlusClient
 from src.infrastructure.external.notification_clients.webhook_client import WebhookClient
 from src.services.notification_service import NotificationService
 
@@ -76,3 +79,57 @@ def test_webhook_client_renders_json_templates(monkeypatch):
     assert captured["json"]["message"].startswith("价格: 9999")
     assert captured["json"]["link"] == "https://www.goofish.com/item/123"
     assert captured["data"] is None
+
+
+def _product():
+    return {
+        "商品标题": "Sony A7M4",
+        "当前售价": "9999",
+        "商品链接": "https://www.goofish.com/item/123",
+    }
+
+
+def test_pushplus_client_sends_text_template_and_requires_business_code(monkeypatch):
+    captured = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"code": 200, "msg": "请求成功"}
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr("requests.post", _fake_post)
+    client = PushPlusClient("test-token", "group-code", pcurl_to_mobile=False)
+
+    asyncio.run(client.send(_product(), "价格合适"))
+
+    assert captured["url"] == "https://www.pushplus.plus/send"
+    assert captured["json"]["token"] == "test-token"
+    assert captured["json"]["topic"] == "group-code"
+    assert captured["json"]["template"] == "txt"
+    assert captured["json"]["content"].startswith("价格: 9999\n原因: 价格合适")
+
+
+def test_pushplus_client_rejects_business_error_with_http_200(monkeypatch):
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"code": 903, "msg": "无效的用户token"}
+
+    monkeypatch.setattr(
+        "requests.post",
+        lambda *args, **kwargs: _FakeResponse(),
+    )
+    client = PushPlusClient("bad-token", pcurl_to_mobile=False)
+
+    with pytest.raises(RuntimeError, match="无效的用户token"):
+        asyncio.run(client.send(_product(), "价格合适"))

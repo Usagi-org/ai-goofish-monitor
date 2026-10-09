@@ -36,7 +36,8 @@ class PushPlusClient(NotificationClient):
             "token": self.token,
             "title": message.notification_title,
             "content": message.content,
-            "template": "html",
+            # 正文是带换行的纯文本。html 模板会把换行吃掉。
+            "template": "txt",
         }
 
         if self.topic:
@@ -52,3 +53,11 @@ class PushPlusClient(NotificationClient):
             ),
         )
         response.raise_for_status()
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise RuntimeError("PushPlus 返回了无法解析的响应") from exc
+        # token 无效或额度用完时 HTTP 仍是 200，失败写在 code 里。
+        if not isinstance(result, dict) or result.get("code") != 200:
+            detail = result.get("msg") if isinstance(result, dict) else None
+            raise RuntimeError(detail or "PushPlus 返回未知错误")
