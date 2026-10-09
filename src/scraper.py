@@ -3,6 +3,7 @@ import json
 import os
 import random
 import re
+import tempfile
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlencode
@@ -110,6 +111,33 @@ REGION_COLUMN_SELECTOR = ":scope > div"
 REGION_OPTION_SELECTOR = "[class*='provItem']:visible"
 REGION_SUBMIT_SELECTOR = "[class*='searchBtn']:visible"
 REGION_SUBMIT_TEXT = re.compile(r"查看(?:\d+|999\+)件宝贝")
+CHROMIUM_CRASH_DUMPS_DIRNAME = "chromium-crashpad"
+
+
+def build_chromium_launch_args(crash_dumps_dir: str) -> list[str]:
+    """Chromium 启动参数。
+
+    Docker 里的 Playwright Chromium 会拉起 chrome_crashpad_handler。数据库路径一旦落到
+    ``/``，handler 会自监控重启并占住大量内存。这里禁用 crash reporter，同时把 dump
+    目录固定到可写临时目录。
+    """
+    return [
+        "--disable-blink-features=AutomationControlled",
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-web-security",
+        "--disable-breakpad",
+        "--disable-crash-reporter",
+        "--disable-features=IsolateOrigins,site-per-process,Crashpad",
+        f"--crash-dumps-dir={crash_dumps_dir}",
+    ]
+
+
+def prepare_chromium_launch_args() -> list[str]:
+    crash_dumps_dir = os.path.join(tempfile.gettempdir(), CHROMIUM_CRASH_DUMPS_DIRNAME)
+    os.makedirs(crash_dumps_dir, exist_ok=True)
+    return build_chromium_launch_args(crash_dumps_dir)
 
 
 def _format_failure_reason(reason: str, limit: int = 500) -> str:
@@ -583,15 +611,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             print(f"警告：读取登录状态文件失败，将直接按路径使用: {e}")
 
         async with async_playwright() as p:
-            # 反检测启动参数
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process",
-            ]
+            launch_args = prepare_chromium_launch_args()
 
             launch_kwargs = {"headless": RUN_HEADLESS, "args": launch_args}
             if proxy_server:
