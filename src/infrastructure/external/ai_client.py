@@ -34,13 +34,41 @@ from src.services.ai_response_parser import (
 )
 
 
-def _sanitize_no_proxy_env() -> None:
-    """Strip CIDR prefix lengths from IPv6 entries in NO_PROXY / no_proxy.
+def _normalize_no_proxy_host(part: str) -> str:
+    """Return an httpx-safe NO_PROXY host, or the original entry if unchanged."""
+    candidate = part.strip()
+    if candidate.startswith("[") and "]" in candidate:
+        inner, _, suffix = candidate[1:].partition("]")
+        unwrapped = f"{inner}{suffix}"
+        host = unwrapped.split("/", 1)[0]
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return part
+        candidate = unwrapped
 
-    httpx <= 0.28.1 wraps NO_PROXY IPv6 entries in brackets *including* the
-    CIDR mask (e.g. ``[::1/128]``), which the URL parser rejects as an invalid
-    port.  Stripping the ``/prefix`` part is safe because httpx doesn't
-    support CIDR range matching anyway — it only does exact-host comparison.
+    if "/" not in candidate:
+        return candidate
+
+    host, _, _prefix = candidate.partition("/")
+    try:
+        ipaddress.IPv6Address(host)
+    except ValueError:
+        return candidate
+    return host
+
+
+def _sanitize_no_proxy_env() -> None:
+    """Normalize IPv6 entries in NO_PROXY / no_proxy for httpx <= 0.28.1.
+
+    Two forms are rejected while building proxy mounts:
+
+    - ``::1/128`` is wrapped as ``[::1/128]``, and the prefix is parsed as a port.
+    - ``[::1]`` is not recognized as IPv6, so it becomes ``all://*[::1]`` and
+      fails with ``Invalid port: ':1]'``.
+
+    httpx only does exact-host comparison, so stripping the prefix length and
+    unwrapping bracketed IPv6 literals is safe. IPv4 CIDR entries are kept.
 
     See https://github.com/encode/httpx/pull/3741
     """
@@ -49,20 +77,8 @@ def _sanitize_no_proxy_env() -> None:
         if not value:
             continue
         parts = [h.strip() for h in value.split(",")]
-        cleaned: list[str] = []
-        changed = False
-        for part in parts:
-            if "/" in part:
-                host, _, prefix = part.partition("/")
-                try:
-                    ipaddress.IPv6Address(host)
-                    cleaned.append(host)
-                    changed = True
-                    continue
-                except ValueError:
-                    pass
-            cleaned.append(part)
-        if changed:
+        cleaned = [_normalize_no_proxy_host(part) for part in parts]
+        if cleaned != parts:
             os.environ[key] = ",".join(cleaned)
 
 

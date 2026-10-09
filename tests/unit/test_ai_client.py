@@ -1,5 +1,8 @@
 import asyncio
 import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -280,3 +283,57 @@ def test_sanitize_no_proxy_handles_both_keys(monkeypatch):
     _sanitize_no_proxy_env()
     assert os.environ["NO_PROXY"] == "::1"
     assert os.environ["no_proxy"] == "fe80::1"
+
+
+def test_sanitize_no_proxy_unwraps_bracketed_ipv6(monkeypatch):
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,::1,[::1]")
+    monkeypatch.setenv("no_proxy", "[::1/128],10.0.0.0/8,[not-ipv6]")
+    _sanitize_no_proxy_env()
+    assert os.environ["NO_PROXY"] == "localhost,127.0.0.1,::1,::1"
+    assert os.environ["no_proxy"] == "::1,10.0.0.0/8,[not-ipv6]"
+
+
+def test_bracketed_ipv6_no_proxy_does_not_break_openai_client(monkeypatch):
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,[::1]")
+    monkeypatch.setenv("no_proxy", "localhost,127.0.0.1,[::1]")
+    _sanitize_no_proxy_env()
+
+    from openai import AsyncOpenAI
+
+    AsyncOpenAI(api_key="sk-test", base_url="https://example.com/v1")
+
+
+def test_legacy_config_client_initializes_with_bracketed_no_proxy(tmp_path):
+    env = os.environ.copy()
+    env.update(
+        {
+            "NO_PROXY": "localhost,127.0.0.1,[::1]",
+            "no_proxy": "localhost,127.0.0.1,[::1]",
+            "OPENAI_API_KEY": "sk-test",
+            "OPENAI_BASE_URL": "https://example.com/v1",
+            "OPENAI_MODEL_NAME": "fake-model",
+            "PROXY_URL": "",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os\n"
+                "from openai import AsyncOpenAI\n"
+                "from src.config import client\n"
+                "assert isinstance(client, AsyncOpenAI)\n"
+                "assert '[::1]' not in os.environ.get('NO_PROXY', '')\n"
+                "assert '[::1]' not in os.environ.get('no_proxy', '')\n"
+            ),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
