@@ -237,6 +237,10 @@ const zhCNExtra = {
     gotify: {
       description: 'URL 与 Token 必须成对配置。',
     },
+    pushplus: {
+      description: '微信推送服务，支持公众号、企微、App 等多渠道。',
+      topicPlaceholder: '群组编码，不填仅发送给自己',
+    },
     wecom: {
       title: '企业微信机器人',
       description: 'Bot URL 含 key，不回显，仅支持更新或清空。',

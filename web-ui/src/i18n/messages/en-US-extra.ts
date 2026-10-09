@@ -237,6 +237,10 @@ const enUSExtra = {
     gotify: {
       description: 'URL and token must be configured together.',
     },
+    pushplus: {
+      description: 'WeChat push service supporting official account, WeCom, App, and more.',
+      topicPlaceholder: 'Group code; leave empty to send to yourself only',
+    },
     wecom: {
       title: 'WeCom Bot',
       description: 'The bot URL contains a key, so it is hidden and can only be updated or cleared.',

@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import type { NotificationSettings, NotificationSettingsUpdate, NotificationTestResponse } from '@/api/settings'
 
-type ChannelKey = 'ntfy' | 'bark' | 'gotify' | 'wecom' | 'telegram' | 'webhook'
+type ChannelKey = 'ntfy' | 'pushplus' | 'bark' | 'gotify' | 'wecom' | 'telegram' | 'webhook'
 
 const props = defineProps<{
   settings: NotificationSettings
@@ -37,9 +37,10 @@ const mutableInitialValues = initialValues as Record<string, string | boolean | 
 const mutableForm = form as Record<string, string | boolean | null | undefined>
 const mutableClearedFields = clearedFields as Record<string, boolean>
 
-const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS'] as const
+const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS', 'PUSHPLUS_TOKEN'] as const
 const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = {
   ntfy: ['NTFY_TOPIC_URL'],
+  pushplus: ['PUSHPLUS_TOKEN', 'PUSHPLUS_TOPIC'],
   bark: ['BARK_URL'],
   gotify: ['GOTIFY_URL', 'GOTIFY_TOKEN'],
   wecom: ['WX_BOT_URL'],
@@ -49,6 +50,7 @@ const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = 
 
 function syncFromSettings(settings: NotificationSettings) {
   initialValues.NTFY_TOPIC_URL = settings.NTFY_TOPIC_URL ?? ''
+  initialValues.PUSHPLUS_TOPIC = settings.PUSHPLUS_TOPIC ?? ''
   initialValues.GOTIFY_URL = settings.GOTIFY_URL ?? ''
   initialValues.TELEGRAM_CHAT_ID = settings.TELEGRAM_CHAT_ID ?? ''
   initialValues.TELEGRAM_API_BASE_URL = settings.TELEGRAM_API_BASE_URL ?? 'https://api.telegram.org'
@@ -65,6 +67,7 @@ function syncFromSettings(settings: NotificationSettings) {
     TELEGRAM_BOT_TOKEN: '',
     WEBHOOK_URL: '',
     WEBHOOK_HEADERS: '',
+    PUSHPLUS_TOKEN: '',
   })
 
   secretConfigured.BARK_URL = !!settings.BARK_URL_SET
@@ -73,6 +76,7 @@ function syncFromSettings(settings: NotificationSettings) {
   secretConfigured.TELEGRAM_BOT_TOKEN = !!settings.TELEGRAM_BOT_TOKEN_SET
   secretConfigured.WEBHOOK_URL = !!settings.WEBHOOK_URL_SET
   secretConfigured.WEBHOOK_HEADERS = !!settings.WEBHOOK_HEADERS_SET
+  secretConfigured.PUSHPLUS_TOKEN = !!settings.PUSHPLUS_TOKEN_SET
 
   for (const field of Object.keys(clearedFields)) {
     clearedFields[field] = false
@@ -123,7 +127,7 @@ function buildScopedPayload(channel?: ChannelKey): NotificationSettingsUpdate {
     ? new Set<string>([...channelFields[channel].map((field) => field as string), 'PCURL_TO_MOBILE'])
     : null
   const textFields: (keyof NotificationSettingsUpdate)[] = [
-    'NTFY_TOPIC_URL', 'GOTIFY_URL', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL', 'WEBHOOK_METHOD',
+    'NTFY_TOPIC_URL', 'PUSHPLUS_TOPIC', 'GOTIFY_URL', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL', 'WEBHOOK_METHOD',
     'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY',
   ]
 
@@ -243,6 +247,15 @@ function resolveChannelBadge(channel: ChannelKey) {
         <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('ntfy') ? 'default' : 'outline'">{{ resolveChannelBadge('ntfy') }}</Badge><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('ntfy')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.testThisChannel') }}</Button></CardFooter>
       </Card>
 
+      <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-green-500">
+        <CardHeader><CardTitle>PushPlus</CardTitle><CardDescription>{{ t('notifyPanel.pushplus.description') }}</CardDescription></CardHeader>
+        <CardContent class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-2"><Label>Token</Label><Input type="password" :model-value="form.PUSHPLUS_TOKEN ?? ''" :placeholder="t('notifyPanel.secretKeepPlaceholder')" @update:model-value="(value) => updateSecretField('PUSHPLUS_TOKEN', String(value))" /></div>
+          <div class="grid gap-2"><Label>Topic</Label><Input :model-value="form.PUSHPLUS_TOPIC ?? ''" :placeholder="t('notifyPanel.pushplus.topicPlaceholder')" @update:model-value="(value) => updateField('PUSHPLUS_TOPIC', String(value))" /></div>
+        </CardContent>
+        <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('pushplus') ? 'default' : 'outline'">{{ resolveChannelBadge('pushplus') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('pushplus')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('pushplus')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
+      </Card>
+
       <div class="grid gap-4 xl:grid-cols-2">
         <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-amber-500">
           <CardHeader><CardTitle>Bark</CardTitle><CardDescription>{{ t('notifyPanel.bark.description') }}</CardDescription></CardHeader>
@@ -301,7 +314,7 @@ function resolveChannelBadge(channel: ChannelKey) {
         <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('webhook') ? 'default' : 'outline'">{{ resolveChannelBadge('webhook') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('webhook')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('webhook')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
       </Card>
 
-      <div v-for="channel in ['ntfy', 'bark', 'gotify', 'wecom', 'telegram', 'webhook']" :key="channel">
+      <div v-for="channel in ['ntfy', 'pushplus', 'bark', 'gotify', 'wecom', 'telegram', 'webhook']" :key="channel">
         <div v-if="testResults[channel]" class="rounded-2xl border px-4 py-3 text-sm" :class="resultClass(channel as ChannelKey)">
           {{ testResults[channel].label }}：{{ testResults[channel].message }}
         </div>

@@ -73,6 +73,8 @@ class NotificationSettingsModel(BaseModel):
     """通知设置模型"""
 
     NTFY_TOPIC_URL: Optional[str] = None
+    PUSHPLUS_TOKEN: Optional[str] = None
+    PUSHPLUS_TOPIC: Optional[str] = None
     GOTIFY_URL: Optional[str] = None
     GOTIFY_TOKEN: Optional[str] = None
     BARK_URL: Optional[str] = None

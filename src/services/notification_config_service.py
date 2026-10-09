@@ -13,6 +13,8 @@ from src.infrastructure.config.settings import (
 
 NOTIFICATION_FIELD_MAP = {
     "NTFY_TOPIC_URL": "ntfy_topic_url",
+    "PUSHPLUS_TOKEN": "pushplus_token",
+    "PUSHPLUS_TOPIC": "pushplus_topic",
     "GOTIFY_URL": "gotify_url",
     "GOTIFY_TOKEN": "gotify_token",
     "BARK_URL": "bark_url",
@@ -31,6 +33,7 @@ NOTIFICATION_FIELD_MAP = {
 
 CHANNEL_NOTIFICATION_FIELDS = {
     "ntfy": {"NTFY_TOPIC_URL"},
+    "pushplus": {"PUSHPLUS_TOKEN", "PUSHPLUS_TOPIC"},
     "bark": {"BARK_URL"},
     "gotify": {"GOTIFY_URL", "GOTIFY_TOKEN"},
     "wecom": {"WX_BOT_URL"},
@@ -56,6 +59,7 @@ SECRET_NOTIFICATION_FIELDS = {
     "TELEGRAM_BOT_TOKEN",
     "WEBHOOK_URL",
     "WEBHOOK_HEADERS",
+    "PUSHPLUS_TOKEN",
 }
 
 JSON_NOTIFICATION_FIELDS = {
@@ -93,6 +97,8 @@ def build_notification_settings_response(
     notification_settings = settings or load_notification_settings()
     response = {
         "NTFY_TOPIC_URL": notification_settings.ntfy_topic_url or "",
+        "PUSHPLUS_TOKEN": "",
+        "PUSHPLUS_TOPIC": notification_settings.pushplus_topic or "",
         "GOTIFY_URL": notification_settings.gotify_url or "",
         "GOTIFY_TOKEN": "",
         "BARK_URL": "",
@@ -124,6 +130,7 @@ def build_notification_status_flags(
     notification_settings = settings or load_notification_settings()
     return {
         "ntfy_topic_url_set": bool(notification_settings.ntfy_topic_url),
+        "pushplus_token_set": bool(notification_settings.pushplus_token),
         "gotify_url_set": bool(notification_settings.gotify_url),
         "gotify_token_set": bool(notification_settings.gotify_token),
         "bark_url_set": bool(notification_settings.bark_url),
@@ -142,6 +149,8 @@ def build_configured_channels(
     channels = []
     if notification_settings.ntfy_topic_url:
         channels.append("ntfy")
+    if notification_settings.pushplus_token:
+        channels.append("pushplus")
     if notification_settings.bark_url:
         channels.append("bark")
     if notification_settings.gotify_url and notification_settings.gotify_token:
@@ -253,6 +262,8 @@ def load_notification_settings() -> NotificationSettings:
     return _build_notification_settings_model(
         {
             "ntfy_topic_url": _normalize_existing_text(env_manager.get_value("NTFY_TOPIC_URL")),
+            "pushplus_token": _normalize_existing_text(env_manager.get_value("PUSHPLUS_TOKEN")),
+            "pushplus_topic": _normalize_existing_text(env_manager.get_value("PUSHPLUS_TOPIC")),
             "gotify_url": _normalize_existing_text(env_manager.get_value("GOTIFY_URL")),
             "gotify_token": _normalize_existing_text(env_manager.get_value("GOTIFY_TOKEN")),
             "bark_url": _normalize_existing_text(env_manager.get_value("BARK_URL")),

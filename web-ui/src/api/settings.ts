@@ -2,6 +2,8 @@ import { http } from '@/lib/http'
 
 export interface NotificationSettings {
   NTFY_TOPIC_URL?: string
+  PUSHPLUS_TOKEN?: string
+  PUSHPLUS_TOPIC?: string
   GOTIFY_URL?: string
   GOTIFY_TOKEN?: string
   BARK_URL?: string
@@ -22,11 +24,14 @@ export interface NotificationSettings {
   TELEGRAM_BOT_TOKEN_SET?: boolean
   WEBHOOK_URL_SET?: boolean
   WEBHOOK_HEADERS_SET?: boolean
+  PUSHPLUS_TOKEN_SET?: boolean
   CONFIGURED_CHANNELS?: string[]
 }
 
 export interface NotificationSettingsUpdate {
   NTFY_TOPIC_URL?: string | null
+  PUSHPLUS_TOKEN?: string | null
+  PUSHPLUS_TOPIC?: string | null
   GOTIFY_URL?: string | null
   GOTIFY_TOKEN?: string | null
   BARK_URL?: string | null
@@ -89,6 +94,7 @@ export interface SystemStatus {
     openai_base_url_set: boolean
     openai_model_name_set: boolean
     ntfy_topic_url_set: boolean
+    pushplus_token_set: boolean
     gotify_url_set: boolean
     gotify_token_set: boolean
     bark_url_set: boolean

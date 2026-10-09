@@ -9,12 +9,18 @@ from .ntfy_client import NtfyClient
 from .telegram_client import TelegramClient
 from .wecom_bot_client import WeComBotClient
 from .webhook_client import WebhookClient
+from .pushplus_client import PushPlusClient
 
 
 def build_notification_clients(settings: NotificationSettings):
     pcurl_to_mobile = settings.pcurl_to_mobile
     return [
         NtfyClient(settings.ntfy_topic_url, pcurl_to_mobile=pcurl_to_mobile),
+        PushPlusClient(
+            settings.pushplus_token,
+            settings.pushplus_topic,
+            pcurl_to_mobile=pcurl_to_mobile,
+        ),
         BarkClient(settings.bark_url, pcurl_to_mobile=pcurl_to_mobile),
         GotifyClient(
             settings.gotify_url,

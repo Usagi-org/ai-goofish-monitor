@@ -57,6 +57,8 @@ class AISettings(_EnvSettings):
 class NotificationSettings(_EnvSettings):
     """通知服务配置"""
     ntfy_topic_url: Optional[str] = _env_field(None, "NTFY_TOPIC_URL")
+    pushplus_token: Optional[str] = _env_field(None, "PUSHPLUS_TOKEN")
+    pushplus_topic: Optional[str] = _env_field(None, "PUSHPLUS_TOPIC")
     gotify_url: Optional[str] = _env_field(None, "GOTIFY_URL")
     gotify_token: Optional[str] = _env_field(None, "GOTIFY_TOKEN")
     bark_url: Optional[str] = _env_field(None, "BARK_URL")
@@ -79,6 +81,7 @@ class NotificationSettings(_EnvSettings):
         """检查是否配置了任何通知服务"""
         return any([
             self.ntfy_topic_url,
+            self.pushplus_token,
             self.wx_bot_url,
             self.gotify_url and self.gotify_token,
             self.bark_url,
