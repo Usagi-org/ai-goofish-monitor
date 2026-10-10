@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from typing import Awaitable, Callable, Optional
 
@@ -34,6 +35,13 @@ META_PROMPT_TEMPLATE = """
 """
 
 ProgressCallback = Callable[[str, str], Awaitable[None]]
+# 参考标准大约一千多 token。思考模型还会先输出推理，800 会把正文截掉。
+CRITERIA_MAX_OUTPUT_TOKENS = 8192
+_THINK_BLOCK_RE = re.compile(
+    r"<(?:think|thinking)>.*?</(?:think|thinking)>",
+    re.IGNORECASE | re.DOTALL,
+)
+_UNCLOSED_THINK_RE = re.compile(r"<(?:think|thinking)>", re.IGNORECASE)
 
 
 async def _report_progress(
@@ -55,21 +63,34 @@ def _read_reference_text(reference_file_path: str) -> str:
         raise IOError(f"读取参考文件失败: {exc}")
 
 
+def _strip_reasoning_blocks(text: str) -> str:
+    stripped = _THINK_BLOCK_RE.sub("", text).strip()
+    if _UNCLOSED_THINK_RE.search(stripped):
+        raise RuntimeError(
+            "生成分析标准时，模型的思考过程占满了输出长度，正文被截断。"
+            "请换一个不输出长思考过程的模型，或提高模型服务允许的输出长度。"
+        )
+    if not stripped:
+        raise RuntimeError("AI 没有生成分析标准正文。")
+    return stripped
+
+
 async def _request_generated_text(ai_client: AIClient, prompt: str) -> str:
     print("正在调用AI生成新的分析标准，请稍候...")
     try:
         generated_text = await ai_client._call_ai(
             [{"role": "user", "content": prompt}],
             temperature=0.5,
-            max_output_tokens=800,
+            max_output_tokens=CRITERIA_MAX_OUTPUT_TOKENS,
             enable_json_output=False,
         )
     except Exception as exc:
         print(f"调用 OpenAI API 时出错: {exc}")
         raise
 
+    generated_text = _strip_reasoning_blocks(generated_text)
     print("AI已成功生成内容。")
-    return generated_text.strip()
+    return generated_text
 
 
 async def _close_ai_client(
