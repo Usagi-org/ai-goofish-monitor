@@ -34,13 +34,25 @@ const {
   blacklistKeywords,
   isSavingBlacklist,
   saveBlacklistRules,
+  deleteSelectedItems,
+  deleteSingleItem,
   fileOptions,
   isFileOptionsReady,
+  // 多选模式
+  selectionMode,
+  selectedIds,
+  toggleSelectionMode,
+  toggleSelectItem,
+  selectAllItems,
+  clearSelection,
+  selectErrorItems,
 } = useResults()
 
 const isDeleteDialogOpen = ref(false)
 const isBlacklistDialogOpen = ref(false)
 const blacklistDraft = ref('')
+const isDeleteItemsDialogOpen = ref(false)
+const pendingDeleteItemId = ref<number | null>(null)
 
 const selectedTaskLabel = computed(() => {
   if (!selectedFile.value || fileOptions.value.length === 0) return null
@@ -125,6 +137,68 @@ async function handleSaveBlacklistRules() {
     })
   }
 }
+
+// --- 单条删除 ---
+function handleDeleteSingleItem(id: number) {
+  pendingDeleteItemId.value = id
+  isDeleteItemsDialogOpen.value = true
+}
+
+async function confirmDeleteSingleItem() {
+  if (pendingDeleteItemId.value === null) return
+  try {
+    await deleteSingleItem(pendingDeleteItemId.value)
+    toast({ title: t('results.filters.itemDeleted') })
+  } catch (e) {
+    toast({
+      title: t('results.filters.deleteFailed'),
+      description: (e as Error).message,
+      variant: 'destructive',
+    })
+  } finally {
+    pendingDeleteItemId.value = null
+    isDeleteItemsDialogOpen.value = false
+  }
+}
+
+// --- 批量删除 ---
+function openBatchDeleteDialog() {
+  if (selectedIds.value.size === 0) return
+  pendingDeleteItemId.value = null
+  isDeleteItemsDialogOpen.value = true
+}
+
+async function confirmBatchDelete() {
+  try {
+    const deletedCount = await deleteSelectedItems()
+    toast({
+      title: t('results.filters.itemsDeleted', { count: deletedCount || 0 }),
+    })
+  } catch (e) {
+    toast({
+      title: t('results.filters.deleteFailed'),
+      description: (e as Error).message,
+      variant: 'destructive',
+    })
+  } finally {
+    isDeleteItemsDialogOpen.value = false
+  }
+}
+
+function confirmDeleteItems() {
+  if (pendingDeleteItemId.value !== null) {
+    confirmDeleteSingleItem()
+  } else {
+    confirmBatchDelete()
+  }
+}
+
+const deleteItemsDialogText = computed(() => {
+  if (pendingDeleteItemId.value !== null) {
+    return t('results.filters.deleteItemConfirm')
+  }
+  return t('results.filters.deleteItemsConfirm', { count: selectedIds.value.size })
+})
 </script>
 
 <template>
@@ -149,16 +223,62 @@ async function handleSaveBlacklistRules() {
       v-model:sortBy="filters.sort_by"
       v-model:sortOrder="filters.sort_order"
       :is-loading="isLoading"
+      :selection-mode="selectionMode"
       @refresh="refreshResults"
       @manage-blacklist="openBlacklistDialog"
       @export="handleExportResults"
       @delete="openDeleteDialog"
+      @toggle-selection-mode="toggleSelectionMode"
     />
+
+    <!-- 批量操作栏（固定在屏幕底部中央） -->
+    <Teleport to="body">
+      <div
+        v-if="selectionMode"
+        class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4"
+      >
+        <div class="rounded-2xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-2xl px-5 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-2 text-sm text-slate-600 font-medium">
+            <span>{{ t('results.filters.selectedCount', { count: selectedIds.size }) }}</span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" @click="selectAllItems">
+              {{ t('results.filters.selectAll') }}
+            </Button>
+            <Button size="sm" variant="outline" @click="clearSelection" :disabled="selectedIds.size === 0">
+              {{ t('results.filters.clearSelection') }}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="border-orange-300 text-orange-600 hover:bg-orange-50"
+              @click="selectErrorItems"
+            >
+              {{ t('results.filters.selectErrors') }}
+            </Button>
+            <Button size="sm" variant="destructive" @click="openBatchDeleteDialog" :disabled="selectedIds.size === 0">
+              {{ t('results.filters.deleteSelected') }}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <ResultsInsightsPanel :insights="insights" :selected-task-label="selectedTaskLabel" />
 
-    <ResultsGrid :results="results" :is-loading="isLoading" @toggle-block="toggleItemBlock" />
+    <div :class="{ 'pb-28': selectionMode }">
+      <ResultsGrid
+        :results="results"
+        :is-loading="isLoading"
+        :selectable="selectionMode"
+        :selected-ids="selectedIds"
+        @toggle-block="toggleItemBlock"
+        @toggle-select="toggleSelectItem"
+        @delete-item="handleDeleteSingleItem"
+      />
+    </div>
 
+    <!-- 全量删除确认弹窗 -->
     <Dialog v-model:open="isDeleteDialogOpen">
       <DialogContent class="sm:max-w-[420px]">
         <DialogHeader>
@@ -201,6 +321,24 @@ async function handleSaveBlacklistRules() {
           <Button variant="outline" @click="isBlacklistDialogOpen = false">{{ t('common.cancel') }}</Button>
           <Button :disabled="isSavingBlacklist" @click="handleSaveBlacklistRules">
             {{ t('results.filters.confirmBlacklistSave') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- 单条/批量删除确认弹窗 -->
+    <Dialog v-model:open="isDeleteItemsDialogOpen">
+      <DialogContent class="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>{{ t('results.filters.deleteItemDialogTitle') }}</DialogTitle>
+          <DialogDescription>
+            {{ deleteItemsDialogText }}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="isDeleteItemsDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button variant="destructive" :disabled="isLoading" @click="confirmDeleteItems">
+            {{ t('results.filters.confirmDelete') }}
           </Button>
         </DialogFooter>
       </DialogContent>

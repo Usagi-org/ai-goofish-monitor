@@ -11,6 +11,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { ListChecks } from 'lucide-vue-next'
 
 interface FileOption {
   value: string
@@ -29,6 +30,7 @@ interface Props {
   sortOrder: 'asc' | 'desc'
   isLoading: boolean
   isReady: boolean
+  selectionMode?: boolean
 }
 
 const props = defineProps<Props>()
@@ -74,6 +76,7 @@ const emit = defineEmits<{
   (e: 'export'): void
   (e: 'delete'): void
   (e: 'manage-blacklist'): void
+  (e: 'toggle-selection-mode'): void
 }>()
 
 function handleToggleAiRecommended(value: boolean) {
@@ -181,6 +184,15 @@ function handleToggleKeywordRecommended(value: boolean) {
       <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
         <Button @click="emit('refresh')" :disabled="props.isLoading">
           {{ t('common.refresh') }}
+        </Button>
+
+        <Button
+          :variant="props.selectionMode ? 'default' : 'outline'"
+          @click="emit('toggle-selection-mode')"
+          :disabled="props.isLoading || !props.selectedFile"
+        >
+          <ListChecks class="w-4 h-4 mr-1" />
+          {{ t('results.filters.selectionMode') }}
         </Button>
 
         <Button

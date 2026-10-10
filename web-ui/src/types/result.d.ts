@@ -94,6 +94,7 @@ export interface ResultInsights {
 }
 
 export interface ResultItem {
+  _db_id?: number;
   "爬取时间": string;
   "搜索关键字": string;
   "任务名称": string;

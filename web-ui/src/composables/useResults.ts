@@ -51,6 +51,47 @@ export function useResults() {
   const error = ref<Error | null>(null)
   const { on } = useWebSocket()
 
+  // --- 多选模式状态 ---
+  const selectionMode = ref(false)
+  const selectedIds = ref<Set<number>>(new Set())
+
+  function toggleSelectionMode() {
+    selectionMode.value = !selectionMode.value
+    if (!selectionMode.value) {
+      selectedIds.value = new Set()
+    }
+  }
+
+  function toggleSelectItem(id: number) {
+    const next = new Set(selectedIds.value)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    selectedIds.value = next
+  }
+
+  function selectAllItems() {
+    const allIds = results.value
+      .map((item) => item._db_id)
+      .filter((id): id is number => id !== undefined)
+    selectedIds.value = new Set(allIds)
+  }
+
+  function clearSelection() {
+    selectedIds.value = new Set()
+  }
+
+  /** 一键选中当前页所有 AI 分析报错的记录（如 429、超时等） */
+  function selectErrorItems() {
+    const errorIds = results.value
+      .filter((item) => item.ai_analysis?.error)
+      .map((item) => item._db_id)
+      .filter((id): id is number => id !== undefined)
+    selectedIds.value = new Set(errorIds)
+  }
+
   function normalizeKeyword(value: string) {
     return value.trim().toLowerCase().replace(/\s+/g, '_')
   }
@@ -64,8 +105,6 @@ export function useResults() {
     try {
       const fileList = await resultsApi.getResultFiles()
       files.value = fileList
-      // If a file is selected that no longer exists, reset it.
-      // Otherwise, if nothing is selected, select the first file by default.
       if (selectedFile.value && fileList.includes(selectedFile.value)) {
         return
       }
@@ -171,8 +210,6 @@ export function useResults() {
   on('results_updated', async () => {
     const oldFile = selectedFile.value
     await fetchFiles()
-    // If the selected file remains the same, refresh its content (in case of append)
-    // If it changed (e.g. from null to new file), the watcher will handle it.
     if (selectedFile.value && selectedFile.value === oldFile) {
       fetchResults()
       fetchInsights()
@@ -250,6 +287,43 @@ export function useResults() {
     }
   }
 
+  /** 批量删除当前选中的记录，返回实际删除条数 */
+  async function deleteSelectedItems(): Promise<number> {
+    if (!selectedFile.value || selectedIds.value.size === 0) return 0
+    isLoading.value = true
+    error.value = null
+    try {
+      const ids = Array.from(selectedIds.value)
+      const { deleted } = await resultsApi.deleteResultItems(selectedFile.value, ids)
+      selectedIds.value = new Set()
+      await fetchResults()
+      await fetchInsights()
+      return deleted
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /** 删除单条记录 */
+  async function deleteSingleItem(id: number) {
+    if (!selectedFile.value) return
+    isLoading.value = true
+    error.value = null
+    try {
+      await resultsApi.deleteResultItems(selectedFile.value, [id])
+      await fetchResults()
+      await fetchInsights()
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // Watchers
   watch(filters, (val) => {
     localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(val))
@@ -272,6 +346,12 @@ export function useResults() {
     },
     { immediate: true }
   )
+
+  // 切换结果文件时退出选择模式
+  watch(selectedFile, () => {
+    selectionMode.value = false
+    selectedIds.value = new Set()
+  })
 
   const fileOptions = computed(() =>
     files.value.map((file) => {
@@ -302,7 +382,7 @@ export function useResults() {
     filters,
     isLoading,
     error,
-    fetchFiles, // Expose to allow manual refresh
+    fetchFiles,
     refreshResults,
     exportSelectedResults,
     deleteSelectedFile,
@@ -310,7 +390,17 @@ export function useResults() {
     blacklistKeywords,
     isSavingBlacklist,
     saveBlacklistRules,
+    deleteSelectedItems,
+    deleteSingleItem,
     fileOptions,
     isFileOptionsReady,
+    // 多选模式
+    selectionMode,
+    selectedIds,
+    toggleSelectionMode,
+    toggleSelectItem,
+    selectAllItems,
+    clearSelection,
+    selectErrorItems,
   }
 }
