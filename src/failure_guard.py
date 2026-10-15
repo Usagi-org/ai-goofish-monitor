@@ -126,8 +126,16 @@ def _read_json_file(path: str) -> dict:
     except Exception:
         # 文件损坏时保留现场，避免无限解析失败。
         try:
+            import shutil
+
             ts = str(int(time.time()))
-            os.replace(path, f"{path}.corrupt.{ts}")
+            backup = f"{path}.corrupt.{ts}"
+            try:
+                os.replace(path, backup)
+            except OSError:
+                # Windows 上目标被占用时降级为复制后删除
+                shutil.copyfile(path, backup)
+                os.remove(path)
         except Exception:
             pass
         return {}
@@ -136,11 +144,35 @@ def _read_json_file(path: str) -> dict:
 def _atomic_write_json(path: str, data: dict) -> None:
     _ensure_parent_dir(path)
     tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    payload = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
+
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+        return
+    except OSError:
+        # Windows 上目标文件被杀软/安全软件临时占用时，os.replace 会抛
+        # PermissionError(WinError 5)。降级为直接覆盖写入，保证失败保护状态
+        # 能落盘，避免因写状态失败而丢弃真实的任务失败原因。
+        pass
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        # 实在无法写入也不影响主流程（失败保护属辅助机制）。
+        pass
+    finally:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
 
 
 @dataclass(frozen=True)

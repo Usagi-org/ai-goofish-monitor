@@ -84,6 +84,65 @@ def _is_login_url(url: str) -> bool:
     return "passport.goofish.com" in lowered or "mini_login" in lowered
 
 
+def _system_browser_available(channel: str) -> bool:
+    """检测本机是否安装了可供 Playwright 驱动的系统浏览器。
+
+    仅对 "chrome" / "msedge" 有意义。未安装却仍以该 channel 启动时，
+    Playwright 会直接报错，导致任务无法运行。
+    """
+    if channel not in ("chrome", "msedge"):
+        return False
+    exe_names = {"chrome": "chrome.exe", "msedge": "msedge.exe"}
+    candidates = {
+        "chrome": [
+            os.path.join(
+                os.environ.get("LOCALAPPDATA", ""),
+                "Google", "Chrome", "Application", "chrome.exe",
+            ),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ],
+        "msedge": [
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        ],
+    }.get(channel, [])
+    if any(p and os.path.exists(p) for p in candidates):
+        return True
+    exe = exe_names.get(channel, "")
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if directory and exe and os.path.exists(os.path.join(directory, exe)):
+            return True
+    return False
+
+
+async def _create_browser(playwright, launch_kwargs: dict):
+    """按配置的 channel 启动浏览器，系统浏览器缺失或启动失败时回退自带 Chromium。
+
+    _resolve_browser_channel() 在非 Docker 且 LOGIN_IS_EDGE 为假时返回 "chrome"，
+    宿主机未安装 Google Chrome 时会导致任务直接无法启动。这里做两重保护：
+    先按本机实际安装情况择优选择，启动失败再兜底降级。
+    """
+    channel = _resolve_browser_channel()
+    launch_kwargs = dict(launch_kwargs)
+
+    if channel != "chromium" and not _system_browser_available(channel):
+        print(f"未检测到系统 {channel}，改用 Playwright 自带 Chromium。")
+        channel = "chromium"
+
+    launch_kwargs["channel"] = channel
+    try:
+        return await playwright.chromium.launch(**launch_kwargs)
+    except Exception as exc:
+        if channel == "chromium":
+            raise
+        print(f"以 {channel} 启动浏览器失败（{exc}），回退到 Playwright 自带 Chromium。")
+        launch_kwargs["channel"] = "chromium"
+        return await playwright.chromium.launch(**launch_kwargs)
+
+
 def _resolve_browser_channel() -> str:
     global EDGE_DOCKER_WARNING_PRINTED
     if RUNNING_IN_DOCKER:
@@ -364,6 +423,54 @@ def _build_context_overrides(snapshot: dict) -> dict:
     return _clean_kwargs(overrides)
 
 
+def _normalize_storage_cookies(raw_cookies) -> list:
+    """规范化快照中的 cookies，使其满足 Playwright storageState 的格式要求。
+
+    浏览器扩展导出会话 cookie 时 expirationDate 为 null，写入 JSON 后是 JSON null，
+    传入 Playwright 时 typeof 为 "object"，会触发：
+        storageState.cookies[N].expires: expected float, got object
+    导致 browser.new_context() 直接失败、任务完全无法运行。
+
+    这里丢弃非数值或 <= 0 的 expires（会话 cookie 本就不应带该字段），
+    数值统一转为 float，并校验/补齐 name、value、domain、path 等必需字段。
+    """
+    normalized = []
+    for item in raw_cookies or []:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        value = item.get("value")
+        domain = item.get("domain")
+        if not name or value is None or not domain:
+            continue
+
+        cookie = {
+            "name": str(name),
+            "value": str(value),
+            "domain": str(domain),
+            "path": str(item.get("path") or "/"),
+        }
+        expires = item.get("expires")
+        # bool 是 int 的子类需先排除；非数值一律按会话 cookie 处理
+        if (
+            not isinstance(expires, bool)
+            and isinstance(expires, (int, float))
+            and expires > 0
+        ):
+            cookie["expires"] = float(expires)
+
+        if "httpOnly" in item:
+            cookie["httpOnly"] = bool(item.get("httpOnly"))
+        if "secure" in item:
+            cookie["secure"] = bool(item.get("secure"))
+        same_site = item.get("sameSite")
+        if same_site in ("Strict", "Lax", "None"):
+            cookie["sameSite"] = same_site
+
+        normalized.append(cookie)
+    return normalized
+
+
 # 这些头由浏览器按请求类型生成。扩展快照里常见的是某次 XHR 的值
 # （Sec-Fetch-Dest: empty / Sec-Fetch-Mode: cors / Accept: */*）。
 # 如果原样套到 BrowserContext，文档和脚本请求会被改成 CORS 空请求，搜索页只剩白屏。
@@ -617,9 +724,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             if proxy_server:
                 launch_kwargs["proxy"] = {"server": proxy_server}
 
-            launch_kwargs["channel"] = _resolve_browser_channel()
-
-            browser = await p.chromium.launch(**launch_kwargs)
+            browser = await _create_browser(p, launch_kwargs)
 
             context_kwargs = _default_context_options()
             storage_state_arg = state_file
@@ -632,7 +737,11 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     for key in ("env", "headers", "page", "storage")
                 ):
                     print(f"检测到增强浏览器快照，应用环境参数: {state_file}")
-                    storage_state_arg = {"cookies": snapshot_data.get("cookies", [])}
+                    storage_state_arg = {
+                        "cookies": _normalize_storage_cookies(
+                            snapshot_data.get("cookies", [])
+                        )
+                    }
                     context_kwargs.update(_build_context_overrides(snapshot_data))
                     extra_headers = _build_extra_headers(snapshot_data.get("headers"))
                     if extra_headers:
@@ -1224,7 +1333,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 log_time("任务执行完毕，浏览器将在5秒后自动关闭...")
                 await asyncio.sleep(5)
                 if debug_limit:
-                    input("按回车键关闭浏览器...")
+                    # 不使用 input()：后台/非交互运行时 stdin 已关闭，会抛
+                    # EOFError 并打断后续的保存与收尾逻辑。
+                    log_time("调试模式：浏览器即将自动关闭。")
                 await browser.close()
 
         return processed_item_count
