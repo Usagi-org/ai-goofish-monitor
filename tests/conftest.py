@@ -148,6 +148,7 @@ def api_context(tmp_path):
         "app": app,
         "config_file": config_file,
         "db_path": db_path,
+        "task_service": task_service,
         "process_service": process_service,
         "scheduler_service": scheduler_service,
         "task_generation_service": task_generation_service,
