@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from src.services.ai_response_parser import (
@@ -50,6 +52,58 @@ def test_extract_ai_response_content_with_none_content_but_valid_reasoning_conte
     result = extract_ai_response_content(response)
 
     assert result == '这是推理内容'
+
+
+@pytest.mark.parametrize("finish_reason", ["stop", "length"])
+def test_extract_ai_response_content_checks_completion_before_reasoning_fallback(finish_reason):
+    response = SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason=finish_reason,
+        message=SimpleNamespace(content=None, reasoning_content="gateway answer"),
+    )])
+
+    if finish_reason == "stop":
+        assert extract_ai_response_content(response) == "gateway answer"
+    else:
+        with pytest.raises(ValueError, match="length"):
+            extract_ai_response_content(response)
+
+
+@pytest.mark.parametrize("finish_reason", ["length", "content_filter", "tool_calls"])
+def test_extract_ai_response_content_rejects_unfinished_chat_even_with_valid_json(
+    finish_reason,
+):
+    response = SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason=finish_reason,
+        message=SimpleNamespace(content='{"ok": true}'),
+    )])
+
+    with pytest.raises(ValueError, match=finish_reason):
+        extract_ai_response_content(response)
+
+
+@pytest.mark.parametrize("status", ["incomplete", "failed", "in_progress", "queued", "cancelled"])
+def test_extract_ai_response_content_rejects_unfinished_responses_with_text(status):
+    response = SimpleNamespace(status=status, output_text='{"ok": true}')
+
+    with pytest.raises(ValueError, match=status):
+        extract_ai_response_content(response)
+
+
+@pytest.mark.parametrize("finish_reason", ["stop", None])
+def test_extract_ai_response_content_accepts_final_chat_with_optional_metadata(finish_reason):
+    response = SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason=finish_reason,
+        message=SimpleNamespace(content='{"ok": true}', reasoning_content="推理过程"),
+    )])
+
+    assert extract_ai_response_content(response) == '{"ok": true}'
+
+
+@pytest.mark.parametrize("status", ["completed", None])
+def test_extract_ai_response_content_accepts_final_responses_with_optional_metadata(status):
+    response = SimpleNamespace(status=status, output_text='{"ok": true}')
+
+    assert extract_ai_response_content(response) == '{"ok": true}'
 
 
 def test_extract_ai_response_content_raises_when_content_and_reasoning_content_are_empty():

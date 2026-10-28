@@ -21,12 +21,21 @@ def extract_ai_response_content(response: Any) -> str:
     if isinstance(response, str):
         return _normalize_text_content(response)
 
+    status = getattr(response, "status", None)
+    if status is not None and status != "completed":
+        raise ValueError(f"AI响应未完成（status={status}），拒绝使用不完整内容。")
+
     output_text = getattr(response, "output_text", None)
     if isinstance(output_text, str):
         return _normalize_text_content(output_text)
 
     choices = getattr(response, "choices", None)
     if choices:
+        finish_reason = getattr(choices[0], "finish_reason", None)
+        if finish_reason is not None and finish_reason != "stop":
+            raise ValueError(
+                f"AI响应未完成（finish_reason={finish_reason}），拒绝使用不完整内容。"
+            )
         message = getattr(choices[0], "message", None)
         if message is None:
             raise EmptyAIResponseError("AI响应缺少 message。")

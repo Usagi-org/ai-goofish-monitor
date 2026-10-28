@@ -77,7 +77,7 @@ async def run_ai_generation_job(
     scheduler_service: SchedulerService,
     generation_service: TaskGenerationService,
 ) -> None:
-    output_filename = build_criteria_filename(req.keyword)
+    output_filename = None
     try:
         await advance_job(
             generation_service,
@@ -95,6 +95,7 @@ async def run_ai_generation_job(
             progress_callback=report_progress,
         )
 
+        output_filename = build_criteria_filename(req.keyword)
         await advance_job(
             generation_service,
             job_id,
@@ -113,6 +114,6 @@ async def run_ai_generation_job(
         await reload_scheduler(task_service, scheduler_service)
         await generation_service.complete(job_id, task, f"任务“{req.task_name}”创建完成。")
     except Exception as exc:
-        if os.path.exists(output_filename):
+        if output_filename and os.path.exists(output_filename):
             os.remove(output_filename)
         await generation_service.fail(job_id, f"AI 任务生成失败: {exc}")
