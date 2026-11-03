@@ -36,18 +36,18 @@ def build_price_history_path(keyword: str) -> str:
 def parse_price_value(value: Any) -> Optional[float]:
     if value is None:
         return None
-    if isinstance(value, (int, float)):
-        return round(float(value), 2)
-
-    text = str(value).strip().replace("¥", "").replace(",", "")
-    if not text or text in {"价格异常", "暂无", "-", "N/A"}:
-        return None
-    if text.endswith("万"):
-        text = str(float(text[:-1]) * 10000)
     try:
-        return round(float(text), 2)
-    except (TypeError, ValueError):
+        if isinstance(value, (int, float)):
+            price = float(value)
+        else:
+            text = str(value).strip().replace("¥", "").replace(",", "")
+            if not text or text in {"价格异常", "暂无", "-", "N/A"}:
+                return None
+            price = float(text[:-1]) * 10000 if text.endswith("万") else float(text)
+    except (TypeError, ValueError, OverflowError):
         return None
+    # Non-finite values cannot be used in SQLite history or price comparisons.
+    return round(price, 2) if math.isfinite(price) else None
 
 
 def _safe_iso_datetime(value: Optional[str]) -> str:
@@ -213,8 +213,8 @@ def _dedupe_latest(records: Iterable[dict], group_key: str) -> list[dict]:
 
 
 def _summarize_prices(records: Iterable[dict]) -> dict:
-    entries = [record for record in records if parse_price_value(record.get("price")) is not None]
-    prices = [float(record["price"]) for record in entries]
+    prices = [price for record in records
+              if (price := parse_price_value(record.get("price"))) is not None]
     if not prices:
         return {
             "sample_count": 0,
@@ -280,13 +280,18 @@ def build_item_price_context(
     if not item_id:
         return {"observation_count": 0, "deal_score": None, "deal_label": "暂无数据"}
 
-    item_snapshots = [record for record in snapshots if str(record.get("item_id")) == str(item_id)]
+    item_snapshots = [
+        {**record, "price": price}
+        for record in snapshots
+        if str(record.get("item_id")) == str(item_id)
+        and (price := parse_price_value(record.get("price"))) is not None
+    ]
     if not item_snapshots:
         return {"observation_count": 0, "deal_score": None, "deal_label": "暂无数据"}
 
     latest_item_snapshot = item_snapshots[-1]
-    price_now = current_price if current_price is not None else parse_price_value(latest_item_snapshot.get("price"))
-    historical_prices = [float(record["price"]) for record in item_snapshots if parse_price_value(record.get("price")) is not None]
+    price_now = parse_price_value(current_price) if current_price is not None else latest_item_snapshot["price"]
+    historical_prices = [record["price"] for record in item_snapshots]
     source_snapshots = market_snapshots if market_snapshots is not None else snapshots
     latest_run_id = str(source_snapshots[-1].get("run_id") or "") if source_snapshots else ""
     latest_market = _dedupe_latest(
