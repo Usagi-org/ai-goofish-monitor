@@ -72,7 +72,10 @@ def _sanitize_no_proxy_env() -> None:
 
     See https://github.com/encode/httpx/pull/3741
     """
-    for key in ("NO_PROXY", "no_proxy"):
+    # Windows treats environment variable names case-insensitively, so both
+    # spellings refer to the same entry and processing it twice is wasted work.
+    keys = ("NO_PROXY",) if os.name == "nt" else ("NO_PROXY", "no_proxy")
+    for key in keys:
         value = os.environ.get(key)
         if not value:
             continue

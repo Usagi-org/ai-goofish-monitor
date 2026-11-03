@@ -277,6 +277,10 @@ def test_sanitize_no_proxy_noop_without_env(monkeypatch):
     _sanitize_no_proxy_env()
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows environment variable names are case-insensitive",
+)
 def test_sanitize_no_proxy_handles_both_keys(monkeypatch):
     monkeypatch.setenv("NO_PROXY", "::1/128")
     monkeypatch.setenv("no_proxy", "fe80::1/10")
@@ -286,10 +290,16 @@ def test_sanitize_no_proxy_handles_both_keys(monkeypatch):
 
 
 def test_sanitize_no_proxy_unwraps_bracketed_ipv6(monkeypatch):
+    monkeypatch.delenv("no_proxy", raising=False)
     monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1,::1,[::1]")
-    monkeypatch.setenv("no_proxy", "[::1/128],10.0.0.0/8,[not-ipv6]")
     _sanitize_no_proxy_env()
     assert os.environ["NO_PROXY"] == "localhost,127.0.0.1,::1,::1"
+
+
+def test_sanitize_no_proxy_unwraps_bracketed_ipv6_lowercase(monkeypatch):
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.setenv("no_proxy", "[::1/128],10.0.0.0/8,[not-ipv6]")
+    _sanitize_no_proxy_env()
     assert os.environ["no_proxy"] == "::1,10.0.0.0/8,[not-ipv6]"
 
 

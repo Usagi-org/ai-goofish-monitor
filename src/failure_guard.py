@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -88,25 +89,56 @@ def _cookie_changed(
 
 
 class _FileLock:
+    """Cross-process exclusive lock backed by a sidecar lock file.
+
+    The lock must not live on the JSON file itself: ``os.replace`` cannot
+    replace a file that is still open on Windows. Windows has no ``fcntl``, so
+    use ``msvcrt.locking`` there and fall back silently when neither API works.
+    """
+
     def __init__(self, fh):
         self._fh = fh
+        self._unlock = None
 
     def __enter__(self):
         try:
             import fcntl
+        except ImportError:
+            fcntl = None
 
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+        if fcntl is not None:
+            try:
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+                self._unlock = lambda: fcntl.flock(
+                    self._fh.fileno(), fcntl.LOCK_UN
+                )
+                return self
+            except OSError:
+                pass
+
+        try:
+            import msvcrt
+
+            self._fh.seek(0)
+            if not self._fh.read(1):
+                self._fh.write(b"\0")
+                self._fh.flush()
+            self._fh.seek(0)
+            msvcrt.locking(self._fh.fileno(), msvcrt.LK_LOCK, 1)
+            self._unlock = lambda: msvcrt.locking(
+                self._fh.fileno(), msvcrt.LK_UNLCK, 1
+            )
         except Exception:
-            pass
+            self._unlock = None
         return self
 
     def __exit__(self, exc_type, exc, tb):
-        try:
-            import fcntl
-
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
-        except Exception:
-            pass
+        if self._unlock is not None:
+            try:
+                self._unlock()
+            except Exception:
+                pass
+            self._unlock = None
         return False
 
 
@@ -133,14 +165,42 @@ def _read_json_file(path: str) -> dict:
         return {}
 
 
+def _replace_with_retry(src: str, dst: str, *, attempts: int = 5) -> None:
+    """Replace ``dst`` with ``src``, retrying transient Windows share errors."""
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                break
+            time.sleep(0.05 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+
+
 def _atomic_write_json(path: str, data: dict) -> None:
     _ensure_parent_dir(path)
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    directory = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.",
+        suffix=".tmp",
+        dir=directory,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        _replace_with_retry(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 @dataclass(frozen=True)
@@ -188,9 +248,9 @@ class FailureGuard:
 
     def _update_task(self, task_key: str, updater) -> dict:
         _ensure_parent_dir(self.path)
-        with open(self.path, "a+", encoding="utf-8") as fh:
-            with _FileLock(fh):
-                fh.seek(0)
+        lock_path = f"{self.path}.lock"
+        with open(lock_path, "a+b") as lock_fh:
+            with _FileLock(lock_fh):
                 data = self._load()
                 tasks = data.setdefault("tasks", {})
                 entry = tasks.get(task_key) or {}

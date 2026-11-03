@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 addopts = "-v --tb=short"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

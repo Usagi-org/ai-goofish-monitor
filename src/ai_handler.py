@@ -11,11 +11,28 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 import requests
 
+
+def _ensure_utf8_stdio() -> None:
+    """Best-effort switch stdio to UTF-8 without detaching the streams.
+
+    Replacing ``sys.stdout`` with a codecs writer hides the original stream from
+    libraries such as pytest's capture plugin and makes repeated imports fail.
+    ``reconfigure`` keeps the existing stream object and is safe to call here.
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 # 设置标准输出编码为UTF-8，解决Windows控制台编码问题
 if sys.platform.startswith('win'):
-    import codecs
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
+    _ensure_utf8_stdio()
 
 from src.config import (
     AI_DEBUG_MODE,
