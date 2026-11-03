@@ -83,3 +83,9 @@ def test_parse_ai_response_json_still_returns_array_when_no_object_exists():
     result = parse_ai_response_json('结果如下：[1, 2] 以上。')
 
     assert result == [1, 2]
+
+
+def test_parse_ai_response_json_keeps_whole_array_of_objects_in_wrapped_text():
+    result = parse_ai_response_json('结果如下：[ {"id": 1}, {"id": 2} ] 以上。')
+
+    assert result == [{"id": 1}, {"id": 2}]
