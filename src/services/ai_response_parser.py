@@ -103,16 +103,27 @@ def _extract_first_json_value(
 ):
     decoder = json.JSONDecoder()
     last_error: json.JSONDecodeError | None = None
+    first_array = None
 
     for start_index, char in enumerate(content):
         if char not in "{[":
             continue
+        if first_array is not None and char == "[":
+            continue
         try:
             parsed, _ = decoder.raw_decode(content[start_index:])
-            return parsed
         except json.JSONDecodeError as exc:
             last_error = exc
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+        # 正文里的 "[1]"、"[2]" 这类引用标记也能被解析成数组；
+        # 先继续找后面的 JSON 对象，找不到时再退回第一个数组。
+        if first_array is None:
+            first_array = parsed
 
+    if first_array is not None:
+        return first_array
     if last_error is not None:
         raise last_error
     raise fallback_error
