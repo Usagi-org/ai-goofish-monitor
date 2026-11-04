@@ -1,6 +1,6 @@
 # 闲鱼智能监控系统
 
-[中文] ｜ [English](README_EN.md)
+[中文] ｜ [English](README_EN.md) ｜ [日本語](README_JA.md)
 
 基于 Playwright 和 AI 的闲鱼多任务实时监控，提供完整的 Web 管理界面。
 

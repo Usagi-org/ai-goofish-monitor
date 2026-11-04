@@ -1,6 +1,6 @@
 # Xianyu Intelligent Monitor Bot
 
-[中文](README.md) ｜ [English]
+[中文](README.md) ｜ [English] ｜ [日本語](README_JA.md)
 
 A Playwright and AI-powered multi-task real-time monitoring tool for Xianyu (闲鱼), featuring a complete web management interface.
 
