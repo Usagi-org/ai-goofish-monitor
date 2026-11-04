@@ -337,3 +337,34 @@ def test_legacy_config_client_initializes_with_bracketed_no_proxy(tmp_path):
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+def test_analysis_budget_keeps_reasoning_models_from_truncating_the_json():
+    # #499: 思考 token 计入输出预算，旧的 4000 默认值会在 prompt_version
+    # 等字段写出前截断分析 JSON（finish_reason=length）。分析预算应与
+    # 标准生成路径共用 prompt_utils.CRITERIA_MAX_OUTPUT_TOKENS。
+    from src.infrastructure.external.ai_client import ANALYSIS_MAX_OUTPUT_TOKENS
+    from src.prompt_utils import CRITERIA_MAX_OUTPUT_TOKENS
+
+    assert ANALYSIS_MAX_OUTPUT_TOKENS == CRITERIA_MAX_OUTPUT_TOKENS
+
+    client = AIClient.__new__(AIClient)
+    client.settings = SimpleNamespace(
+        model_name='fake-model',
+        enable_response_format=False,
+        enable_thinking=False,
+    )
+    request_history = []
+
+    async def fake_create(**kwargs):
+        request_history.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok":true}'))]
+        )
+
+    client.client = _build_fake_client(fake_create)
+
+    response = asyncio.run(client._call_ai([{'role': 'user', 'content': 'hi'}]))
+
+    assert response == '{"ok":true}'
+    sent = request_history[0]
+    assert sent.get('max_tokens', sent.get('max_output_tokens')) == ANALYSIS_MAX_OUTPUT_TOKENS

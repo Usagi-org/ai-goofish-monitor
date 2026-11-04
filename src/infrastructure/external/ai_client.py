@@ -82,6 +82,11 @@ def _sanitize_no_proxy_env() -> None:
             os.environ[key] = ",".join(cleaned)
 
 
+# 商品分析输出上限（对齐 prompt_utils.CRITERIA_MAX_OUTPUT_TOKENS）。
+# 推理模型的思考 token 会占用输出预算，上限过小会在 prompt_version 等字段
+# 写出前把 JSON 截断（见 #499：finish_reason=length, reasoning_tokens 占满预算）。
+ANALYSIS_MAX_OUTPUT_TOKENS = 8192
+
 class AIClient:
     """AI 客户端封装"""
 
@@ -199,7 +204,7 @@ class AIClient:
         messages: List[Dict],
         *,
         temperature: float = 0.1,
-        max_output_tokens: int = 4000,
+        max_output_tokens: int = ANALYSIS_MAX_OUTPUT_TOKENS,
         enable_json_output: Optional[bool] = None,
     ) -> str:
         """调用 AI API"""
