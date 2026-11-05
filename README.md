@@ -91,7 +91,9 @@ docker compose up -d
 - `关键词判断`：填写关键词规则，任务会直接创建，不经过 AI 生成流程。
 - `区域筛选`：已改为省 / 市 / 区三级选择器，数据基于闲鱼页面抓取快照内置。
 
+## 一键部署
 
+[![Deploy on RepoCloud](https://d16t0pc4846x52.cloudfront.net/deploylobe.svg)](https://repocloud.io/details/Goofish%20Monitor/)
 
 ## 用户使用说明
 
