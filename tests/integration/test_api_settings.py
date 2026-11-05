@@ -1,3 +1,4 @@
+import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -437,3 +438,74 @@ def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
     assert request_history[0][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
     assert request_history[1][0] == "responses"
     assert request_history[1][1]["input"][0]["content"][0]["text"] == settings.AI_TEST_PROMPT
+
+
+def test_ai_test_endpoint_falls_back_to_responses_when_gateway_rejects_chat_protocol(
+    tmp_path, monkeypatch
+):
+    """PackyCode's codex group answers /v1/chat/completions with 400 protocol_not_supported."""
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+    request_paths = []
+
+    def _gateway(request):
+        request_paths.append(request.url.path)
+        if request.url.path.endswith("/chat/completions"):
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "模型 demo-model 不支持 chat completions 协议",
+                        "code": "protocol_not_supported",
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_1",
+                "object": "response",
+                "created_at": 0,
+                "model": "demo-model",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "id": "msg_1",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {"type": "output_text", "text": "OK", "annotations": []}
+                        ],
+                    }
+                ],
+            },
+        )
+
+    import openai
+
+    real_openai = openai.OpenAI
+
+    def _openai_with_gateway(**kwargs):
+        kwargs["http_client"] = httpx.Client(transport=httpx.MockTransport(_gateway))
+        return real_openai(**kwargs)
+
+    monkeypatch.setattr(openai, "OpenAI", _openai_with_gateway)
+
+    response = client.post(
+        "/api/settings/ai/test",
+        json={
+            "OPENAI_API_KEY": "demo",
+            "OPENAI_BASE_URL": "https://example.com/v1/",
+            "OPENAI_MODEL_NAME": "demo-model",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["response"] == "OK"
+    assert request_paths == ["/v1/chat/completions", "/v1/responses"]

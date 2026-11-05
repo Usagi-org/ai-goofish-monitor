@@ -28,7 +28,9 @@ CHAT_COMPLETIONS_API_UNSUPPORTED_MARKERS = (
     "page not found",
     "/chat/completions",
     "/v1/chat/completions",
+    "不支持 chat completions 协议",
 )
+PROTOCOL_NOT_SUPPORTED_CODE = "protocol_not_supported"
 UNSUPPORTED_TEMPERATURE_MARKERS = (
     "temperature",
     "sampling temperature",
@@ -98,6 +100,9 @@ def is_responses_api_unsupported_error(error: Exception) -> bool:
 
 def is_chat_completions_api_unsupported_error(error: Exception) -> bool:
     """识别 OpenAI 兼容服务未实现 Chat Completions API 的错误。"""
+    body = getattr(error, "body", None)
+    if isinstance(body, dict) and body.get("code") == PROTOCOL_NOT_SUPPORTED_CODE:
+        return True
     return _is_api_unsupported_error(error, CHAT_COMPLETIONS_API_UNSUPPORTED_MARKERS)
 
 
