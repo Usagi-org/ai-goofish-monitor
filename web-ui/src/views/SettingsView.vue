@@ -15,11 +15,17 @@ import { toast } from '@/components/ui/toast'
 import { getPromptContent, listPrompts, updatePrompt } from '@/api/prompts'
 import NotificationSettingsPanel from '@/components/settings/NotificationSettingsPanel.vue'
 import RotationSettingsPanel from '@/components/settings/RotationSettingsPanel.vue'
+import ModelPicker from '@/components/settings/ModelPicker.vue'
 const { t } = useI18n()
 
 const {
   notificationSettings,
   aiSettings,
+  aiModels,
+  isLoadingModels,
+  hasLoadedModels,
+  modelListError,
+  loadAiModels,
   rotationSettings,
   systemStatus,
   isLoading,
@@ -96,7 +102,11 @@ async function handleSaveRotation() {
 async function handleTestAi() {
   try {
     const res = await testAiConnection()
-    notifySuccess(t('settings.ai.testSuccess'), res.message)
+    if (res.success) {
+      notifySuccess(t('settings.ai.testSuccess'), res.message)
+    } else {
+      notifyError(t('settings.ai.testFailed'), res.message)
+    }
   } catch (e) {
     notifyError(t('settings.ai.testFailed'), (e as Error).message)
   }
@@ -219,8 +229,32 @@ watch(selectedPrompt, async (value) => {
               </p>
             </div>
             <div class="grid gap-2">
-              <Label>{{ t('settings.ai.modelName') }}</Label>
-              <Input v-model="aiSettings.OPENAI_MODEL_NAME" placeholder="gpt-3.5-turbo" />
+              <Label for="ai-model-name">{{ t('settings.ai.modelName') }}</Label>
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <Input id="ai-model-name" v-model="aiSettings.OPENAI_MODEL_NAME" autocomplete="off" placeholder="gpt-3.5-turbo" aria-describedby="ai-model-help" />
+                <ModelPicker v-model="aiSettings.OPENAI_MODEL_NAME" :models="aiModels" :loading="isLoadingModels" :loaded="hasLoadedModels" :error="modelListError" :disabled="!aiSettings.OPENAI_BASE_URL?.trim()" @refresh="loadAiModels" />
+              </div>
+              <p id="ai-model-help" class="text-xs text-gray-500">{{ t('settings.ai.modelsHelp') }}</p>
+              <p v-if="hasLoadedModels" class="text-xs text-gray-500">
+                {{ aiModels.length ? t('settings.ai.modelsLoaded', { count: aiModels.length }) : t('settings.ai.modelsEmpty') }}
+              </p>
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('settings.ai.outputFormat') }}</Label>
+              <Select v-model="aiSettings.AI_OUTPUT_FORMAT">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="json_object">JSON Object</SelectItem>
+                  <SelectItem value="json_schema">JSON Schema</SelectItem>
+                  <SelectItem value="none">{{ t('settings.ai.outputNone') }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p class="text-xs text-gray-500">{{ t('settings.ai.outputHelp') }}</p>
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('settings.ai.outputBudget') }}</Label>
+              <Input v-model.number="aiSettings.AI_MAX_OUTPUT_TOKENS" type="number" min="512" max="65536" step="512" />
+              <p class="text-xs text-gray-500">{{ t('settings.ai.budgetHelp') }}</p>
             </div>
             <div class="grid gap-2">
               <Label>{{ t('settings.ai.proxy') }}</Label>
