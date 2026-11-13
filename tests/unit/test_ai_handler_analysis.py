@@ -7,6 +7,13 @@ import src.ai_handler as ai_handler
 import src.config as app_config
 
 
+@pytest.fixture(autouse=True)
+def default_output_mode(monkeypatch):
+    # Keep legacy-mode tests independent of the deployment's .env settings.
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_object")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "16384")
+
+
 def _build_fake_client(responses_create_impl, chat_create_impl=None):
     responses = SimpleNamespace(create=responses_create_impl)
     chat = SimpleNamespace(
@@ -241,3 +248,33 @@ def test_get_ai_analysis_uses_first_json_object_when_model_returns_multiple_obje
 
     assert result["is_recommended"] is True
     assert result["reason"] == "first"
+
+
+
+def test_analysis_schema_requests_configured_budget_and_rejects_missing_fields(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_schema")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "16384")
+    history = []
+    async def create(**kw):
+        history.append(kw)
+        return SimpleNamespace(output_text='{"prompt_version":"v1","is_recommended":true,"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}')
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    monkeypatch.setattr(ai_handler, "ENABLE_RESPONSE_FORMAT", True)
+    with pytest.raises(ValueError):
+        asyncio.run(ai_handler.get_ai_analysis({"商品信息":{"商品ID":"schema-test"}}, prompt_text="JSON"))
+    assert history[0]["max_tokens"] == 16384
+    assert history[0]["response_format"]["type"] == "json_schema"
+
+
+
+def test_analysis_does_not_repeat_a_truncated_response_with_same_budget(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    async def create(**kw):
+        calls.append(kw)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="length", message=SimpleNamespace(content='{"reason":"partial"}'))])
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    with pytest.raises(ValueError, match="未完成"):
+        asyncio.run(ai_handler.get_ai_analysis({"商品信息":{"商品ID":"cutoff"}}, prompt_text="JSON"))
+    assert len(calls) == 1
