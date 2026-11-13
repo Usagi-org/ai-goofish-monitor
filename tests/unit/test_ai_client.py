@@ -337,3 +337,22 @@ def test_legacy_config_client_initializes_with_bracketed_no_proxy(tmp_path):
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+
+def test_call_ai_schema_falls_back_to_object_and_uses_configured_budget():
+    client = AIClient.__new__(AIClient)
+    client.settings = SimpleNamespace(model_name="test", enable_response_format=True,
+        enable_thinking=False, output_format="json_schema", max_output_tokens=16384)
+    history = []
+    async def create(**kw):
+        history.append(kw)
+        if len(history) == 1:
+            raise Exception("json_schema is not supported by this model")
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content='{"criteria":"正文"}'))])
+    client.client = _build_fake_client(create)
+    result = asyncio.run(client._call_ai([{"role":"user","content":"JSON"}]))
+    assert result == '{"criteria":"正文"}'
+    assert history[0]["response_format"]["type"] == "json_schema"
+    assert history[1]["response_format"] == {"type":"json_object"}
+    assert history[0]["max_tokens"] == 16384

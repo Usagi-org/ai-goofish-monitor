@@ -82,3 +82,25 @@ def test_json_output_error_not_triggered_by_unrelated_400():
 def test_json_output_error_not_triggered_without_body():
     err = Exception("some random 400 error")
     assert is_json_output_unsupported_error(err) is False
+
+
+import pytest
+from src.services.ai_request_compat import build_ai_request_params
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+@pytest.mark.parametrize("output_format", ["json_object", "json_schema", "none"])
+def test_output_formats_use_correct_api_envelope(api_mode, output_format):
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}},
+              "required": ["ok"], "additionalProperties": False}
+    result = build_ai_request_params(api_mode, model="test", messages=[],
+        enable_json_output=True, output_format=output_format, json_schema=schema,
+        schema_name="test_result")
+    actual = result.get("response_format") if api_mode == "chat_completions" else result.get("text", {}).get("format")
+    if output_format == "none":
+        assert actual is None
+    else:
+        assert actual["type"] == output_format
+        if output_format == "json_schema":
+            envelope = actual["json_schema"] if api_mode == "chat_completions" else actual
+            assert envelope["strict"] is True and envelope["schema"] == schema
+            assert envelope["name"] == "test_result"

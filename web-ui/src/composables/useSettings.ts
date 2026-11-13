@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import * as settingsApi from '@/api/settings'
 import type {
   NotificationSettings,
@@ -19,6 +19,47 @@ export function useSettings() {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<Error | null>(null)
+
+  const aiModels = ref<string[]>([])
+  const isLoadingModels = ref(false)
+  const hasLoadedModels = ref(false)
+  const modelListError = ref<string | null>(null)
+  let modelRequestVersion = 0
+
+  watch(
+    () => [aiSettings.value.OPENAI_BASE_URL, aiSettings.value.OPENAI_API_KEY, aiSettings.value.PROXY_URL],
+    () => {
+      modelRequestVersion++
+      aiModels.value = []
+      hasLoadedModels.value = false
+      modelListError.value = null
+      isLoadingModels.value = false
+    },
+    { flush: 'sync' },
+  )
+
+  async function loadAiModels() {
+    const version = ++modelRequestVersion
+    isLoadingModels.value = true
+    hasLoadedModels.value = false
+    modelListError.value = null
+    aiModels.value = []
+    try {
+      const result = await settingsApi.getAiModels({
+        OPENAI_BASE_URL: aiSettings.value.OPENAI_BASE_URL,
+        OPENAI_API_KEY: aiSettings.value.OPENAI_API_KEY?.trim() || undefined,
+        PROXY_URL: aiSettings.value.PROXY_URL,
+      })
+      if (version !== modelRequestVersion) return
+      if (!result.success) throw new Error(result.message)
+      aiModels.value = result.models
+      hasLoadedModels.value = true
+    } catch (e) {
+      if (version === modelRequestVersion) modelListError.value = (e as Error).message
+    } finally {
+      if (version === modelRequestVersion) isLoadingModels.value = false
+    }
+  }
 
   async function fetchAll() {
     isLoading.value = true
@@ -149,6 +190,11 @@ export function useSettings() {
   return {
     notificationSettings,
     aiSettings,
+    aiModels,
+    isLoadingModels,
+    hasLoadedModels,
+    modelListError,
+    loadAiModels,
     rotationSettings,
     systemStatus,
     isLoading,

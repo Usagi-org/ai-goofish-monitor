@@ -81,12 +81,14 @@ def is_json_output_unsupported_error(error: Exception) -> bool:
     if isinstance(body, dict) and body.get("param") in (
         "response_format",
         "response_format.type",
+        "text.format",
+        "text.format.type",
     ):
         return True
 
-    message = str(error)
+    message = str(error).lower()
     return (
-        "not supported" in message.lower()
+        any(term in message for term in ("not supported", "does not support", "unsupported"))
         and any(marker in message for marker in UNSUPPORTED_JSON_OUTPUT_MARKERS)
     )
 
@@ -109,8 +111,24 @@ def build_ai_request_params(
     temperature: float | None = None,
     max_output_tokens: int | None = None,
     enable_json_output: bool = False,
+    output_format: str = "json_object",
+    json_schema: dict | None = None,
+    schema_name: str = "analysis_result",
 ) -> Dict[str, Any]:
     """根据 API 模式构建请求参数。"""
+    if output_format not in {"none", "json_object", "json_schema"}:
+        raise ValueError(f"不支持的输出格式: {output_format}")
+    format_config = None
+    if enable_json_output and output_format != "none":
+        format_config = {"type": output_format}
+        if output_format == "json_schema":
+            if json_schema is None:
+                raise ValueError("JSON Schema 模式必须提供 schema。")
+            schema_config = {"name": schema_name, "strict": True, "schema": copy.deepcopy(json_schema)}
+            if api_mode == CHAT_COMPLETIONS_API_MODE:
+                format_config["json_schema"] = schema_config
+            else:
+                format_config.update(schema_config)
     request_params = {"model": model}
     if api_mode == RESPONSES_API_MODE:
         request_params["input"] = build_responses_input(messages)
@@ -118,7 +136,9 @@ def build_ai_request_params(
             request_params["max_output_tokens"] = max_output_tokens
         if temperature is not None:
             request_params["temperature"] = temperature
-        return add_json_text_format(request_params, enable_json_output)
+        if format_config is not None:
+            request_params["text"] = {"format": format_config}
+        return request_params
 
     if api_mode == CHAT_COMPLETIONS_API_MODE:
         request_params["messages"] = copy.deepcopy(list(messages))
@@ -126,7 +146,9 @@ def build_ai_request_params(
             request_params["max_tokens"] = max_output_tokens
         if temperature is not None:
             request_params["temperature"] = temperature
-        return add_json_response_format(request_params, enable_json_output)
+        if format_config is not None:
+            request_params["response_format"] = format_config
+        return request_params
 
     raise ValueError(f"不支持的 AI API 模式: {api_mode}")
 
@@ -236,3 +258,8 @@ def _build_image_input_item(item: Dict[str, Any]) -> Dict[str, Any]:
         "image_url": image_url,
         "detail": item.get("detail", IMAGE_DETAIL_AUTO),
     }
+
+
+def next_output_format(current: str) -> str:
+    """只在服务明确拒绝格式参数时逐级回退，调用方必须记录降级。"""
+    return {"json_schema": "json_object", "json_object": "none", "none": "none"}[current]
