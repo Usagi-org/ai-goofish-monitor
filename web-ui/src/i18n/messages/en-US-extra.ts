@@ -247,6 +247,16 @@ const enUSExtra = {
       urlLabel: 'WeCom Bot URL',
       configuredHint: 'Bot URL is already stored.',
     },
+    dingtalk: {
+      title: 'DingTalk Bot',
+      description: 'Supports custom group bot Markdown delivery and optional signing secret. Sensitive fields are not echoed back.',
+      webhookLabel: 'DingTalk Webhook URL',
+      secretLabel: 'Signing Secret DINGTALK_SECRET (Optional)',
+      secretPlaceholder: 'Optional, e.g. SEC..., leave blank to keep current value',
+      webhookConfiguredHint: 'Webhook URL is already stored.',
+      secretConfiguredHint: 'Signing secret is already stored.',
+      secretOptionalHint: 'No signing secret configured (fill in if signature verification is enabled).',
+    },
     telegram: {
       description: 'The bot token is sensitive, while Chat ID and API base URL can be viewed and updated directly.',
       chatIdPlaceholder: 'Example: 123456789',

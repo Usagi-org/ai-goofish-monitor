@@ -8,6 +8,7 @@ from .gotify_client import GotifyClient
 from .ntfy_client import NtfyClient
 from .telegram_client import TelegramClient
 from .wecom_bot_client import WeComBotClient
+from .dingtalk_client import DingTalkClient
 from .webhook_client import WebhookClient
 from .pushplus_client import PushPlusClient
 
@@ -28,6 +29,11 @@ def build_notification_clients(settings: NotificationSettings):
             pcurl_to_mobile=pcurl_to_mobile,
         ),
         WeComBotClient(settings.wx_bot_url, pcurl_to_mobile=pcurl_to_mobile),
+        DingTalkClient(
+            settings.dingtalk_webhook,
+            settings.dingtalk_secret,
+            pcurl_to_mobile=pcurl_to_mobile,
+        ),
         TelegramClient(
             settings.telegram_bot_token,
             settings.telegram_chat_id,
