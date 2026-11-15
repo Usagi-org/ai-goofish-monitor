@@ -55,9 +55,14 @@ from src.services.item_analysis_dispatcher import (
 from src.services.price_history_service import (
     build_market_reference,
     load_price_snapshots,
+    parse_price_value,
     record_market_snapshots,
 )
-from src.services.result_storage_service import load_processed_link_keys
+from src.services.result_storage_service import (
+    evaluate_price_drop,
+    load_processed_item_states,
+    load_processed_link_keys,
+)
 from src.services.seller_profile_cache import SellerProfileCache
 from src.services.search_pagination import (
     advance_search_page,
@@ -282,6 +287,36 @@ def _get_seller_profile_cache_ttl(task_config: dict) -> int:
     configured = task_config.get("seller_profile_cache_ttl")
     default = _as_int(os.getenv("SELLER_PROFILE_CACHE_TTL"), 1800)
     return max(0, _as_int(configured, default))
+
+
+def build_dispatcher_saver(
+    *,
+    saver_fn,
+    processed_links: set[str],
+    processed_item_states: dict[str, dict],
+    in_flight_links: set[str],
+):
+    async def _wrapped_saver(rec: dict, kw: str) -> bool:
+        item_info = rec.get("商品信息", {}) or {}
+        rec_link = str(item_info.get("商品链接") or "")
+        rec_key = get_link_unique_key(rec_link) if rec_link else ""
+        try:
+            saved = bool(await saver_fn(rec, kw))
+            if saved and rec_key:
+                analysis_info = rec.get("ai_analysis", {}) or {}
+                existing_state = processed_item_states.get(rec_key) or {}
+                processed_links.add(rec_key)
+                processed_item_states[rec_key] = {
+                    "price": parse_price_value(item_info.get("当前售价")),
+                    "status": existing_state.get("status") or "active",
+                    "is_recommended": bool(analysis_info.get("is_recommended")),
+                }
+            return saved
+        finally:
+            if rec_key:
+                in_flight_links.discard(rec_key)
+
+    return _wrapped_saver
 
 
 def _default_context_options() -> dict:
@@ -531,7 +566,8 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     history_seen_item_ids: set[str] = set()
     historical_snapshots = load_price_snapshots(keyword)
     result_filename = build_result_filename(keyword)
-    processed_links = load_processed_link_keys(keyword)
+    processed_item_states = load_processed_item_states(keyword)
+    processed_links = load_processed_link_keys(keyword) | set(processed_item_states.keys())
     if processed_links:
         print(f"LOG: 发现已存在结果集 {result_filename}，已加载 {len(processed_links)} 个历史商品用于去重。")
     else:
@@ -599,6 +635,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     async def _run_scrape_attempt(state_file: str, proxy_server: Optional[str]) -> int:
         processed_item_count = 0
         stop_scraping = False
+        in_flight_links: set[str] = set()
 
         if not os.path.exists(state_file):
             raise FileNotFoundError(f"登录状态文件不存在: {state_file}")
@@ -657,7 +694,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 image_downloader=download_all_images,
                 ai_analyzer=get_ai_analysis,
                 notifier=send_ntfy_notification,
-                saver=save_to_jsonl,
+                saver=build_dispatcher_saver(
+                    saver_fn=save_to_jsonl,
+                    processed_links=processed_links,
+                    processed_item_states=processed_item_states,
+                    in_flight_links=in_flight_links,
+                ),
             )
 
             # 增强反检测脚本（模拟真实移动设备）
@@ -1016,20 +1058,40 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             break
 
                         unique_key = get_link_unique_key(item_data["商品链接"])
-                        if unique_key in processed_links:
+                        if unique_key in in_flight_links:
                             log_time(
-                                f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                                f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 正在后台处理中，跳过。"
                             )
                             continue
 
-                        log_time(
-                            f"[页内进度 {i}/{total_items_on_page}] 发现新商品，获取详情: {item_data['商品标题'][:30]}..."
-                        )
+                        price_drop_info = None
+                        if unique_key in processed_links:
+                            price_drop_info = evaluate_price_drop(
+                                processed_item_states.get(unique_key),
+                                item_data.get("当前售价"),
+                            )
+                            if price_drop_info is None:
+                                log_time(
+                                    f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                                )
+                                continue
+                            prev = price_drop_info["previous_price"]
+                            curr = price_drop_info["current_price"]
+                            log_time(
+                                f"[页内进度 {i}/{total_items_on_page}] [降价重评] 商品 '{item_data['商品标题'][:20]}...' 降价 (¥{prev:g} -> ¥{curr:g})，重新采集详情评估..."
+                            )
+                        else:
+                            log_time(
+                                f"[页内进度 {i}/{total_items_on_page}] 发现新商品，获取详情: {item_data['商品标题'][:30]}..."
+                            )
                         # --- 修改: 访问详情页前的等待时间，模拟用户在列表页上看了一会儿 ---
                         await random_sleep(2, 4)  # 原来是 (2, 4)
 
-                        detail_page = await context.new_page()
+                        in_flight_links.add(unique_key)
+                        submitted_to_dispatcher = False
+                        detail_page = None
                         try:
+                            detail_page = await context.new_page()
                             async with detail_page.expect_response(
                                 lambda r: DETAIL_API_URL_PATTERN in r.url, timeout=25000
                             ) as detail_info:
@@ -1126,6 +1188,8 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     "商品信息": item_data,
                                     "卖家信息": {},
                                 }
+                                if price_drop_info is not None:
+                                    final_record["降价信息"] = price_drop_info
                                 price_reference = build_market_reference(
                                     keyword=keyword,
                                     item=item_data,
@@ -1153,8 +1217,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         registration_duration_text=registration_duration_text,
                                     )
                                 )
-
-                                processed_links.add(unique_key)
+                                submitted_to_dispatcher = True
                                 processed_item_count += 1
                                 log_time(
                                     f"商品已提交后台分析。累计处理 {processed_item_count} 个新商品。"
@@ -1186,7 +1249,10 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         except Exception as e:
                             print(f"   错误: 处理商品详情时发生未知错误: {e}")
                         finally:
-                            await detail_page.close()
+                            if not submitted_to_dispatcher:
+                                in_flight_links.discard(unique_key)
+                            if detail_page is not None:
+                                await detail_page.close()
                             # --- 修改: 增加关闭页面后的短暂整理时间 ---
                             await random_sleep(2, 4)  # 原来是 (1, 2.5)
 

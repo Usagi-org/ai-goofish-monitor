@@ -4,6 +4,7 @@
 """
 import asyncio
 import copy
+import math
 import os
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
@@ -16,6 +17,25 @@ ImageDownloader = Callable[[str, list[str], str], Awaitable[list[str]]]
 AIAnalyzer = Callable[[dict, list[str], str], Awaitable[Optional[dict]]]
 Notifier = Callable[[dict, str], Awaitable[None]]
 Saver = Callable[[dict, str], Awaitable[bool]]
+
+
+def _extract_valid_price_drop(price_drop_info) -> Optional[tuple[float, float, float]]:
+    if not isinstance(price_drop_info, dict):
+        return None
+    prev = price_drop_info.get("previous_price")
+    curr = price_drop_info.get("current_price")
+    drop = price_drop_info.get("drop_amount")
+    for val in (prev, curr, drop):
+        if (
+            isinstance(val, bool)
+            or not isinstance(val, (int, float))
+            or not math.isfinite(val)
+            or val <= 0
+        ):
+            return None
+    if curr >= prev:
+        return None
+    return float(prev), float(curr), float(drop)
 
 
 @dataclass(frozen=True)
@@ -71,12 +91,13 @@ class ItemAnalysisDispatcher:
 
     async def _process_job(self, job: ItemAnalysisJob) -> None:
         record = copy.deepcopy(job.final_record)
-        item_data = record.get("商品信息", {}) or {}
         record["卖家信息"] = await self._load_seller_info(job)
         record["ai_analysis"] = await self._build_analysis_result(job, record)
-        if await self._saver(record, job.keyword):
-            self.completed_count += 1
-        await self._notify_if_recommended(item_data, record["ai_analysis"])
+        saved = await self._saver(record, job.keyword)
+        if not saved:
+            return
+        self.completed_count += 1
+        await self._notify_if_recommended(record, record["ai_analysis"])
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:
         seller_info = {}
@@ -125,7 +146,10 @@ class ItemAnalysisDispatcher:
         try:
             image_paths = await self._download_images(job, record)
             if not job.prompt_text:
-                return self._build_ai_error_result("任务未配置AI prompt，跳过分析。")
+                return self._build_ai_error_result(
+                    "任务未配置AI prompt，跳过分析。",
+                    error="任务未配置AI prompt，跳过分析。",
+                )
             ai_result = await self._ai_analyzer(record, image_paths, job.prompt_text)
             if not ai_result:
                 return self._build_ai_error_result(
@@ -164,10 +188,19 @@ class ItemAnalysisDispatcher:
             except Exception as exc:
                 print(f"   [图片] 删除图片文件时出错: {exc}")
 
-    async def _notify_if_recommended(self, item_data: dict, analysis_result: dict) -> None:
+    async def _notify_if_recommended(self, record: dict, analysis_result: dict) -> None:
         if not analysis_result.get("is_recommended"):
             return
+        raw_item_data = record.get("商品信息", {}) or {}
+        notify_item_data = dict(raw_item_data)
+        reason = analysis_result.get("reason", "无")
+        price_drop_info = record.get("降价信息")
+        valid_drop = _extract_valid_price_drop(price_drop_info)
+        if valid_drop is not None:
+            prev, curr, drop = valid_drop
+            notify_item_data["降价信息"] = dict(price_drop_info)
+            reason = f"📉 降价重评 (¥{prev:g} → ¥{curr:g}，直降 ¥{drop:g}) | {reason}"
         try:
-            await self._notifier(item_data, analysis_result.get("reason", "无"))
+            await self._notifier(notify_item_data, reason)
         except Exception as exc:
             print(f"   [通知] 发送推荐通知失败: {exc}")

@@ -4,9 +4,38 @@
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import math
 from typing import Dict
 
 from src.utils import convert_goofish_link
+
+
+def _is_valid_price_drop_info(price_drop_info: object) -> bool:
+    if not isinstance(price_drop_info, dict) or not price_drop_info:
+        return False
+    prev = price_drop_info.get("previous_price")
+    curr = price_drop_info.get("current_price")
+    if (
+        isinstance(prev, bool)
+        or isinstance(curr, bool)
+        or not isinstance(prev, (int, float))
+        or not isinstance(curr, (int, float))
+        or not math.isfinite(prev)
+        or not math.isfinite(curr)
+        or prev <= 0
+        or curr <= 0
+        or curr >= prev
+    ):
+        return False
+    drop = price_drop_info.get("drop_amount")
+    if drop is not None and (
+        isinstance(drop, bool)
+        or not isinstance(drop, (int, float))
+        or not math.isfinite(drop)
+        or drop <= 0
+    ):
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -71,7 +100,10 @@ class NotificationClient(ABC):
 
         short_title = title[:30]
         suffix = "..." if len(title) > 30 else ""
-        notification_title = f"🚨 新推荐! {short_title}{suffix}"
+        if _is_valid_price_drop_info(product_data.get("降价信息")):
+            notification_title = f"📉 降价重评 {short_title}{suffix}"
+        else:
+            notification_title = f"🚨 新推荐! {short_title}{suffix}"
 
         main_image = product_data.get('商品主图链接')
         if not main_image:
