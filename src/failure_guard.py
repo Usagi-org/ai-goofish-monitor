@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -87,26 +88,89 @@ def _cookie_changed(
     return current > (previous_mtime + 1e-6)
 
 
+_THREAD_LOCKS_GUARD = threading.Lock()
+_THREAD_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _get_thread_lock(lock_path: str) -> threading.Lock:
+    key = os.path.abspath(lock_path)
+    with _THREAD_LOCKS_GUARD:
+        lock = _THREAD_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _THREAD_LOCKS[key] = lock
+        return lock
+
+
 class _FileLock:
-    def __init__(self, fh):
-        self._fh = fh
+    def __init__(self, lock_path: str, *, timeout: float = 30.0):
+        self._lock_path = lock_path
+        self._timeout = timeout
+        self._thread_lock = _get_thread_lock(lock_path)
+        self._fh = None
+        self._os_locked = False
 
     def __enter__(self):
+        self._thread_lock.acquire()
         try:
-            import fcntl
+            _ensure_parent_dir(self._lock_path)
+            self._fh = open(self._lock_path, "a+b")
+            fd = self._fh.fileno()
+            if os.name == "nt":
+                import msvcrt
 
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
-        except Exception:
-            pass
-        return self
+                deadline = time.monotonic() + self._timeout
+                while True:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                        self._os_locked = True
+                        break
+                    except OSError:
+                        if time.monotonic() >= deadline:
+                            raise
+                        time.sleep(0.01)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                self._os_locked = True
+            return self
+        except BaseException:
+            if self._fh is not None:
+                try:
+                    self._fh.close()
+                except OSError:
+                    pass
+                self._fh = None
+            self._thread_lock.release()
+            raise
 
     def __exit__(self, exc_type, exc, tb):
         try:
-            import fcntl
+            if self._fh is not None:
+                try:
+                    if self._os_locked:
+                        fd = self._fh.fileno()
+                        if os.name == "nt":
+                            import msvcrt
 
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
-        except Exception:
-            pass
+                            os.lseek(fd, 0, os.SEEK_SET)
+                            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                        else:
+                            import fcntl
+
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+                finally:
+                    self._os_locked = False
+                    try:
+                        self._fh.close()
+                    finally:
+                        self._fh = None
+        finally:
+            self._thread_lock.release()
         return False
 
 
@@ -116,31 +180,48 @@ def _ensure_parent_dir(path: str) -> None:
         os.makedirs(parent, exist_ok=True)
 
 
-def _read_json_file(path: str) -> dict:
+def _quarantine_corrupt_file(path: str) -> None:
+    try:
+        ts = str(int(time.time()))
+        os.replace(path, f"{path}.corrupt.{ts}")
+    except OSError:
+        pass
+
+
+def _read_json_file_unlocked(path: str, *, quarantine_corrupt: bool = True) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
     except FileNotFoundError:
         return {}
-    except Exception:
-        # 文件损坏时保留现场，避免无限解析失败。
-        try:
-            ts = str(int(time.time()))
-            os.replace(path, f"{path}.corrupt.{ts}")
-        except Exception:
-            pass
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        if quarantine_corrupt:
+            # 仅在确认 JSON 解析或编码损坏时隔离现场；I/O 或权限异常需向上抛出，避免覆盖其它任务状态。
+            _quarantine_corrupt_file(path)
         return {}
+    if not isinstance(data, dict):
+        if quarantine_corrupt:
+            _quarantine_corrupt_file(path)
+        return {}
+    return data
 
 
 def _atomic_write_json(path: str, data: dict) -> None:
     _ensure_parent_dir(path)
-    tmp = f"{path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 @dataclass(frozen=True)
@@ -176,46 +257,58 @@ class FailureGuard:
         )
         self.tz_name = tz_name or os.getenv("TASK_FAILURE_TZ") or "Asia/Shanghai"
 
-    def _load(self) -> dict:
-        data = _read_json_file(self.path)
+    def _lock_path(self) -> str:
+        return f"{self.path}.lock"
+
+    def _load_unlocked(self, *, quarantine_corrupt: bool = True) -> dict:
+        data = _read_json_file_unlocked(
+            self.path, quarantine_corrupt=quarantine_corrupt
+        )
         if "tasks" not in data or not isinstance(data.get("tasks"), dict):
             data = {"version": 1, "tasks": {}}
         data.setdefault("version", 1)
         return data
 
-    def _save(self, data: dict) -> None:
+    def _save_unlocked(self, data: dict) -> None:
         _atomic_write_json(self.path, data)
+
+    def _load(self, *, quarantine_corrupt: bool = True) -> dict:
+        with _FileLock(self._lock_path()):
+            return self._load_unlocked(quarantine_corrupt=quarantine_corrupt)
+
+    def _save(self, data: dict) -> None:
+        with _FileLock(self._lock_path()):
+            self._save_unlocked(data)
 
     def _update_task(self, task_key: str, updater) -> dict:
         _ensure_parent_dir(self.path)
-        with open(self.path, "a+", encoding="utf-8") as fh:
-            with _FileLock(fh):
-                fh.seek(0)
-                data = self._load()
-                tasks = data.setdefault("tasks", {})
-                entry = tasks.get(task_key) or {}
-                if not isinstance(entry, dict):
-                    entry = {}
-                entry = updater(entry) or entry
-                tasks[task_key] = entry
-                self._save(data)
-                return entry
+        with _FileLock(self._lock_path()):
+            data = self._load_unlocked()
+            tasks = data.setdefault("tasks", {})
+            entry = tasks.get(task_key) or {}
+            if not isinstance(entry, dict):
+                entry = {}
+            entry = updater(entry) or entry
+            tasks[task_key] = entry
+            self._save_unlocked(data)
+            return entry
+
+    @staticmethod
+    def _build_reset_entry(current: datetime) -> dict:
+        return {
+            "consecutive_failures": 0,
+            "paused_until": None,
+            "last_notified_date": None,
+            "last_failure_reason": None,
+            "last_failure_at": None,
+            "last_success_at": _dt_to_str(current),
+            "cookie_path": None,
+            "cookie_mtime": None,
+        }
 
     def record_success(self, task_key: str, *, now: Optional[datetime] = None) -> None:
-        def _reset(_: dict) -> dict:
-            current = _now(self.tz_name, now=now)
-            return {
-                "consecutive_failures": 0,
-                "paused_until": None,
-                "last_notified_date": None,
-                "last_failure_reason": None,
-                "last_failure_at": None,
-                "last_success_at": _dt_to_str(current),
-                "cookie_path": None,
-                "cookie_mtime": None,
-            }
-
-        self._update_task(task_key, _reset)
+        current = _now(self.tz_name, now=now)
+        self._update_task(task_key, lambda _: self._build_reset_entry(current))
 
     def should_skip_start(
         self,
@@ -227,66 +320,65 @@ class FailureGuard:
         current = _now(self.tz_name, now=now)
         today = _today_str(self.tz_name, now=current)
 
-        data = self._load()
-        entry = (data.get("tasks") or {}).get(task_key) or {}
-        if not isinstance(entry, dict):
-            entry = {}
+        with _FileLock(self._lock_path()):
+            data = self._load_unlocked()
+            tasks = data.setdefault("tasks", {})
+            entry = tasks.get(task_key) or {}
+            if not isinstance(entry, dict):
+                entry = {}
 
-        paused_until = _str_to_dt(entry.get("paused_until"))
-        consecutive = _as_int(entry.get("consecutive_failures"), 0)
-        last_reason = (entry.get("last_failure_reason") or "").strip() or "未知错误"
-        last_notified_date = entry.get("last_notified_date")
+            paused_until = _str_to_dt(entry.get("paused_until"))
+            consecutive = _as_int(entry.get("consecutive_failures"), 0)
+            last_reason = (entry.get("last_failure_reason") or "").strip() or "未知错误"
+            last_notified_date = entry.get("last_notified_date")
 
-        previous_cookie_mtime = entry.get("cookie_mtime")
-        if cookie_path and previous_cookie_mtime is not None:
-            try:
-                previous_cookie_mtime = float(previous_cookie_mtime)
-            except (TypeError, ValueError):
-                previous_cookie_mtime = None
+            previous_cookie_mtime = entry.get("cookie_mtime")
+            if cookie_path and previous_cookie_mtime is not None:
+                try:
+                    previous_cookie_mtime = float(previous_cookie_mtime)
+                except (TypeError, ValueError):
+                    previous_cookie_mtime = None
 
-        if (
-            paused_until
-            and paused_until > current
-            and cookie_path
-            and _cookie_changed(cookie_path, previous_cookie_mtime)
-        ):
-            # cookies / 登录态更新 => 自动恢复
-            self.record_success(task_key, now=current)
+            if (
+                paused_until
+                and paused_until > current
+                and cookie_path
+                and _cookie_changed(cookie_path, previous_cookie_mtime)
+            ):
+                # cookies / 登录态更新 => 在同一把锁内重置恢复
+                tasks[task_key] = self._build_reset_entry(current)
+                self._save_unlocked(data)
+                return SkipDecision(
+                    skip=False,
+                    should_notify=False,
+                    reason="cookie_updated",
+                    paused_until=None,
+                    consecutive_failures=0,
+                )
+
+            if paused_until and current < paused_until:
+                should_notify = last_notified_date != today
+                if should_notify:
+                    updated_entry = dict(entry)
+                    updated_entry["last_notified_date"] = today
+                    tasks[task_key] = updated_entry
+                    self._save_unlocked(data)
+
+                return SkipDecision(
+                    skip=True,
+                    should_notify=should_notify,
+                    reason=last_reason,
+                    paused_until=paused_until,
+                    consecutive_failures=consecutive,
+                )
+
             return SkipDecision(
                 skip=False,
                 should_notify=False,
-                reason="cookie_updated",
+                reason="not_paused",
                 paused_until=None,
-                consecutive_failures=0,
-            )
-
-        if paused_until and current < paused_until:
-            should_notify = last_notified_date != today
-
-            if should_notify:
-
-                def _touch(e: dict) -> dict:
-                    e = dict(e or {})
-                    e["last_notified_date"] = today
-                    return e
-
-                self._update_task(task_key, _touch)
-
-            return SkipDecision(
-                skip=True,
-                should_notify=should_notify,
-                reason=last_reason,
-                paused_until=paused_until,
                 consecutive_failures=consecutive,
             )
-
-        return SkipDecision(
-            skip=False,
-            should_notify=False,
-            reason="not_paused",
-            paused_until=None,
-            consecutive_failures=consecutive,
-        )
 
     def record_failure(
         self,
