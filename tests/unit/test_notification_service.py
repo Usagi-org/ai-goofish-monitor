@@ -133,3 +133,46 @@ def test_pushplus_client_rejects_business_error_with_http_200(monkeypatch):
 
     with pytest.raises(RuntimeError, match="无效的用户token"):
         asyncio.run(client.send(_product(), "价格合适"))
+
+
+def test_notification_client_uses_price_drop_title_when_drop_info_present(monkeypatch):
+    captured = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"code": 200, "msg": "请求成功"}
+
+    def _fake_post(url, json=None, timeout=None):
+        captured["json"] = json
+        return _FakeResponse()
+
+    monkeypatch.setattr("requests.post", _fake_post)
+    client = PushPlusClient("test-token", pcurl_to_mobile=False)
+
+    drop_product = {
+        **_product(),
+        "降价信息": {
+            "previous_price": 10999.0,
+            "current_price": 9999.0,
+            "drop_amount": 1000.0,
+            "drop_ratio": 0.0909,
+        },
+    }
+    asyncio.run(
+        client.send(
+            drop_product,
+            "📉 降价重评 (¥10999 → ¥9999，直降 ¥1000) | 价格合适",
+        )
+    )
+    assert captured["json"]["title"] == "📉 降价重评 Sony A7M4"
+
+    # 空或无效降价字典仍走普通新推荐标题
+    invalid_drop_product = {
+        **_product(),
+        "降价信息": {"previous_price": 9999.0, "current_price": 9999.0},
+    }
+    asyncio.run(client.send(invalid_drop_product, "价格合适"))
+    assert captured["json"]["title"] == "🚨 新推荐! Sony A7M4"
