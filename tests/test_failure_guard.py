@@ -388,6 +388,8 @@ def test_file_lock_raises_when_posix_flock_fails_and_releases_thread_lock(
 def test_read_permission_error_aborts_update_without_quarantining_or_wiping_tasks(
     tmp_path, monkeypatch
 ):
+    import builtins
+
     guard_path = tmp_path / "guard.json"
     guard = FailureGuard(path=str(guard_path), threshold=2, pause_seconds=3600)
     base = datetime(2026, 3, 4, 12, 0, 0)
@@ -423,7 +425,6 @@ def test_read_permission_error_aborts_update_without_quarantining_or_wiping_task
     payload = json.loads(guard_path.read_text(encoding="utf-8"))
     assert set(payload["tasks"].keys()) == {"task-a", "task-b"}
 
-    # On non-root POSIX, also verify real filesystem chmod 0o200 write-only mode
     if os.name != "nt" and getattr(os, "geteuid", lambda: 1)() != 0:
         os.chmod(guard_path, 0o200)
         try:
@@ -433,3 +434,212 @@ def test_read_permission_error_aborts_update_without_quarantining_or_wiping_task
             os.chmod(guard_path, 0o600)
         assert list(tmp_path.glob("*.corrupt.*")) == []
         assert guard_path.read_bytes() == original_bytes
+
+
+def test_rename_task_migrates_guard_state_and_protects_shared_legacy_names(tmp_path):
+    guard_path = tmp_path / "guard.json"
+    guard = FailureGuard(path=str(guard_path), threshold=2, pause_seconds=3600)
+    base = datetime(2026, 3, 4, 12, 0, 0)
+
+    guard.record_failure("task-a", "err-1", now=base)
+    guard.record_failure("task-a", "err-2", now=base)
+    assert guard.get_task_state("task-a", now=base)["paused"] is True
+
+    # 唯一任务改名：A -> B，B 继承暂停，新建同名 A 不应残留旧暂停
+    guard.rename_task("task-a", "task-b", keep_old=False)
+    assert guard.get_task_state("task-b", now=base)["paused"] is True
+    assert guard.should_skip_start("task-b", now=base, record_notification=False).skip is True
+    assert guard.get_task_state("task-a", now=base)["paused"] is False
+    assert guard.should_skip_start("task-a", now=base, record_notification=False).skip is False
+
+    # 历史重名任务改名（keep_old=True）：保留原名状态并为改名后的任务保留独立副本
+    guard.rename_task("task-b", "task-c", keep_old=True)
+    assert guard.get_task_state("task-b", now=base)["paused"] is True
+    assert guard.get_task_state("task-c", now=base)["paused"] is True
+    guard.clear_task("task-c")
+    assert guard.get_task_state("task-b", now=base)["paused"] is True
+    assert guard.get_task_state("task-c", now=base)["paused"] is False
+
+
+def test_get_task_state_is_pure_read_only_and_detects_cookie_update(tmp_path):
+    guard_path = tmp_path / "guard.json"
+    cookie_path = tmp_path / "xianyu_state.json"
+    cookie_path.write_text("{}", encoding="utf-8")
+
+    guard = FailureGuard(
+        path=str(guard_path),
+        threshold=2,
+        pause_seconds=3 * 24 * 60 * 60,
+        tz_name="Asia/Shanghai",
+    )
+    base = datetime(2026, 3, 4, 12, 0, 0)
+
+    # File does not exist yet -> pure read returns default dict without creating file
+    initial = guard.get_task_state("task-a", cookie_path=str(cookie_path), now=base)
+    assert initial == {
+        "paused": False,
+        "paused_until": None,
+        "consecutive_failures": 0,
+        "threshold": 2,
+        "reason": None,
+        "last_failure_at": None,
+    }
+    assert not guard_path.exists()
+
+    guard.record_failure("task-a", "login-expired", cookie_path=str(cookie_path), now=base)
+    guard.record_failure("task-a", "login-expired", cookie_path=str(cookie_path), now=base)
+
+    before_bytes = guard_path.read_bytes()
+    next_day = base + timedelta(days=1, minutes=5)
+    paused_state = guard.get_task_state("task-a", cookie_path=str(cookie_path), now=next_day)
+    assert paused_state["paused"] is True
+    assert paused_state["consecutive_failures"] == 2
+    assert paused_state["threshold"] == 2
+    assert paused_state["reason"] == "login-expired"
+    assert paused_state["paused_until"] is not None
+    assert paused_state["last_failure_at"] == base.isoformat()
+    # Must NOT mutate last_notified_date on disk
+    assert guard_path.read_bytes() == before_bytes
+
+    # Cookie updated -> paused becomes False without clearing file on disk
+    cookie_path.write_text('{"fresh": true}', encoding="utf-8")
+    recovered_state = guard.get_task_state("task-a", cookie_path=str(cookie_path), now=next_day)
+    assert recovered_state["paused"] is False
+    assert recovered_state["paused_until"] is None
+    assert guard_path.read_bytes() == before_bytes
+
+
+def test_clear_task_resets_failure_state_without_forging_last_success_at(tmp_path):
+    guard_path = tmp_path / "guard.json"
+    guard = FailureGuard(path=str(guard_path), threshold=2, pause_seconds=3600)
+    base = datetime(2026, 3, 4, 12, 0, 0)
+
+    guard.record_failure("task-a", "err-1", now=base)
+    guard.record_failure("task-a", "err-2", now=base)
+    guard.record_failure("task-b", "other-err", now=base)
+
+    assert guard.get_task_state("task-a", now=base)["paused"] is True
+
+    guard.clear_task("task-a")
+
+    cleared = guard.get_task_state("task-a", now=base)
+    assert cleared["paused"] is False
+    assert cleared["consecutive_failures"] == 0
+    assert cleared["paused_until"] is None
+    assert cleared["reason"] is None
+
+    raw = json.loads(guard_path.read_text(encoding="utf-8"))
+    assert "task-a" not in raw["tasks"]
+    assert raw["tasks"]["task-b"]["consecutive_failures"] == 1
+    assert guard.should_skip_start("task-a", now=base).skip is False
+
+
+def test_cookie_recovery_prefers_recorded_rotated_account_path(tmp_path):
+    guard_path = tmp_path / "guard.json"
+    fallback_cookie = tmp_path / "default_state.json"
+    rotated_cookie = tmp_path / "account_rot_1.json"
+    fallback_cookie.write_text("{}", encoding="utf-8")
+    rotated_cookie.write_text("{}", encoding="utf-8")
+    os.utime(fallback_cookie, (1000, 1000))
+    os.utime(rotated_cookie, (1000, 1000))
+
+    guard = FailureGuard(path=str(guard_path), threshold=2, pause_seconds=3600)
+    base = datetime(2026, 3, 4, 12, 0, 0)
+
+    # Spider fails while using rotated_cookie
+    guard.record_failure("task-rot", "expired", cookie_path=str(rotated_cookie), now=base)
+    guard.record_failure("task-rot", "expired", cookie_path=str(rotated_cookie), now=base)
+
+    # Updating unrelated fallback cookie must NOT falsely recover rotated_cookie failure
+    fallback_cookie.write_text('{"updated": true}', encoding="utf-8")
+    os.utime(fallback_cookie, (2000, 2000))
+    still_paused = guard.get_task_state(
+        "task-rot",
+        cookie_path=str(fallback_cookie),
+        now=base + timedelta(minutes=1),
+    )
+    assert still_paused["paused"] is True
+
+    # Updating recorded rotated_cookie recovers even when caller passes None or fallback_cookie
+    rotated_cookie.write_text('{"relogged": true}', encoding="utf-8")
+    os.utime(rotated_cookie, (3000, 3000))
+
+    state_without_arg = guard.get_task_state(
+        "task-rot",
+        cookie_path=None,
+        now=base + timedelta(minutes=2),
+    )
+    assert state_without_arg["paused"] is False
+    assert state_without_arg["consecutive_failures"] == 0
+    assert state_without_arg["reason"] is None
+    assert state_without_arg["last_failure_at"] is None
+
+    decision = guard.should_skip_start(
+        "task-rot",
+        cookie_path=str(fallback_cookie),
+        now=base + timedelta(minutes=2),
+    )
+    assert decision.skip is False
+    assert decision.reason == "cookie_updated"
+    assert decision.consecutive_failures == 0
+
+
+def test_below_threshold_cookie_update_resets_state_and_snapshot_reuses_read(
+    tmp_path, monkeypatch
+):
+    guard_path = tmp_path / "guard.json"
+    cookie_path = tmp_path / "state.json"
+    cookie_path.write_text("{}", encoding="utf-8")
+    os.utime(cookie_path, (1000, 1000))
+
+    guard = FailureGuard(path=str(guard_path), threshold=3, pause_seconds=3600)
+    base = datetime(2026, 3, 4, 12, 0, 0)
+
+    guard.record_failure("task-sub", "err-once", cookie_path=str(cookie_path), now=base)
+    before_update = guard.get_task_state("task-sub", cookie_path=str(cookie_path), now=base)
+    assert before_update["paused"] is False
+    assert before_update["consecutive_failures"] == 1
+    assert before_update["reason"] == "err-once"
+    assert before_update["last_failure_at"] == base.isoformat()
+
+    # Cookie updated before threshold=3 is reached
+    cookie_path.write_text('{"fresh": true}', encoding="utf-8")
+    os.utime(cookie_path, (2000, 2000))
+
+    snapshot = guard.load_snapshot()
+    real_open = builtins.open
+
+    def forbid_guard_open(file, *args, **kwargs):
+        if os.path.abspath(os.fsdecode(os.fspath(file))) == os.path.abspath(str(guard_path)):
+            raise AssertionError("get_task_state with snapshot must not re-open guard.json")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", forbid_guard_open)
+    state_after = guard.get_task_state(
+        "task-sub",
+        cookie_path=str(cookie_path),
+        now=base + timedelta(minutes=1),
+        snapshot=snapshot,
+    )
+    monkeypatch.undo()
+
+    assert state_after == {
+        "paused": False,
+        "paused_until": None,
+        "consecutive_failures": 0,
+        "threshold": 3,
+        "reason": None,
+        "last_failure_at": None,
+    }
+
+    decision = guard.should_skip_start(
+        "task-sub",
+        cookie_path=str(cookie_path),
+        now=base + timedelta(minutes=1),
+    )
+    assert decision.skip is False
+    assert decision.reason == "cookie_updated"
+    assert decision.consecutive_failures == 0
+
+    persisted = json.loads(guard_path.read_text(encoding="utf-8"))
+    assert persisted["tasks"]["task-sub"]["consecutive_failures"] == 0

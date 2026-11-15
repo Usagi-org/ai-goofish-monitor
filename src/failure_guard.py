@@ -15,9 +15,12 @@ import json
 import os
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Optional
+
+from src.infrastructure.persistence.file_lock import FileLock as _FileLock
 
 
 try:
@@ -88,90 +91,33 @@ def _cookie_changed(
     return current > (previous_mtime + 1e-6)
 
 
-_THREAD_LOCKS_GUARD = threading.Lock()
-_THREAD_LOCKS: dict[str, threading.Lock] = {}
+def _resolve_entry_cookie_path(
+    entry: dict, fallback_cookie_path: Optional[str]
+) -> Optional[str]:
+    recorded = entry.get("cookie_path")
+    if isinstance(recorded, str) and recorded.strip():
+        return recorded.strip()
+    if isinstance(fallback_cookie_path, str) and fallback_cookie_path.strip():
+        return fallback_cookie_path.strip()
+    return None
 
 
-def _get_thread_lock(lock_path: str) -> threading.Lock:
-    key = os.path.abspath(lock_path)
-    with _THREAD_LOCKS_GUARD:
-        lock = _THREAD_LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _THREAD_LOCKS[key] = lock
-        return lock
+def _parse_cookie_mtime(entry: dict) -> Optional[float]:
+    raw_mtime = entry.get("cookie_mtime")
+    if raw_mtime is None:
+        return None
+    try:
+        return float(raw_mtime)
+    except (TypeError, ValueError):
+        return None
 
 
-class _FileLock:
-    def __init__(self, lock_path: str, *, timeout: float = 30.0):
-        self._lock_path = lock_path
-        self._timeout = timeout
-        self._thread_lock = _get_thread_lock(lock_path)
-        self._fh = None
-        self._os_locked = False
-
-    def __enter__(self):
-        self._thread_lock.acquire()
-        try:
-            _ensure_parent_dir(self._lock_path)
-            self._fh = open(self._lock_path, "a+b")
-            fd = self._fh.fileno()
-            if os.name == "nt":
-                import msvcrt
-
-                deadline = time.monotonic() + self._timeout
-                while True:
-                    os.lseek(fd, 0, os.SEEK_SET)
-                    try:
-                        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-                        self._os_locked = True
-                        break
-                    except OSError:
-                        if time.monotonic() >= deadline:
-                            raise
-                        time.sleep(0.01)
-            else:
-                import fcntl
-
-                fcntl.flock(fd, fcntl.LOCK_EX)
-                self._os_locked = True
-            return self
-        except BaseException:
-            if self._fh is not None:
-                try:
-                    self._fh.close()
-                except OSError:
-                    pass
-                self._fh = None
-            self._thread_lock.release()
-            raise
-
-    def __exit__(self, exc_type, exc, tb):
-        try:
-            if self._fh is not None:
-                try:
-                    if self._os_locked:
-                        fd = self._fh.fileno()
-                        if os.name == "nt":
-                            import msvcrt
-
-                            os.lseek(fd, 0, os.SEEK_SET)
-                            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-                        else:
-                            import fcntl
-
-                            fcntl.flock(fd, fcntl.LOCK_UN)
-                except OSError:
-                    pass
-                finally:
-                    self._os_locked = False
-                    try:
-                        self._fh.close()
-                    finally:
-                        self._fh = None
-        finally:
-            self._thread_lock.release()
-        return False
+def _has_cookie_recovered(
+    entry: dict, fallback_cookie_path: Optional[str]
+) -> bool:
+    effective_cookie_path = _resolve_entry_cookie_path(entry, fallback_cookie_path)
+    previous_mtime = _parse_cookie_mtime(entry)
+    return _cookie_changed(effective_cookie_path, previous_mtime)
 
 
 def _ensure_parent_dir(path: str) -> None:
@@ -306,6 +252,82 @@ class FailureGuard:
             "cookie_mtime": None,
         }
 
+    def load_snapshot(self) -> dict:
+        with _FileLock(self._lock_path()):
+            return self._load_unlocked(quarantine_corrupt=False)
+
+    def get_task_state(
+        self,
+        task_key: str,
+        *,
+        cookie_path: Optional[str] = None,
+        now: Optional[datetime] = None,
+        snapshot: Optional[dict] = None,
+    ) -> dict:
+        current = _now(self.tz_name, now=now)
+        data = snapshot if isinstance(snapshot, dict) else self.load_snapshot()
+        entry = (data.get("tasks") or {}).get(task_key) or {}
+        if not isinstance(entry, dict):
+            entry = {}
+
+        paused_until = _str_to_dt(entry.get("paused_until"))
+        consecutive = _as_int(entry.get("consecutive_failures"), 0)
+        raw_reason = entry.get("last_failure_reason")
+        reason = raw_reason.strip() if isinstance(raw_reason, str) and raw_reason.strip() else None
+        raw_last_failure_at = entry.get("last_failure_at")
+        last_failure_at = (
+            raw_last_failure_at.strip()
+            if isinstance(raw_last_failure_at, str) and raw_last_failure_at.strip()
+            else None
+        )
+
+        has_failure_state = consecutive > 0 or bool(paused_until and current < paused_until)
+        cookie_recovered = has_failure_state and _has_cookie_recovered(entry, cookie_path)
+        paused = bool(
+            paused_until and current < paused_until and not cookie_recovered
+        )
+
+        return {
+            "paused": paused,
+            "paused_until": _dt_to_str(paused_until) if paused else None,
+            "consecutive_failures": 0 if cookie_recovered else consecutive,
+            "threshold": self.threshold,
+            "reason": None if cookie_recovered else reason,
+            "last_failure_at": None if cookie_recovered else last_failure_at,
+        }
+
+    @contextmanager
+    def change_task(self, old_key: str, new_key: str | None = None, *, keep_old: bool = False):
+        """Hold the guard lock until the corresponding task change commits."""
+        with _FileLock(self._lock_path()):
+            original = self._load_unlocked()
+            tasks = dict(original["tasks"])
+            if new_key is not None and new_key != old_key:
+                if old_key in tasks:
+                    tasks[new_key] = tasks[old_key]
+                else:
+                    tasks.pop(new_key, None)
+            if not keep_old and old_key != new_key:
+                tasks.pop(old_key, None)
+
+            changed = tasks != original["tasks"]
+            if changed:
+                self._save_unlocked({**original, "tasks": tasks})
+            try:
+                yield
+            except BaseException:
+                if changed:
+                    self._save_unlocked(original)
+                raise
+
+    def clear_task(self, task_key: str) -> None:
+        with self.change_task(task_key):
+            pass
+
+    def rename_task(self, old_key: str, new_key: str, *, keep_old: bool = False) -> None:
+        with self.change_task(old_key, new_key, keep_old=keep_old):
+            pass
+
     def record_success(self, task_key: str, *, now: Optional[datetime] = None) -> None:
         current = _now(self.tz_name, now=now)
         self._update_task(task_key, lambda _: self._build_reset_entry(current))
@@ -316,6 +338,7 @@ class FailureGuard:
         *,
         cookie_path: Optional[str] = None,
         now: Optional[datetime] = None,
+        record_notification: bool = True,
     ) -> SkipDecision:
         current = _now(self.tz_name, now=now)
         today = _today_str(self.tz_name, now=current)
@@ -332,19 +355,10 @@ class FailureGuard:
             last_reason = (entry.get("last_failure_reason") or "").strip() or "未知错误"
             last_notified_date = entry.get("last_notified_date")
 
-            previous_cookie_mtime = entry.get("cookie_mtime")
-            if cookie_path and previous_cookie_mtime is not None:
-                try:
-                    previous_cookie_mtime = float(previous_cookie_mtime)
-                except (TypeError, ValueError):
-                    previous_cookie_mtime = None
-
-            if (
-                paused_until
-                and paused_until > current
-                and cookie_path
-                and _cookie_changed(cookie_path, previous_cookie_mtime)
-            ):
+            has_failure_state = consecutive > 0 or bool(
+                paused_until and paused_until > current
+            )
+            if has_failure_state and _has_cookie_recovered(entry, cookie_path):
                 # cookies / 登录态更新 => 在同一把锁内重置恢复
                 tasks[task_key] = self._build_reset_entry(current)
                 self._save_unlocked(data)
@@ -357,12 +371,15 @@ class FailureGuard:
                 )
 
             if paused_until and current < paused_until:
-                should_notify = last_notified_date != today
-                if should_notify:
-                    updated_entry = dict(entry)
-                    updated_entry["last_notified_date"] = today
-                    tasks[task_key] = updated_entry
-                    self._save_unlocked(data)
+                if record_notification:
+                    should_notify = last_notified_date != today
+                    if should_notify:
+                        updated_entry = dict(entry)
+                        updated_entry["last_notified_date"] = today
+                        tasks[task_key] = updated_entry
+                        self._save_unlocked(data)
+                else:
+                    should_notify = False
 
                 return SkipDecision(
                     skip=True,
@@ -407,13 +424,7 @@ class FailureGuard:
             previous_paused_until = _str_to_dt(entry.get("paused_until"))
             was_paused = bool(previous_paused_until and current < previous_paused_until)
 
-            prev_mtime = entry.get("cookie_mtime")
-            try:
-                prev_mtime = float(prev_mtime) if prev_mtime is not None else None
-            except (TypeError, ValueError):
-                prev_mtime = None
-
-            if cookie_path and _cookie_changed(cookie_path, prev_mtime):
+            if _has_cookie_recovered(entry, cookie_path):
                 entry["consecutive_failures"] = 0
                 entry["paused_until"] = None
                 entry["last_notified_date"] = None

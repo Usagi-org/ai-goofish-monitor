@@ -13,6 +13,7 @@ export function useTasks() {
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
   const stoppingTaskIds = ref<Set<number>>(new Set())
+  const unpausingTaskIds = ref<Set<number>>(new Set())
   const { on } = useWebSocket()
 
   async function fetchTasks(options?: { silent?: boolean }) {
@@ -97,24 +98,63 @@ export function useTasks() {
     }
   }
 
-  async function startTask(taskId: number) {
+  async function startTask(taskId: number, forceUnpause = false) {
     isLoading.value = true
     const task = tasks.value.find((t) => t.id === taskId)
-    const previous = task?.is_running
+    const previousRunning = task?.is_running
+    const previousGuard = task?.failure_guard ? { ...task.failure_guard } : task?.failure_guard
     if (task) {
       task.is_running = true // 乐观更新：点击后立刻显示运行中
+      if (forceUnpause && task.failure_guard) {
+        task.failure_guard = {
+          ...task.failure_guard,
+          paused: false,
+          paused_until: null,
+          consecutive_failures: 0,
+          reason: null,
+        }
+      }
     }
     try {
-      await taskApi.startTask(taskId)
-      // The websocket will update the status, but we can also optimistically update
+      await taskApi.startTask(taskId, forceUnpause)
+      if (forceUnpause) {
+        await fetchTasks({ silent: true })
+      }
     } catch (e) {
-      if (task && previous !== undefined) {
-        task.is_running = previous
+      if (task) {
+        if (previousRunning !== undefined) {
+          task.is_running = previousRunning
+        }
+        if (previousGuard !== undefined) {
+          task.failure_guard = previousGuard
+        }
       }
       if (e instanceof Error) error.value = e
       throw e
     } finally {
       isLoading.value = false
+    }
+  }
+
+  async function unpauseTask(taskId: number) {
+    error.value = null
+    const next = new Set(unpausingTaskIds.value)
+    next.add(taskId)
+    unpausingTaskIds.value = next
+    try {
+      const updatedTask = await taskApi.unpauseTask(taskId)
+      const index = tasks.value.findIndex((task) => task.id === updatedTask.id)
+      if (index >= 0) {
+        tasks.value[index] = { ...tasks.value[index], ...updatedTask }
+      }
+      return updatedTask
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      const cleaned = new Set(unpausingTaskIds.value)
+      cleaned.delete(taskId)
+      unpausingTaskIds.value = cleaned
     }
   }
 
@@ -148,7 +188,9 @@ export function useTasks() {
     updateTask,
     removeTask,
     startTask,
+    unpauseTask,
     stopTask,
     stoppingTaskIds,
+    unpausingTaskIds,
   }
 }

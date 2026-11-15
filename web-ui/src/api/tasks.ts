@@ -37,8 +37,16 @@ export async function updateTask(taskId: number, data: TaskUpdate): Promise<Task
   return result.task
 }
 
-export async function startTask(taskId: number): Promise<void> {
-  await http(`/api/tasks/start/${taskId}`, { method: 'POST' })
+export async function startTask(taskId: number, forceUnpause = false): Promise<void> {
+  await http(`/api/tasks/start/${taskId}`, {
+    method: 'POST',
+    params: forceUnpause ? { force_unpause: true } : undefined,
+  })
+}
+
+export async function unpauseTask(taskId: number): Promise<Task> {
+  const result = await http(`/api/tasks/${taskId}/unpause`, { method: 'POST' })
+  return result.task
 }
 
 export async function stopTask(taskId: number): Promise<void> {

@@ -34,7 +34,7 @@ from src.infrastructure.config.settings import settings as app_settings
 
 
 # 全局服务实例
-process_service = ProcessService()
+process_service = ProcessService(task_loader=TaskService(SqliteTaskRepository()).get_task)
 scheduler_service = SchedulerService(process_service)
 task_generation_service = TaskGenerationService()
 

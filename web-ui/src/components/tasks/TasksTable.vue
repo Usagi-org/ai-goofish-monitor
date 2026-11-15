@@ -25,7 +25,8 @@ import {
   Layers,
   MapPin,
   RefreshCcw,
-  Search
+  Search,
+  AlertTriangle
 } from 'lucide-vue-next'
 import { formatCountdown, formatNextRunAbsolute } from '@/lib/taskSchedule'
 
@@ -33,11 +34,14 @@ interface Props {
   tasks: Task[]
   isLoading: boolean
   stoppingIds?: Set<number>
+  unpausingIds?: Set<number>
 }
 
 const props = defineProps<Props>()
 const { t } = useI18n()
 const isStopping = (id: number) => props.stoppingIds?.has(id) ?? false
+const isUnpausing = (id: number) => props.unpausingIds?.has(id) ?? false
+const isCircuitOpen = (task: Task) => Boolean(task.failure_guard?.paused)
 const isKeywordMode = (task: Task) => task.decision_mode === 'keyword'
 const nowMs = ref(Date.now())
 let timer: number | null = null
@@ -84,9 +88,21 @@ const resolveNextRunLabel = (task: Task) => {
   return formatNextRunAbsolute(task.next_run_at)
 }
 
+const resolveCircuitReason = (task: Task) => {
+  const reason = task.failure_guard?.reason?.trim()
+  return reason || t('tasks.circuit.unknownReason')
+}
+
+const resolveCircuitRecoverAt = (task: Task) => {
+  const pausedUntil = task.failure_guard?.paused_until
+  if (!pausedUntil) return t('tasks.circuit.unknownTime')
+  return formatNextRunAbsolute(pausedUntil)
+}
+
 const emit = defineEmits<{
   (e: 'delete-task', taskId: number): void
   (e: 'run-task', taskId: number): void
+  (e: 'unpause-task', taskId: number): void
   (e: 'stop-task', taskId: number): void
   (e: 'edit-task', task: Task): void
   (e: 'refresh-criteria', task: Task): void
@@ -151,12 +167,60 @@ const emit = defineEmits<{
                 @update:model-value="(val: boolean) => emit('toggle-enabled', task, val)"
               />
               <Badge
+                v-if="task.is_running"
                 variant="outline"
-                :class="task.is_running ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'"
+                class="border-emerald-200 bg-emerald-50 text-emerald-700"
               >
-                {{ task.is_running ? t('common.running') : t('common.idle') }}
+                {{ t('common.running') }}
+              </Badge>
+              <Badge
+                v-else-if="isCircuitOpen(task)"
+                variant="outline"
+                class="border-rose-200 bg-rose-50 font-bold text-rose-700"
+              >
+                <AlertTriangle class="mr-1 h-3 w-3" />
+                {{ t('tasks.circuit.badge') }}
+              </Badge>
+              <Badge
+                v-else
+                variant="outline"
+                class="border-slate-200 bg-slate-50 text-slate-500"
+              >
+                {{ t('common.idle') }}
               </Badge>
             </div>
+          </div>
+
+          <div
+            v-if="isCircuitOpen(task)"
+            class="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 font-bold text-rose-700">
+                <AlertTriangle class="h-3.5 w-3.5 shrink-0" />
+                <span>{{ t('tasks.circuit.badge') }}</span>
+                <span class="text-amber-800">
+                  · {{ t('tasks.circuit.failures', { count: task.failure_guard?.consecutive_failures || 0, threshold: task.failure_guard?.threshold || 3 }) }}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                class="h-7 border-amber-300 bg-white px-2.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                :disabled="isUnpausing(task.id)"
+                :aria-label="`${t('tasks.circuit.unpause')} ${task.task_name}`"
+                @click="emit('unpause-task', task.id)"
+              >
+                <RefreshCcw v-if="isUnpausing(task.id)" class="mr-1 h-3 w-3 animate-spin" />
+                {{ isUnpausing(task.id) ? t('tasks.circuit.unpausing') : t('tasks.circuit.unpause') }}
+              </Button>
+            </div>
+            <p class="mt-1.5 line-clamp-2 font-medium text-amber-900/90" :title="resolveCircuitReason(task)">
+              {{ t('tasks.circuit.reason', { reason: resolveCircuitReason(task) }) }}
+            </p>
+            <p class="mt-1 text-[11px] text-amber-700">
+              {{ t('tasks.circuit.recoverAt', { time: resolveCircuitRecoverAt(task) }) }}
+            </p>
           </div>
 
           <div class="mt-4 grid gap-3 sm:grid-cols-2">
@@ -293,7 +357,7 @@ const emit = defineEmits<{
             <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-left">{{ t('tasks.table.headers.crawl') }}</TableHead>
             <TableHead class="w-[180px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.mode') }}</TableHead>
             <TableHead class="w-[140px] text-slate-500 font-bold uppercase text-[10px] tracking-wider text-center">{{ t('tasks.table.headers.schedule') }}</TableHead>
-            <TableHead class="w-[160px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">{{ t('tasks.table.headers.actions') }}</TableHead>
+            <TableHead class="w-[220px] px-6 text-slate-500 font-bold uppercase text-[10px] tracking-wider text-right">{{ t('tasks.table.headers.actions') }}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -331,10 +395,23 @@ const emit = defineEmits<{
                   class="data-[state=checked]:bg-primary scale-90"
                   @update:model-value="(val: boolean) => emit('toggle-enabled', task, val)"
                 />
-                <div class="flex items-center gap-1.5">
-                  <div :class="[ 'w-1.5 h-1.5 rounded-full shadow-sm', task.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300' ]"></div>
-                  <span :class="[ 'text-[9px] font-black tracking-widest uppercase', task.is_running ? 'text-emerald-600' : 'text-slate-400' ]">
-                    {{ task.is_running ? 'ACTIVE' : 'IDLE' }}
+                <div v-if="task.is_running" class="flex items-center gap-1.5">
+                  <div class="w-1.5 h-1.5 rounded-full shadow-sm bg-emerald-500 animate-pulse"></div>
+                  <span class="text-[9px] font-black tracking-widest uppercase text-emerald-600">
+                    ACTIVE
+                  </span>
+                </div>
+                <Badge
+                  v-else-if="isCircuitOpen(task)"
+                  variant="outline"
+                  class="border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-700"
+                >
+                  {{ t('tasks.circuit.badge') }}
+                </Badge>
+                <div v-else class="flex items-center gap-1.5">
+                  <div class="w-1.5 h-1.5 rounded-full shadow-sm bg-slate-300"></div>
+                  <span class="text-[9px] font-black tracking-widest uppercase text-slate-400">
+                    IDLE
                   </span>
                 </div>
               </div>
@@ -343,7 +420,7 @@ const emit = defineEmits<{
             <!-- Column 2: Task Info -->
             <TableCell class="align-middle">
               <div class="flex flex-col gap-1.5 py-1">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <span class="text-base font-black text-slate-800 tracking-tight group-hover:text-primary transition-colors">{{ task.task_name }}</span>
                   <Badge 
                     variant="outline" 
@@ -354,6 +431,14 @@ const emit = defineEmits<{
                   >
                     <component :is="isKeywordMode(task) ? Keyboard : BrainCircuit" class="w-2.5 h-2.5 mr-1" />
                     {{ isKeywordMode(task) ? 'KEYWORD' : 'AI ENGINE' }}
+                  </Badge>
+                  <Badge
+                    v-if="isCircuitOpen(task)"
+                    variant="outline"
+                    class="h-5 border-amber-300 bg-amber-50 px-1.5 text-[10px] font-black text-rose-700"
+                  >
+                    <AlertTriangle class="mr-1 h-2.5 w-2.5" />
+                    {{ t('tasks.circuit.badge') }}
                   </Badge>
                 </div>
                 
@@ -374,6 +459,20 @@ const emit = defineEmits<{
                    <div class="text-[10px] font-medium text-slate-400 truncate max-w-[120px]">
                       {{ resolveAccountName(task) }}
                    </div>
+                </div>
+
+                <div
+                  v-if="isCircuitOpen(task)"
+                  class="mt-1 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-1.5 text-[11px] text-amber-900"
+                >
+                  <div class="line-clamp-1 font-semibold" :title="resolveCircuitReason(task)">
+                    {{ t('tasks.circuit.reason', { reason: resolveCircuitReason(task) }) }}
+                  </div>
+                  <div class="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-amber-700">
+                    <span>{{ t('tasks.circuit.failures', { count: task.failure_guard?.consecutive_failures || 0, threshold: task.failure_guard?.threshold || 3 }) }}</span>
+                    <span>·</span>
+                    <span>{{ t('tasks.circuit.recoverAt', { time: resolveCircuitRecoverAt(task) }) }}</span>
+                  </div>
                 </div>
               </div>
             </TableCell>
@@ -463,6 +562,18 @@ const emit = defineEmits<{
             <!-- Column 6: Actions -->
             <TableCell class="px-6 align-middle text-right">
               <div class="flex justify-end items-center gap-2">
+                  <Button
+                    v-if="!task.is_running && isCircuitOpen(task)"
+                    size="sm"
+                    variant="outline"
+                    class="h-8 px-2.5 rounded-lg border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors"
+                    :disabled="isUnpausing(task.id)"
+                    :aria-label="`${t('tasks.circuit.unpause')} ${task.task_name}`"
+                    @click="emit('unpause-task', task.id)"
+                  >
+                    <RefreshCcw v-if="isUnpausing(task.id)" class="w-3 h-3 mr-1 animate-spin" />
+                    <span class="font-bold text-[11px]">{{ isUnpausing(task.id) ? t('tasks.circuit.unpausing') : t('tasks.circuit.unpause') }}</span>
+                  </Button>
                   <Button
                     v-if="!task.is_running"
                     size="sm" 
