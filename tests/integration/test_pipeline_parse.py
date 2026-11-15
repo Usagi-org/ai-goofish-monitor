@@ -21,6 +21,24 @@ def test_parse_search_results(load_json_fixture):
     assert item["商品链接"].startswith("https://www.goofish.com/")
 
 
+def test_range_price_preserves_valid_neighbors(load_json_fixture):
+    from copy import deepcopy
+    from src.domain.price import parse_price_value
+
+    raw = load_json_fixture("search_results.json")
+    cards = raw["data"]["resultList"]
+    template = cards[0]
+    cards.clear()
+    for price in ("¥100", "1万-2万", "2.3万", "¥80"):
+        card = deepcopy(template)
+        card["data"]["item"]["main"]["exContent"]["price"] = [{"text": price}]
+        cards.append(card)
+    rows = asyncio.run(_parse_search_results_json(raw, source="search"))
+    prices = [row["当前售价"] for row in rows]
+    assert prices == ["¥100", "1万-2万", "¥23000", "¥80"]
+    assert [parse_price_value(price) for price in prices] == [100, None, 23000, 80]
+
+
 def test_parse_user_head_and_items(load_json_fixture):
     head_json = load_json_fixture("user_head.json")
     items_json = load_json_fixture("user_items.json")

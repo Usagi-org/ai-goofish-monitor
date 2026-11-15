@@ -55,8 +55,8 @@ class ProcessService:
         """Best-effort cookie/state path for a task."""
         try:
             task = find_task_by_name_sync(task_name)
-            if task and isinstance(task.account_state_file, str) and task.account_state_file.strip():
-                return task.account_state_file.strip()
+            if task and task.account_strategy == "fixed" and task.account_state_file:
+                return task.account_state_file
         except Exception:
             pass
 

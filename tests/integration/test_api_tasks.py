@@ -121,6 +121,39 @@ def test_generate_ai_task_returns_job_and_completes_async(api_client, api_contex
     assert api_context["scheduler_service"].reload_calls == 1
 
 
+def test_partial_update_and_status_preserve_account_binding(api_client, sample_task_payload):
+    payload = {**sample_task_payload, "account_strategy": "fixed", "account_state_file": "bound.json"}
+    task = api_client.post("/api/tasks/", json=payload).json()["task"]
+    url = f"/api/tasks/{task['id']}"
+    patched = api_client.patch(url, json={"max_pages": 4}).json()["task"]
+    assert (patched["account_strategy"], patched["account_state_file"]) == ("fixed", "bound.json")
+    assert api_client.post(f"/api/tasks/start/{task['id']}").status_code == 200
+    started = api_client.get(url).json()
+    assert started["is_running"] is True
+    assert (started["account_strategy"], started["account_state_file"]) == ("fixed", "bound.json")
+    assert api_client.patch(url, json={"account_strategy": "fixed", "account_state_file": None}).status_code == 400
+    cleared = api_client.patch(url, json={"account_state_file": None}).json()["task"]
+    assert (cleared["account_strategy"], cleared["account_state_file"]) == ("auto", None)
+
+
+def test_account_patch_distinguishes_clearing_a_file_from_changing_strategy(api_client, sample_task_payload):
+    payload = {**sample_task_payload, "account_strategy": "rotate", "account_state_file": None}
+    task = api_client.post("/api/tasks/", json=payload).json()["task"]
+    url = f"/api/tasks/{task['id']}"
+
+    def patch(values):
+        response = api_client.patch(url, json=values)
+        assert response.status_code == 200
+        row = response.json()["task"]
+        return row["account_strategy"], row["account_state_file"]
+
+    assert patch({"account_state_file": None}) == ("rotate", None)
+    assert patch({"account_state_file": "bound.json"}) == ("fixed", "bound.json")
+    assert patch({"account_strategy": "auto"}) == ("auto", None)
+    assert patch({"account_strategy": "fixed", "account_state_file": "next.json"}) == ("fixed", "next.json")
+    assert patch({"account_strategy": "rotate"}) == ("rotate", None)
+
+
 def test_create_task_accepts_cron_alias(api_client, sample_task_payload):
     payload = dict(sample_task_payload)
     payload["cron"] = "@daily"

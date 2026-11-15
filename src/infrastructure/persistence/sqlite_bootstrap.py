@@ -8,6 +8,7 @@ import json
 import threading
 from pathlib import Path
 
+from src.domain.price import parse_price_value
 from src.infrastructure.persistence.sqlite_connection import init_schema, sqlite_connection
 from src.infrastructure.persistence.storage_names import (
     build_result_filename,
@@ -207,7 +208,7 @@ def _insert_result_record(conn, record: dict, *, keyword: str, filename: str) ->
             record.get("任务名称", ""),
             record.get("爬取时间", ""),
             item.get("发布时间"),
-            _parse_price(item.get("当前售价")),
+            parse_price_value(item.get("当前售价")),
             item.get("当前售价"),
             item.get("商品ID"),
             item.get("商品标题"),
@@ -242,7 +243,7 @@ def _insert_price_snapshot(conn, record: dict) -> None:
             record.get("run_id", ""),
             record.get("item_id", ""),
             record.get("title", ""),
-            _parse_price(record.get("price")),
+            parse_price_value(record.get("price")),
             record.get("price_display"),
             json.dumps(record.get("tags") or [], ensure_ascii=False),
             record.get("region"),
@@ -259,23 +260,6 @@ def _as_int(value) -> int:
     if value is None:
         return 0
     return 1 if str(value).strip().lower() in {"1", "true", "yes", "on"} else 0
-
-
-def _parse_price(value):
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return round(float(value), 2)
-
-    text = str(value).strip().replace("¥", "").replace(",", "")
-    if not text or text in {"价格异常", "暂无", "-", "N/A"}:
-        return None
-    if text.endswith("万"):
-        text = str(float(text[:-1]) * 10000)
-    try:
-        return round(float(text), 2)
-    except (TypeError, ValueError):
-        return None
 
 
 def _bootstrap_completed(conn, key: str) -> bool:
