@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import type { NotificationSettings, NotificationSettingsUpdate, NotificationTestResponse } from '@/api/settings'
 
-type ChannelKey = 'ntfy' | 'pushplus' | 'bark' | 'gotify' | 'wecom' | 'telegram' | 'webhook'
+type ChannelKey = 'ntfy' | 'pushplus' | 'bark' | 'gotify' | 'wecom' | 'dingtalk' | 'telegram' | 'webhook'
 
 const props = defineProps<{
   settings: NotificationSettings
@@ -37,13 +37,14 @@ const mutableInitialValues = initialValues as Record<string, string | boolean | 
 const mutableForm = form as Record<string, string | boolean | null | undefined>
 const mutableClearedFields = clearedFields as Record<string, boolean>
 
-const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS', 'PUSHPLUS_TOKEN'] as const
+const secretFields = ['BARK_URL', 'GOTIFY_TOKEN', 'WX_BOT_URL', 'DINGTALK_WEBHOOK', 'DINGTALK_SECRET', 'TELEGRAM_BOT_TOKEN', 'WEBHOOK_URL', 'WEBHOOK_HEADERS', 'PUSHPLUS_TOKEN'] as const
 const channelFields: Record<ChannelKey, (keyof NotificationSettingsUpdate)[]> = {
   ntfy: ['NTFY_TOPIC_URL'],
   pushplus: ['PUSHPLUS_TOKEN', 'PUSHPLUS_TOPIC'],
   bark: ['BARK_URL'],
   gotify: ['GOTIFY_URL', 'GOTIFY_TOKEN'],
   wecom: ['WX_BOT_URL'],
+  dingtalk: ['DINGTALK_WEBHOOK', 'DINGTALK_SECRET'],
   telegram: ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_API_BASE_URL'],
   webhook: ['WEBHOOK_URL', 'WEBHOOK_METHOD', 'WEBHOOK_CONTENT_TYPE', 'WEBHOOK_HEADERS', 'WEBHOOK_QUERY_PARAMETERS', 'WEBHOOK_BODY'],
 }
@@ -64,6 +65,8 @@ function syncFromSettings(settings: NotificationSettings) {
     BARK_URL: '',
     GOTIFY_TOKEN: '',
     WX_BOT_URL: '',
+    DINGTALK_WEBHOOK: '',
+    DINGTALK_SECRET: '',
     TELEGRAM_BOT_TOKEN: '',
     WEBHOOK_URL: '',
     WEBHOOK_HEADERS: '',
@@ -73,6 +76,8 @@ function syncFromSettings(settings: NotificationSettings) {
   secretConfigured.BARK_URL = !!settings.BARK_URL_SET
   secretConfigured.GOTIFY_TOKEN = !!settings.GOTIFY_TOKEN_SET
   secretConfigured.WX_BOT_URL = !!settings.WX_BOT_URL_SET
+  secretConfigured.DINGTALK_WEBHOOK = !!settings.DINGTALK_WEBHOOK_SET
+  secretConfigured.DINGTALK_SECRET = !!settings.DINGTALK_SECRET_SET
   secretConfigured.TELEGRAM_BOT_TOKEN = !!settings.TELEGRAM_BOT_TOKEN_SET
   secretConfigured.WEBHOOK_URL = !!settings.WEBHOOK_URL_SET
   secretConfigured.WEBHOOK_HEADERS = !!settings.WEBHOOK_HEADERS_SET
@@ -291,6 +296,23 @@ function resolveChannelBadge(channel: ChannelKey) {
         </Card>
       </div>
 
+      <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-blue-500">
+        <CardHeader><CardTitle>{{ t('notifyPanel.dingtalk.title') }}</CardTitle><CardDescription>{{ t('notifyPanel.dingtalk.description') }}</CardDescription></CardHeader>
+        <CardContent class="grid gap-4 md:grid-cols-2">
+          <div class="grid gap-2">
+            <Label>{{ t('notifyPanel.dingtalk.webhookLabel') }}</Label>
+            <Input type="password" :model-value="form.DINGTALK_WEBHOOK ?? ''" :placeholder="t('notifyPanel.secretPlaceholder')" @update:model-value="(value) => updateSecretField('DINGTALK_WEBHOOK', String(value))" />
+            <p class="text-xs text-slate-500">{{ secretConfigured.DINGTALK_WEBHOOK ? t('notifyPanel.dingtalk.webhookConfiguredHint') : t('notifyPanel.notConfigured') }}</p>
+          </div>
+          <div class="grid gap-2">
+            <Label>{{ t('notifyPanel.dingtalk.secretLabel') }}</Label>
+            <Input type="password" :model-value="form.DINGTALK_SECRET ?? ''" :placeholder="t('notifyPanel.dingtalk.secretPlaceholder')" @update:model-value="(value) => updateSecretField('DINGTALK_SECRET', String(value))" />
+            <p class="text-xs text-slate-500">{{ secretConfigured.DINGTALK_SECRET ? t('notifyPanel.dingtalk.secretConfiguredHint') : t('notifyPanel.dingtalk.secretOptionalHint') }}</p>
+          </div>
+        </CardContent>
+        <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('dingtalk') ? 'default' : 'outline'">{{ resolveChannelBadge('dingtalk') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('dingtalk')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('dingtalk')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
+      </Card>
+
       <Card class="app-surface-subtle overflow-hidden border-l-4 border-l-rose-500">
         <CardHeader><CardTitle class="flex items-center gap-2"><Webhook class="h-4 w-4 text-rose-500" /> {{ t('notifyPanel.webhook.title') }}</CardTitle><CardDescription>{{ t('notifyPanel.webhook.description') }}</CardDescription></CardHeader>
         <CardContent class="grid gap-4">
@@ -314,7 +336,7 @@ function resolveChannelBadge(channel: ChannelKey) {
         <CardFooter class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><Badge :variant="isChannelConfigured('webhook') ? 'default' : 'outline'">{{ resolveChannelBadge('webhook') }}</Badge><div class="flex flex-wrap gap-2"><Button variant="ghost" size="sm" :disabled="props.isSaving" @click="clearChannel('webhook')"><Trash2 class="h-4 w-4" />{{ t('notifyPanel.clear') }}</Button><Button variant="outline" size="sm" :disabled="props.isSaving" @click="handleTest('webhook')"><TestTube2 class="h-4 w-4" />{{ t('notifyPanel.test') }}</Button></div></CardFooter>
       </Card>
 
-      <div v-for="channel in ['ntfy', 'pushplus', 'bark', 'gotify', 'wecom', 'telegram', 'webhook']" :key="channel">
+      <div v-for="channel in ['ntfy', 'pushplus', 'bark', 'gotify', 'wecom', 'dingtalk', 'telegram', 'webhook']" :key="channel">
         <div v-if="testResults[channel]" class="rounded-2xl border px-4 py-3 text-sm" :class="resultClass(channel as ChannelKey)">
           {{ testResults[channel].label }}：{{ testResults[channel].message }}
         </div>

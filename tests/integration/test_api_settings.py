@@ -1,3 +1,4 @@
+import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -23,10 +24,14 @@ _SETTINGS_ENV_KEYS = [
     "SKIP_AI_ANALYSIS",
     "PROXY_URL",
     "NTFY_TOPIC_URL",
+    "PUSHPLUS_TOKEN",
+    "PUSHPLUS_TOPIC",
     "GOTIFY_URL",
     "GOTIFY_TOKEN",
     "BARK_URL",
     "WX_BOT_URL",
+    "DINGTALK_WEBHOOK",
+    "DINGTALK_SECRET",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
     "TELEGRAM_API_BASE_URL",
@@ -437,3 +442,179 @@ def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
     assert request_history[0][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
     assert request_history[1][0] == "responses"
     assert request_history[1][1]["input"][0]["content"][0]["text"] == settings.AI_TEST_PROMPT
+
+
+def test_dingtalk_notification_settings_lifecycle_validation_and_single_channel_test(
+    tmp_path, monkeypatch
+):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+
+    # 1. 单独填写 DINGTALK_SECRET 未填 DINGTALK_WEBHOOK 时报错 422
+    secret_only_resp = client.put(
+        "/api/settings/notifications",
+        json={"DINGTALK_SECRET": "SECtestsecret"},
+    )
+    assert secret_only_resp.status_code == 422
+    assert "配置 DINGTALK_SECRET 前必须先填写 DINGTALK_WEBHOOK" in secret_only_resp.text
+
+    # 2. 保存 DINGTALK_WEBHOOK 与 DINGTALK_SECRET，校验脱敏回显与状态位
+    save_resp = client.put(
+        "/api/settings/notifications",
+        json={
+            "DINGTALK_WEBHOOK": "https://oapi.dingtalk.com/robot/send?access_token=dt-token",
+            "DINGTALK_SECRET": "SECtestsecret",
+        },
+    )
+    assert save_resp.status_code == 200
+    assert save_resp.json()["configured_channels"] == ["dingtalk"]
+
+    get_resp = client.get("/api/settings/notifications")
+    assert get_resp.status_code == 200
+    notif_payload = get_resp.json()
+    assert notif_payload["DINGTALK_WEBHOOK"] == ""
+    assert notif_payload["DINGTALK_SECRET"] == ""
+    assert notif_payload["DINGTALK_WEBHOOK_SET"] is True
+    assert notif_payload["DINGTALK_SECRET_SET"] is True
+    assert notif_payload["CONFIGURED_CHANNELS"] == ["dingtalk"]
+
+    status_resp = client.get("/api/settings/status")
+    assert status_resp.status_code == 200
+    status_payload = status_resp.json()
+    assert status_payload["notification_configured"] is True
+    assert status_payload["configured_notification_channels"] == ["dingtalk"]
+    assert status_payload["env_file"]["dingtalk_webhook_set"] is True
+    assert status_payload["env_file"]["dingtalk_secret_set"] is True
+
+    # 3. 单渠道测试（合并已存储的密文配置并加签请求）
+    captured = {}
+
+    class _FakeDingTalkResponse:
+        ok = True
+        status_code = 200
+
+        def json(self):
+            return {"errcode": 0, "errmsg": "ok"}
+
+    def _fake_post(url, json=None, headers=None, timeout=None):
+        captured["url"] = url
+        captured["json"] = json
+        return _FakeDingTalkResponse()
+
+    monkeypatch.setattr("requests.post", _fake_post)
+
+    test_resp = client.post(
+        "/api/settings/notifications/test",
+        json={"channel": "dingtalk", "settings": {}},
+    )
+    assert test_resp.status_code == 200
+    test_payload = test_resp.json()
+    assert list(test_payload["results"]) == ["dingtalk"]
+    assert test_payload["results"]["dingtalk"]["success"] is True
+    assert test_payload["results"]["dingtalk"]["label"] == "钉钉"
+    assert "access_token=dt-token" in captured["url"]
+    assert "timestamp=" in captured["url"]
+    assert "sign=" in captured["url"]
+    assert captured["json"]["msgtype"] == "markdown"
+
+    # 4. 清空钉钉渠道配置
+    clear_resp = client.put(
+        "/api/settings/notifications",
+        json={"DINGTALK_WEBHOOK": None, "DINGTALK_SECRET": None},
+    )
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["configured_channels"] == []
+
+    after_clear = client.get("/api/settings/notifications").json()
+    assert after_clear["DINGTALK_WEBHOOK_SET"] is False
+    assert after_clear["DINGTALK_SECRET_SET"] is False
+    assert after_clear["CONFIGURED_CHANNELS"] == []
+    env_text = env_file.read_text(encoding="utf-8")
+    assert "DINGTALK_WEBHOOK" not in env_text
+    assert "DINGTALK_SECRET" not in env_text
+
+
+def test_dingtalk_test_endpoint_redacts_credentials_and_rejects_malformed_200_payloads(
+    tmp_path, monkeypatch
+):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    token_value = "dt-super-secret-token-777"
+    secret_value = "SECtopsecretkey999"
+    env_file.write_text(
+        "\n".join(
+            [
+                f"DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token={token_value}",
+                f"DINGTALK_SECRET={secret_value}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+
+    def _assert_no_leaked_secrets(raw_text: str) -> None:
+        for sensitive in ("access_token", token_value, secret_value, "sign="):
+            assert sensitive not in raw_text
+
+    # 1. HTTP 403 失败响应不泄露完整 URL、token、secret、sign=
+    class _ForbiddenResponse:
+        ok = False
+        status_code = 403
+
+    monkeypatch.setattr("requests.post", lambda *args, **kwargs: _ForbiddenResponse())
+    http_403_resp = client.post(
+        "/api/settings/notifications/test",
+        json={"channel": "dingtalk", "settings": {}},
+    )
+    assert http_403_resp.status_code == 200
+    http_403_result = http_403_resp.json()["results"]["dingtalk"]
+    assert http_403_result["success"] is False
+    assert "HTTP 403" in http_403_result["message"]
+    _assert_no_leaked_secrets(http_403_resp.text)
+
+    # 2. 网络异常（底层异常消息故意携带完整签名 URL）绝不泄露敏感参数
+    def _raise_connection_error(url, **kwargs):
+        raise requests.ConnectionError(
+            f"HTTPSConnectionPool(host='oapi.dingtalk.com', port=443): Max retries exceeded with url: {url}"
+        )
+
+    monkeypatch.setattr("requests.post", _raise_connection_error)
+    net_err_resp = client.post(
+        "/api/settings/notifications/test",
+        json={"channel": "dingtalk", "settings": {}},
+    )
+    assert net_err_resp.status_code == 200
+    net_err_result = net_err_resp.json()["results"]["dingtalk"]
+    assert net_err_result["success"] is False
+    assert "网络连接失败" in net_err_result["message"]
+    _assert_no_leaked_secrets(net_err_resp.text)
+
+    # 3. HTTP 200 但网关返回 {"error": "upstream unavailable"} 或 {"errcode": False} 均判定失败
+    for malformed_body, expected_snippet in (
+        ({"error": "upstream unavailable"}, "upstream unavailable"),
+        ({"errcode": False}, "缺少有效 errcode"),
+    ):
+        class _Malformed200Response:
+            ok = True
+            status_code = 200
+
+            def json(self, body=malformed_body):
+                return body
+
+        monkeypatch.setattr(
+            "requests.post",
+            lambda *args, **kwargs: _Malformed200Response(),
+        )
+        malformed_resp = client.post(
+            "/api/settings/notifications/test",
+            json={"channel": "dingtalk", "settings": {}},
+        )
+        assert malformed_resp.status_code == 200
+        malformed_result = malformed_resp.json()["results"]["dingtalk"]
+        assert malformed_result["success"] is False
+        assert expected_snippet in malformed_result["message"]
+        _assert_no_leaked_secrets(malformed_resp.text)

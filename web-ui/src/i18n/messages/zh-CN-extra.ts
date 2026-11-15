@@ -247,6 +247,16 @@ const zhCNExtra = {
       urlLabel: '企业微信 Bot URL',
       configuredHint: '已保存机器人地址。',
     },
+    dingtalk: {
+      title: '钉钉机器人',
+      description: '支持群自定义机器人 Markdown 推送与可选加签密钥，敏感字段均不回显。',
+      webhookLabel: '钉钉 Webhook 地址',
+      secretLabel: '加签密钥 DINGTALK_SECRET（可选）',
+      secretPlaceholder: '可选，例如 SEC...，已配置则留空保留',
+      webhookConfiguredHint: '已保存 Webhook 地址。',
+      secretConfiguredHint: '已保存加签密钥。',
+      secretOptionalHint: '未配置加签密钥（若机器人启用加签请填写）。',
+    },
     telegram: {
       description: 'Bot Token 属于敏感字段，Chat ID 与反代地址可直接查看和修改。',
       chatIdPlaceholder: '例如：123456789',

@@ -63,6 +63,8 @@ class NotificationSettings(_EnvSettings):
     gotify_token: Optional[str] = _env_field(None, "GOTIFY_TOKEN")
     bark_url: Optional[str] = _env_field(None, "BARK_URL")
     wx_bot_url: Optional[str] = _env_field(None, "WX_BOT_URL")
+    dingtalk_webhook: Optional[str] = _env_field(None, "DINGTALK_WEBHOOK")
+    dingtalk_secret: Optional[str] = _env_field(None, "DINGTALK_SECRET")
     telegram_bot_token: Optional[str] = _env_field(None, "TELEGRAM_BOT_TOKEN")
     telegram_chat_id: Optional[str] = _env_field(None, "TELEGRAM_CHAT_ID")
     telegram_api_base_url: Optional[str] = _env_field(
@@ -83,6 +85,7 @@ class NotificationSettings(_EnvSettings):
             self.ntfy_topic_url,
             self.pushplus_token,
             self.wx_bot_url,
+            self.dingtalk_webhook,
             self.gotify_url and self.gotify_token,
             self.bark_url,
             self.telegram_bot_token and self.telegram_chat_id,

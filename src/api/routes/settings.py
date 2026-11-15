@@ -79,6 +79,8 @@ class NotificationSettingsModel(BaseModel):
     GOTIFY_TOKEN: Optional[str] = None
     BARK_URL: Optional[str] = None
     WX_BOT_URL: Optional[str] = None
+    DINGTALK_WEBHOOK: Optional[str] = None
+    DINGTALK_SECRET: Optional[str] = None
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
     TELEGRAM_API_BASE_URL: Optional[str] = None
@@ -140,6 +142,8 @@ async def update_notification_settings(settings: NotificationSettingsModel):
     if not success:
         raise HTTPException(status_code=500, detail="更新通知设置失败")
 
+    for key in deletions:
+        os.environ.pop(key, None)
     _reload_env()
     return {
         "message": "通知设置已成功更新",
