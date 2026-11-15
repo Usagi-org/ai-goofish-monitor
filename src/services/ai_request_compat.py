@@ -10,12 +10,20 @@ INPUT_TEXT_TYPE = "input_text"
 INPUT_IMAGE_TYPE = "input_image"
 IMAGE_DETAIL_AUTO = "auto"
 JSON_OUTPUT_TYPE = "json_object"
+JSON_OUTPUT_PARAM_NAMES = (
+    "response_format",
+    "response_format.type",
+    "text.format",
+    "text.format.type",
+)
 UNSUPPORTED_JSON_OUTPUT_MARKERS = (
-    "not supported by this model",
     "json_object",
     "json_schema",
     "text.format",
     "response_format.type",
+    "response_format",
+    "grammar-constrained decoding",
+    "guided decoding",
 )
 RESPONSES_API_UNSUPPORTED_MARKERS = (
     "404 page not found",
@@ -78,16 +86,27 @@ def add_json_response_format(
 def is_json_output_unsupported_error(error: Exception) -> bool:
     """识别模型或网关不支持结构化 JSON 输出参数的错误。"""
     body = getattr(error, "body", None)
-    if isinstance(body, dict) and body.get("param") in (
-        "response_format",
-        "response_format.type",
-    ):
-        return True
+    message_parts = [str(error)]
+    if isinstance(body, dict):
+        top_param = body.get("param")
+        if isinstance(top_param, str) and top_param.strip():
+            return top_param in JSON_OUTPUT_PARAM_NAMES
+        if isinstance(body.get("message"), str):
+            message_parts.append(body["message"])
+        nested_error = body.get("error")
+        if isinstance(nested_error, dict):
+            nested_param = nested_error.get("param")
+            if isinstance(nested_param, str) and nested_param.strip():
+                return nested_param in JSON_OUTPUT_PARAM_NAMES
+            if isinstance(nested_error.get("message"), str):
+                message_parts.append(nested_error["message"])
 
-    message = str(error)
+    message = " ".join(message_parts).lower()
     return (
-        "not supported" in message.lower()
-        and any(marker in message for marker in UNSUPPORTED_JSON_OUTPUT_MARKERS)
+        ("not support" in message or "unsupported" in message)
+        and any(
+            marker.lower() in message for marker in UNSUPPORTED_JSON_OUTPUT_MARKERS
+        )
     )
 
 
