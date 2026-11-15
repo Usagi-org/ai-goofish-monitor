@@ -51,4 +51,10 @@ def test_save_to_jsonl(tmp_path, monkeypatch):
             sort_order="asc",
         )
     )
-    assert records == [record]
+    assert records == [{
+        **record,
+        "_status": "active",
+        "_matched_blacklist_keywords": [],
+        "_hidden_reason": None,
+        "_effective_hidden": False,
+    }]

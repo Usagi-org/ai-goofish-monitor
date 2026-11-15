@@ -118,11 +118,12 @@ docker compose down
 ### Account Management
 
 - Import, update, and delete Xianyu login states.
-- Each task can bind a specific account or leave account selection to the system.
+- Each task can bind a specific account or leave account selection to the system. Starting or stopping a task and editing unrelated settings preserve its account binding. Clearing the file keeps rotation enabled on a rotating task and switches a fixed task to automatic selection. Selecting automatic or rotating mode clears the fixed account.
 
 ### Results and Logs
 
 - The results page and export endpoints now query SQLite instead of directly scanning `jsonl` files.
+- Listings preserve displayed price ranges. Only single prices contribute to price statistics.
 - The logs page is the first place to inspect login-state expiry, anti-bot issues, or AI call failures.
 
 ### System Settings

@@ -21,10 +21,9 @@ from src.services.task_generation_runner import (
     run_ai_generation_job,
 )
 from src.services.task_payloads import serialize_task, serialize_tasks
-from src.domain.models.task import TaskCreate, TaskUpdate, TaskGenerateRequest
+from src.domain.models.task import InvalidTaskAccount, TaskCreate, TaskUpdate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
 from src.utils import resolve_task_log_path
-from src.services.account_strategy_service import normalize_account_strategy
 from src.infrastructure.persistence.storage_names import build_result_filename
 from src.services.price_history_service import delete_price_snapshots
 from src.services.result_storage_service import delete_result_file_records
@@ -42,19 +41,6 @@ def _has_keyword_rules(rules) -> bool:
     return bool(rules and len(rules) > 0)
 
 
-def _validate_final_account_strategy(existing_task, task_update: TaskUpdate) -> None:
-    account_state_file = (
-        task_update.account_state_file
-        if task_update.account_state_file is not None
-        else existing_task.account_state_file
-    )
-    account_strategy = normalize_account_strategy(
-        task_update.account_strategy,
-        account_state_file,
-    )
-    task_update.account_strategy = account_strategy
-    if account_strategy == "fixed" and not account_state_file:
-        raise HTTPException(status_code=400, detail="固定账号模式下必须选择账号。")
 @router.get("", response_model=List[dict])
 async def get_tasks(
     service: TaskService = Depends(get_task_service),
@@ -149,7 +135,6 @@ async def update_task(
         existing_task = await service.get_task(task_id)
         if not existing_task:
             raise HTTPException(status_code=404, detail="任务未找到")
-        _validate_final_account_strategy(existing_task, task_update)
 
         current_mode = getattr(existing_task, "decision_mode", "ai") or "ai"
         target_mode = task_update.decision_mode or current_mode
@@ -168,6 +153,7 @@ async def update_task(
             if not _has_keyword_rules(final_rules):
                 raise HTTPException(status_code=400, detail="关键词模式下至少需要一个关键词。")
         if target_mode == "ai" and (description_changed or switched_to_ai):
+            existing_task.account_changes(task_update)
             print(f"检测到任务 {task_id} 需要刷新 AI 标准文件，开始重新生成...")
             try:
                 description_for_ai = (
@@ -209,6 +195,8 @@ async def update_task(
         task = await service.update_task(task_id, task_update)
         await _reload_scheduler_if_needed(service, scheduler_service)
         return {"message": "任务更新成功", "task": serialize_task(task, scheduler_service)}
+    except InvalidTaskAccount as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 @router.delete("/{task_id}", response_model=dict)

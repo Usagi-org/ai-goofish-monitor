@@ -10,7 +10,6 @@ venv
 logs/
 jsonl/
 web-ui/node_modules
-web-ui/dist
 dist/
 .git
 .DS_Store
