@@ -11,6 +11,7 @@ from datetime import datetime
 from statistics import median
 from typing import Any, Iterable, Optional
 
+from src.domain.price import parse_price_value
 from src.infrastructure.persistence.sqlite_bootstrap import bootstrap_sqlite_storage
 from src.infrastructure.persistence.sqlite_connection import sqlite_connection
 
@@ -31,23 +32,6 @@ def build_price_history_path(keyword: str) -> str:
         PRICE_HISTORY_DIR,
         f"{normalize_keyword_slug(keyword)}_history.jsonl",
     )
-
-
-def parse_price_value(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    if isinstance(value, (int, float)):
-        return round(float(value), 2)
-
-    text = str(value).strip().replace("¥", "").replace(",", "")
-    if not text or text in {"价格异常", "暂无", "-", "N/A"}:
-        return None
-    if text.endswith("万"):
-        text = str(float(text[:-1]) * 10000)
-    try:
-        return round(float(text), 2)
-    except (TypeError, ValueError):
-        return None
 
 
 def _safe_iso_datetime(value: Optional[str]) -> str:

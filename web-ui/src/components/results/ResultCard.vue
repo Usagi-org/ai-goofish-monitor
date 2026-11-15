@@ -29,6 +29,7 @@ const ai = props.item.ai_analysis
 const priceInsight = props.item.price_insight
 
 const isRecommended = ai?.is_recommended === true
+const isExcludeRule = computed(() => ai?.analysis_source === 'exclude_rule')
 const recommendationStatus = computed(() => {
   if (ai?.is_recommended === true) return { label: t('results.card.strongRecommend'), color: 'bg-emerald-500', icon: CheckCircle2, text: 'text-emerald-600', bg: 'bg-emerald-50' }
   if (ai?.is_recommended === false) return { label: t('results.card.notRecommended'), color: 'bg-rose-500', icon: XCircle, text: 'text-rose-600', bg: 'bg-rose-50' }
@@ -122,13 +123,20 @@ const expanded = ref(false)
             <component :is="recommendationStatus.icon" class="w-4 h-4" :class="recommendationStatus.text" />
             <span class="text-sm font-bold" :class="recommendationStatus.text">{{ recommendationStatus.label }}</span>
           </div>
-          <div class="flex items-center gap-1">
+          <Badge
+            v-if="isExcludeRule"
+            variant="outline"
+            class="text-[10px] font-semibold border-rose-200 bg-white/80 text-rose-600"
+          >
+            {{ t('resultCardExtra.ruleExcluded') }}
+          </Badge>
+          <div v-else class="flex items-center gap-1">
              <span class="text-[10px] font-medium uppercase tracking-wider text-slate-400">AI Match</span>
              <span class="text-sm font-black" :class="recommendationStatus.text">{{ matchScore }}%</span>
           </div>
         </div>
         
-        <div class="w-full h-1.5 bg-white/50 rounded-full overflow-hidden mb-3">
+        <div v-if="!isExcludeRule" class="w-full h-1.5 bg-white/50 rounded-full overflow-hidden mb-3">
           <div 
             class="h-full transition-all duration-1000 ease-out rounded-full" 
             :class="recommendationStatus.color"

@@ -12,7 +12,7 @@ from urllib.parse import quote
 from openai import APIStatusError
 from requests.exceptions import HTTPError
 
-from src.services.result_storage_service import save_result_record
+from src.services.result_storage_service import save_result_record_id
 
 
 def retry_on_failure(retries=3, delay=5):
@@ -119,13 +119,26 @@ def get_link_unique_key(link: str) -> str:
     return link.split('&', 1)[0]
 
 
-async def save_to_jsonl(data_record: dict, keyword: str):
+async def save_to_jsonl(
+    data_record: dict, keyword: str, *, expected_result_id: int | None = None, exclusion_rules_key: str = "",
+):
     """兼容旧调用名，实际将结果写入 SQLite。"""
+    row_id = await save_result_with_id(
+        data_record, keyword, expected_result_id=expected_result_id, exclusion_rules_key=exclusion_rules_key,
+    )
+    return row_id is not None
+
+
+async def save_result_with_id(
+    data_record: dict, keyword: str, *, expected_result_id: int | None = None, exclusion_rules_key: str = "",
+) -> int | None:
     try:
-        return await save_result_record(data_record, keyword)
+        return await save_result_record_id(
+            data_record, keyword, expected_result_id=expected_result_id, exclusion_rules_key=exclusion_rules_key,
+        )
     except Exception as e:
         print(f"写入 SQLite 结果记录出错: {e}")
-        return False
+        return None
 
 
 def format_registration_days(total_days: int) -> str:

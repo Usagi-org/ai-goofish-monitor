@@ -8,7 +8,20 @@ import os
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
-from src.keyword_rule_engine import build_search_text, evaluate_keyword_rules
+from src.keyword_rule_engine import (
+    build_search_text,
+    evaluate_keyword_rules,
+    match_exclude_keywords_in_fields,
+)
+
+
+VISIBLE_PRODUCT_TEXT_FIELDS = (
+    "商品描述",
+    "商品标题",
+    "商品标签",
+    "卖家昵称",
+    "发货地区",
+)
 
 
 SellerLoader = Callable[[str], Awaitable[dict]]
@@ -30,6 +43,7 @@ class ItemAnalysisJob:
     seller_id: Optional[str]
     zhima_credit_text: Optional[str]
     registration_duration_text: str
+    exclude_keywords: tuple[str, ...] = ()
 
 
 class ItemAnalysisDispatcher:
@@ -72,10 +86,30 @@ class ItemAnalysisDispatcher:
     async def _process_job(self, job: ItemAnalysisJob) -> None:
         record = copy.deepcopy(job.final_record)
         item_data = record.get("商品信息", {}) or {}
+        visible_fields = [item_data.get(field) for field in VISIBLE_PRODUCT_TEXT_FIELDS]
+        matched = match_exclude_keywords_in_fields(job.exclude_keywords, visible_fields)
+        if matched:
+            record["卖家信息"] = {
+                "卖家芝麻信用": job.zhima_credit_text,
+                "卖家注册时长": job.registration_duration_text,
+            }
+            record["ai_analysis"] = {
+                "analysis_source": "exclude_rule",
+                "is_recommended": False,
+                "reason": f"命中前置排除词：{', '.join(matched)}",
+                "matched_exclude_keywords": matched,
+                "keyword_hit_count": 0,
+            }
+            if await self._saver(record, job.keyword):
+                self.completed_count += 1
+            return
+
         record["卖家信息"] = await self._load_seller_info(job)
         record["ai_analysis"] = await self._build_analysis_result(job, record)
-        if await self._saver(record, job.keyword):
-            self.completed_count += 1
+        saved = await self._saver(record, job.keyword)
+        if not saved:
+            return
+        self.completed_count += 1
         await self._notify_if_recommended(item_data, record["ai_analysis"])
 
     async def _load_seller_info(self, job: ItemAnalysisJob) -> dict:

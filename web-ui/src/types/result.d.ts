@@ -2,6 +2,7 @@
 
 export interface ProductInfo {
   "商品标题": string;
+  "商品描述"?: string;
   "当前售价": string;
   "商品原价"?: string;
   "“想要”人数"?: string | number;
@@ -37,7 +38,7 @@ export interface SellerInfo {
 export interface AiAnalysis {
   is_recommended: boolean;
   reason: string;
-  analysis_source?: 'ai' | 'keyword';
+  analysis_source?: 'ai' | 'keyword' | 'exclude_rule';
   keyword_hit_count?: number;
   value_score?: number;
   value_summary?: string;
@@ -45,6 +46,7 @@ export interface AiAnalysis {
   risk_tags?: string[];
   criteria_analysis?: Record<string, any>;
   matched_keywords?: string[];
+  matched_exclude_keywords?: string[];
   error?: string;
 }
 
