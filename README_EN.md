@@ -112,7 +112,8 @@ docker compose down
 ### Task Management
 
 - Supports AI creation, keyword rules, price range, new listing filters, region filters, account binding, and cron scheduling.
-- AI task creation runs as a background job and shows a dedicated progress dialog after submission.
+- AI task creation runs as a background job. Only one task with a given name can be created. A failed job leaves the successful task’s criteria intact.
+- Renaming a starting or running task returns 409. If a start and a deletion overlap, the busy request returns 423 and can be retried. A deletion rejected during startup leaves the child process running. Late edits cannot recreate deleted tasks. Concurrent edits update only the fields supplied. Renaming preserves account rotation. A paused task stays paused under its new name. If the failure guard cannot be updated, renaming or deleting the task fails and the original task is retained.
 - Region filtering can greatly reduce results, so leaving it empty is the safer default.
 
 ### Account Management

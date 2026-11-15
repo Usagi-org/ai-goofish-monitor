@@ -3,8 +3,9 @@
 封装任务相关的业务逻辑
 """
 from typing import List, Optional
+from contextlib import nullcontext
 from src.domain.models.task import Task, TaskCreate, TaskUpdate
-from src.domain.repositories.task_repository import TaskRepository
+from src.domain.repositories.task_repository import TaskCommitScope, TaskRepository
 
 
 class TaskService:
@@ -21,23 +22,23 @@ class TaskService:
         """获取单个任务"""
         return await self.repository.find_by_id(task_id)
 
-    async def create_task(self, task_create: TaskCreate) -> Task:
+    async def create_task(self, task_create: TaskCreate, *, on_commit: TaskCommitScope = nullcontext) -> Task:
         """创建新任务"""
         task = Task(**task_create.model_dump(), is_running=False)
-        return await self.repository.save(task)
+        return await self.repository.save(task, on_commit=on_commit)
 
-    async def update_task(self, task_id: int, task_update: TaskUpdate) -> Task:
-        """更新任务"""
-        task = await self.repository.find_by_id(task_id)
-        if not task:
-            raise ValueError(f"任务 {task_id} 不存在")
+    async def update_task(
+        self, task_id: int, task_update: TaskUpdate, *, expected_name: str | None = None,
+        on_commit: TaskCommitScope = nullcontext,
+    ) -> Task:
+        return await self.repository.update(task_id, task_update, expected_name=expected_name, on_commit=on_commit)
 
-        updated_task = task.apply_update(task_update)
-        return await self.repository.save(updated_task)
-
-    async def delete_task(self, task_id: int) -> bool:
+    async def delete_task(
+        self, task_id: int, *, expected_name: str | None = None,
+        on_commit: TaskCommitScope = nullcontext,
+    ) -> bool:
         """删除任务"""
-        return await self.repository.delete(task_id)
+        return await self.repository.delete(task_id, expected_name=expected_name, on_commit=on_commit)
 
     async def update_task_status(self, task_id: int, is_running: bool) -> Task:
         """更新任务运行状态"""

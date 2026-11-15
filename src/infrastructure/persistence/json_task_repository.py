@@ -3,9 +3,17 @@
 """
 from typing import List, Optional
 import json
-import aiofiles
-from src.domain.models.task import Task
-from src.domain.repositories.task_repository import TaskRepository
+import asyncio
+from contextlib import nullcontext
+from pathlib import Path
+import os
+import tempfile
+
+from src.infrastructure.persistence.file_lock import FileLock
+from src.domain.models.task import Task, TaskUpdate
+from src.domain.repositories.task_repository import (
+    RunningTaskRename, TaskChanged, TaskCommitScope, TaskRepository, ensure_available_task_name, resolve_task_write,
+)
 
 
 class JsonTaskRepository(TaskRepository):
@@ -16,9 +24,16 @@ class JsonTaskRepository(TaskRepository):
 
     async def find_all(self) -> List[Task]:
         """获取所有任务"""
+        return await asyncio.to_thread(self._read_tasks)
+
+    def _read_tasks(self) -> List[Task]:
+        with FileLock(f"{self.config_file}.lock"):
+            return self._read_unlocked()
+
+    def _read_unlocked(self) -> List[Task]:
         try:
-            async with aiofiles.open(self.config_file, 'r', encoding='utf-8') as f:
-                content = await f.read()
+            with open(self.config_file, 'r', encoding='utf-8') as f:
+                content = f.read()
                 if not content.strip():
                     return []
 
@@ -41,32 +56,59 @@ class JsonTaskRepository(TaskRepository):
             return tasks[task_id]
         return None
 
-    async def save(self, task: Task) -> Task:
-        """保存任务（创建或更新）"""
-        tasks = await self.find_all()
+    async def save(self, task: Task, *, on_commit: TaskCommitScope = nullcontext) -> Task:
+        return await asyncio.to_thread(self._save_sync, task.id, task, None, on_commit)
 
-        if task.id is not None and 0 <= task.id < len(tasks):
-            # 更新现有任务
-            tasks[task.id] = task
-        else:
-            # 创建新任务
-            task.id = len(tasks)
-            tasks.append(task)
+    async def update(
+        self, task_id: int, change: TaskUpdate, *, expected_name: str | None = None,
+        on_commit: TaskCommitScope = nullcontext,
+    ) -> Task:
+        return await asyncio.to_thread(self._save_sync, task_id, change, expected_name, on_commit)
 
-        await self._write_tasks(tasks)
-        return task
+    def _save_sync(
+        self, task_id: int | None, change: Task | TaskUpdate, expected_name: str | None, on_commit: TaskCommitScope,
+    ) -> Task:
+        with FileLock(f"{self.config_file}.lock"):
+            tasks = self._read_unlocked()
+            current = tasks[task_id] if task_id is not None and 0 <= task_id < len(tasks) else None
+            task = resolve_task_write(task_id, current, change, expected_name)
+            if current is not None:
+                if current.task_name != task.task_name:
+                    if current.is_running:
+                        raise RunningTaskRename()
+                    ensure_available_task_name(task, (t.task_name for t in tasks if t.id != task.id))
+                tasks[task.id] = task
+            else:
+                ensure_available_task_name(task, (t.task_name for t in tasks))
+                task = task.model_copy(update={"id": len(tasks)})
+                tasks.append(task)
+            self._write_tasks(tasks, on_commit)
+            return task
 
-    async def delete(self, task_id: int) -> bool:
-        """删除任务"""
-        tasks = await self.find_all()
-        if 0 <= task_id < len(tasks):
+    async def delete(
+        self, task_id: int, *, expected_name: str | None = None,
+        on_commit: TaskCommitScope = nullcontext,
+    ) -> bool:
+        return await asyncio.to_thread(self._delete_sync, task_id, expected_name, on_commit)
+
+    def _delete_sync(self, task_id: int, expected_name: str | None, on_commit: TaskCommitScope) -> bool:
+        with FileLock(f"{self.config_file}.lock"):
+            tasks = self._read_unlocked()
+            if not 0 <= task_id < len(tasks):
+                return False
+            if expected_name is not None and tasks[task_id].task_name != expected_name:
+                raise TaskChanged("任务名称已更改，请刷新后重试")
             tasks.pop(task_id)
-            await self._write_tasks(tasks)
+            self._write_tasks(tasks, on_commit)
             return True
-        return False
 
-    async def _write_tasks(self, tasks: List[Task]):
-        """写入任务列表到文件"""
-        tasks_data = [task.model_dump(exclude={'id'}) for task in tasks]
-        async with aiofiles.open(self.config_file, 'w', encoding='utf-8') as f:
-            await f.write(json.dumps(tasks_data, ensure_ascii=False, indent=2))
+    def _write_tasks(self, tasks: List[Task], on_commit: TaskCommitScope) -> None:
+        tasks_data = [task.model_dump(exclude={"id"}) for task in tasks]
+        fd, temp_name = tempfile.mkstemp(dir=Path(self.config_file).parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                json.dump(tasks_data, output, ensure_ascii=False, indent=2)
+            with on_commit():
+                os.replace(temp_name, self.config_file)
+        finally:
+            Path(temp_name).unlink(missing_ok=True)

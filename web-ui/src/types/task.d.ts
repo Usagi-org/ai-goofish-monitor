@@ -1,5 +1,14 @@
 // Based on the Pydantic model in the backend
 
+export interface TaskFailureGuard {
+  paused: boolean;
+  paused_until: string | null;
+  consecutive_failures: number;
+  threshold: number;
+  reason: string | null;
+  last_failure_at: string | null;
+}
+
 export interface Task {
   id: number;
   task_name: string;
@@ -23,6 +32,7 @@ export interface Task {
   decision_mode: 'ai' | 'keyword';
   keyword_rules: string[];
   is_running: boolean;
+  failure_guard?: TaskFailureGuard | null;
 }
 
 export type TaskGenerationStatus = 'queued' | 'running' | 'completed' | 'failed';
@@ -53,7 +63,7 @@ export interface TaskCreateResponse {
 }
 
 // For PATCH requests, all fields are optional
-export type TaskUpdate = Partial<Omit<Task, 'id' | 'next_run_at'>>;
+export type TaskUpdate = Partial<Omit<Task, 'id' | 'next_run_at' | 'failure_guard'>>;
 
 // For task creation
 export interface TaskGenerateRequest {
