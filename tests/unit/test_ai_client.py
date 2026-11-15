@@ -114,6 +114,120 @@ def test_call_ai_retries_without_structured_output_when_model_rejects_it():
     assert "response_format" not in request_history[1]
 
 
+def test_call_ai_retries_without_response_format_on_sglang_grammar_decoding_400():
+    client = AIClient.__new__(AIClient)
+    client.settings = SimpleNamespace(
+        model_name="fake-model",
+        enable_response_format=True,
+        enable_thinking=False,
+    )
+    request_history = []
+
+    class _SGLangBadRequestError(Exception):
+        status_code = 400
+        body = {
+            "object": "error",
+            "message": (
+                "DFLASH speculative decoding does not support "
+                "grammar-constrained decoding yet."
+            ),
+            "type": "BadRequestError",
+            "param": None,
+            "code": 400,
+        }
+
+    async def fake_create(**kwargs):
+        request_history.append(kwargs)
+        if len(request_history) == 1:
+            raise _SGLangBadRequestError(
+                "Error code: 400 - {'object': 'error', 'message': "
+                "'DFLASH speculative decoding does not support grammar-constrained decoding yet.', "
+                "'type': 'BadRequestError', 'param': None, 'code': 400}"
+            )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content='{"ok":true}')
+                )
+            ]
+        )
+
+    client.client = _build_fake_client(fake_create)
+
+    response = asyncio.run(client._call_ai([{"role": "user", "content": "hi"}]))
+
+    assert response == '{"ok":true}'
+    assert len(request_history) == 2
+    assert request_history[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in request_history[1]
+
+
+def test_call_ai_retries_without_json_output_for_grammar_and_guided_decoding_in_both_modes():
+    chat_client = AIClient.__new__(AIClient)
+    chat_client.settings = SimpleNamespace(
+        model_name="fake-model",
+        enable_response_format=True,
+        enable_thinking=False,
+    )
+    chat_history = []
+
+    async def fake_chat_grammar_err(**kwargs):
+        chat_history.append(kwargs)
+        if len(chat_history) == 1:
+            raise Exception(
+                "Error code: 400 - {'object': 'error', 'message': "
+                "'This model does not support grammar-constrained decoding.', "
+                "'type': 'BadRequestError', 'param': None, 'code': 400}"
+            )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content='{"ok":true}'))
+            ]
+        )
+
+    chat_client.client = _build_fake_client(fake_chat_grammar_err)
+    assert (
+        asyncio.run(chat_client._call_ai([{"role": "user", "content": "hi"}]))
+        == '{"ok":true}'
+    )
+    assert chat_history[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in chat_history[1]
+
+    responses_client = AIClient.__new__(AIClient)
+    responses_client.settings = SimpleNamespace(
+        model_name="fake-model",
+        enable_response_format=True,
+        enable_thinking=False,
+    )
+    responses_history = []
+
+    async def fake_chat_404(**kwargs):
+        responses_history.append(("chat", kwargs))
+        raise Exception("Error code: 404 - page not found")
+
+    async def fake_responses_guided_err(**kwargs):
+        responses_history.append(("responses", kwargs))
+        if len([item for item in responses_history if item[0] == "responses"]) == 1:
+            raise Exception(
+                "Error code: 400 - {'object': 'error', 'message': "
+                "'guided decoding is unsupported', "
+                "'type': 'BadRequestError', 'param': None, 'code': 400}"
+            )
+        return SimpleNamespace(output_text='{"ok":true}')
+
+    responses_client.client = _build_fake_client(
+        fake_responses_guided_err, fake_chat_404
+    )
+    assert (
+        asyncio.run(responses_client._call_ai([{"role": "user", "content": "hi"}]))
+        == '{"ok":true}'
+    )
+    assert responses_history[1][0] == "responses"
+    assert responses_history[1][1]["text"]["format"] == {"type": "json_object"}
+    assert responses_history[2][0] == "responses"
+    assert "text" not in responses_history[2][1]
+
+
 def test_call_ai_falls_back_to_responses_when_chat_completions_api_is_missing():
     client = AIClient.__new__(AIClient)
     client.settings = SimpleNamespace(
