@@ -60,6 +60,9 @@ const enUSExtra = {
       keywordRules: 'Keyword Rules',
       keywordRulesHint: 'Single OR group: any matching keyword recommends the item. One keyword per line or comma-separated; alphanumeric keywords match whole words.',
       keywordRulesPlaceholder: 'Example: a7m4\nVerified Authentic\nFull Frame',
+      excludeKeywords: 'Pre-filter Exclude Keywords (optional)',
+      excludeKeywordsHint: 'Applies to both AI and keyword modes: matches on search cards skip detail scraping, and matches in detail text skip seller scraping, image downloads, and AI analysis. One per line or comma-separated; alphanumeric keywords match whole words.',
+      excludeKeywordsPlaceholder: 'Example: defective\nrepaired\nsata',
       priceRange: 'Price Range',
       minPrice: 'Min Price',
       maxPrice: 'Max Price',
@@ -266,6 +269,9 @@ const enUSExtra = {
       bodyPlaceholder: 'Example: ',
       variablesHelp: 'Available template variables:',
     },
+  },
+  resultCardExtra: {
+    ruleExcluded: 'Rule Excluded',
   },
 }
 

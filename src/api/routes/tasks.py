@@ -43,6 +43,8 @@ def _has_keyword_rules(rules) -> bool:
 
 
 def _validate_final_account_strategy(existing_task, task_update: TaskUpdate) -> None:
+    if task_update.model_fields_set.isdisjoint({"account_state_file", "account_strategy"}):
+        return
     account_state_file = (
         task_update.account_state_file
         if task_update.account_state_file is not None

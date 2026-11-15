@@ -5,6 +5,7 @@ import random
 import re
 import tempfile
 from datetime import datetime
+from functools import partial
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -42,10 +43,15 @@ from src.utils import (
     log_time,
     random_sleep,
     safe_get,
-    save_to_jsonl,
+    save_result_with_id,
 )
 from src.rotation import RotationPool, load_state_files, parse_proxy_pool, RotationItem
 from src.failure_guard import FailureGuard
+from src.keyword_rule_engine import (
+    match_exclude_keywords_in_fields,
+    normalize_keyword_values,
+    normalize_text,
+)
 from src.services.account_strategy_service import resolve_account_runtime_plan
 from src.infrastructure.persistence.storage_names import build_result_filename
 from src.services.item_analysis_dispatcher import (
@@ -57,12 +63,56 @@ from src.services.price_history_service import (
     load_price_snapshots,
     record_market_snapshots,
 )
-from src.services.result_storage_service import load_processed_link_keys
+from src.services.result_storage_service import (
+    has_task_exclusion,
+    load_excluded_item_records,
+    load_processed_link_ids,
+)
 from src.services.seller_profile_cache import SellerProfileCache
 from src.services.search_pagination import (
     advance_search_page,
     is_search_results_response,
 )
+
+
+VISIBLE_ITEM_TEXT_FIELDS = (
+    "商品标题",
+    "商品描述",
+    "商品标签",
+    "卖家昵称",
+    "发货地区",
+)
+
+
+def match_item_exclude_keywords(item_data: dict, exclude_keywords) -> list[str]:
+    """提取列表卡片/商品可见文本字段并逐字段匹配前置排除词。"""
+    if not isinstance(item_data, dict) or not exclude_keywords:
+        return []
+    fields = [item_data.get(field) for field in VISIBLE_ITEM_TEXT_FIELDS]
+    return match_exclude_keywords_in_fields(exclude_keywords, fields)
+
+
+def merge_excluded_item_snapshot(
+    cached_item: Optional[dict],
+    current_item: dict,
+) -> dict:
+    """合并历史 exclude_rule 快照（保留已抓商品描述）与当前列表卡片数据。"""
+    merged = dict(cached_item or {})
+    for key, value in (current_item or {}).items():
+        if value in (None, "", []) and key in merged:
+            continue
+        merged[key] = value
+    return merged
+
+
+def recheck_excluded_item(
+    cached_item: Optional[dict],
+    current_item: dict,
+    exclude_keywords,
+) -> list[str]:
+    """用当前任务的排除词复核历史 exclude_rule 商品。"""
+    merged = merge_excluded_item_snapshot(cached_item, current_item)
+    return match_item_exclude_keywords(merged, exclude_keywords)
 
 
 class RiskControlError(Exception):
@@ -282,6 +332,40 @@ def _get_seller_profile_cache_ttl(task_config: dict) -> int:
     configured = task_config.get("seller_profile_cache_ttl")
     default = _as_int(os.getenv("SELLER_PROFILE_CACHE_TTL"), 1800)
     return max(0, _as_int(configured, default))
+
+
+def _build_exclude_aware_saver(
+    *,
+    saver_fn,
+    processed_links: set[str],
+    processed_link_ids: dict[str, int],
+    excluded_item_map: dict[str, dict],
+    in_flight_links: set[str],
+):
+    async def _wrapped_saver(rec: dict, kw: str) -> bool:
+        item_info = rec.get("商品信息", {}) or {}
+        rec_link = str(item_info.get("商品链接") or "")
+        rec_key = get_link_unique_key(rec_link) if rec_link else ""
+        try:
+            expected_id = processed_link_ids.get(rec_key)
+            if expected_id is None:
+                row_id = await saver_fn(rec, kw)
+            else:
+                row_id = await saver_fn(rec, kw, expected_result_id=expected_id)
+            if row_id is not None and rec_key:
+                analysis_info = rec.get("ai_analysis", {}) or {}
+                processed_links.add(rec_key)
+                processed_link_ids[rec_key] = row_id
+                if (analysis_info.get("analysis_source") or "").strip().lower() == "exclude_rule":
+                    excluded_item_map[rec_key] = dict(item_info)
+                else:
+                    excluded_item_map.pop(rec_key, None)
+            return row_id is not None
+        finally:
+            if rec_key:
+                in_flight_links.discard(rec_key)
+
+    return _wrapped_saver
 
 
 def _default_context_options() -> dict:
@@ -519,6 +603,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     if decision_mode not in {"ai", "keyword"}:
         decision_mode = "ai"
     keyword_rules = task_config.get("keyword_rules") or []
+    exclude_keywords = normalize_keyword_values(task_config.get("exclude_keywords"))
+    rule_key = json.dumps(sorted(normalize_text(word) for word in exclude_keywords), ensure_ascii=False)
+    task_name = task_config.get("task_name", "Untitled Task")
     free_shipping = task_config.get("free_shipping", False)
     raw_new_publish = task_config.get("new_publish_option") or ""
     new_publish_option = raw_new_publish.strip()
@@ -526,12 +613,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
         new_publish_option = ""
     region_filter = (task_config.get("region") or "").strip()
 
-    processed_links = set()
     history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
     history_seen_item_ids: set[str] = set()
     historical_snapshots = load_price_snapshots(keyword)
     result_filename = build_result_filename(keyword)
-    processed_links = load_processed_link_keys(keyword)
+    processed_link_ids = load_processed_link_ids(keyword)
+    processed_links = set(processed_link_ids)
+    excluded_item_map = load_excluded_item_records(keyword)
     if processed_links:
         print(f"LOG: 发现已存在结果集 {result_filename}，已加载 {len(processed_links)} 个历史商品用于去重。")
     else:
@@ -599,6 +687,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     async def _run_scrape_attempt(state_file: str, proxy_server: Optional[str]) -> int:
         processed_item_count = 0
         stop_scraping = False
+        in_flight_links: set[str] = set()
 
         if not os.path.exists(state_file):
             raise FileNotFoundError(f"登录状态文件不存在: {state_file}")
@@ -657,7 +746,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 image_downloader=download_all_images,
                 ai_analyzer=get_ai_analysis,
                 notifier=send_ntfy_notification,
-                saver=save_to_jsonl,
+                saver=_build_exclude_aware_saver(
+                    saver_fn=partial(save_result_with_id, exclusion_rules_key=rule_key),
+                    processed_links=processed_links,
+                    processed_link_ids=processed_link_ids,
+                    excluded_item_map=excluded_item_map,
+                    in_flight_links=in_flight_links,
+                ),
             )
 
             # 增强反检测脚本（模拟真实移动设备）
@@ -1016,10 +1111,44 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             break
 
                         unique_key = get_link_unique_key(item_data["商品链接"])
-                        if unique_key in processed_links:
+                        if unique_key in in_flight_links:
                             log_time(
-                                f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                                f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 正在后台处理中，跳过。"
                             )
+                            continue
+                        if unique_key in processed_links:
+                            if unique_key in excluded_item_map and unique_key in processed_link_ids:
+                                rechecked_excludes = recheck_excluded_item(
+                                    excluded_item_map.get(unique_key),
+                                    item_data,
+                                    exclude_keywords,
+                                )
+                                if rechecked_excludes:
+                                    log_time(
+                                        f"[预过滤] 商品 '{item_data.get('商品标题', '')[:30]}...' 命中排除词 {', '.join(rechecked_excludes)}，跳过详情采集。"
+                                    )
+                                    continue
+                                log_time(
+                                    f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 历史排除规则已变更，重新采集详情。"
+                                )
+                            else:
+                                log_time(
+                                    f"[页内进度 {i}/{total_items_on_page}] 商品 '{item_data['商品标题'][:20]}...' 已存在，跳过。"
+                                )
+                                continue
+
+                        matched_excludes = match_item_exclude_keywords(
+                            item_data, exclude_keywords
+                        )
+                        if matched_excludes:
+                            log_time(
+                                f"[预过滤] 商品 '{item_data.get('商品标题', '')[:30]}...' 命中排除词 {', '.join(matched_excludes)}，跳过详情采集。"
+                            )
+                            continue
+
+                        if exclude_keywords and unique_key in processed_link_ids and has_task_exclusion(
+                            processed_link_ids[unique_key], task_name, item_data.get("当前售价"), rule_key,
+                        ):
                             continue
 
                         log_time(
@@ -1028,8 +1157,11 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         # --- 修改: 访问详情页前的等待时间，模拟用户在列表页上看了一会儿 ---
                         await random_sleep(2, 4)  # 原来是 (2, 4)
 
-                        detail_page = await context.new_page()
+                        in_flight_links.add(unique_key)
+                        submitted_to_dispatcher = False
+                        detail_page = None
                         try:
+                            detail_page = await context.new_page()
                             async with detail_page.expect_response(
                                 lambda r: DETAIL_API_URL_PATTERN in r.url, timeout=25000
                             ) as detail_info:
@@ -1112,6 +1244,11 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 item_data["浏览量"] = await safe_get(
                                     item_do, "browseCnt", default="-"
                                 )
+                                detail_desc = await safe_get(
+                                    item_do, "desc", default=""
+                                )
+                                if isinstance(detail_desc, str) and detail_desc.strip():
+                                    item_data["商品描述"] = detail_desc.strip()
                                 # ...[此处可添加更多从详情页解析出的商品信息]...
 
                                 user_id = await safe_get(seller_do, "sellerId")
@@ -1147,6 +1284,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         analyze_images=analyze_images,
                                         prompt_text=ai_prompt_text,
                                         keyword_rules=tuple(keyword_rules or []),
+                                        exclude_keywords=tuple(exclude_keywords or []),
                                         final_record=final_record,
                                         seller_id=str(user_id) if user_id else None,
                                         zhima_credit_text=zhima_credit_text,
@@ -1154,7 +1292,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     )
                                 )
 
-                                processed_links.add(unique_key)
+                                submitted_to_dispatcher = True
                                 processed_item_count += 1
                                 log_time(
                                     f"商品已提交后台分析。累计处理 {processed_item_count} 个新商品。"
@@ -1186,7 +1324,10 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         except Exception as e:
                             print(f"   错误: 处理商品详情时发生未知错误: {e}")
                         finally:
-                            await detail_page.close()
+                            if not submitted_to_dispatcher:
+                                in_flight_links.discard(unique_key)
+                            if detail_page is not None:
+                                await detail_page.close()
                             # --- 修改: 增加关闭页面后的短暂整理时间 ---
                             await random_sleep(2, 4)  # 原来是 (1, 2.5)
 

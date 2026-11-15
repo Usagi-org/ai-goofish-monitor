@@ -122,6 +122,8 @@ docker compose down
 
 ### Results and Logs
 
+- Tasks sharing a search keyword keep their own detail exclusions. Other tasks retain their recommendations. Later scans reuse an exclusion while the price and exclusion rules match. Positive prices compare by value. Ranges, zero and other displays compare by their trimmed text. Upgrading preserves existing exclusions. Ranges keep their original text on the search page, and neighboring listings still get processed. Editing only the exclusion list preserves the task’s account strategy and binding.
+- Previously excluded items are checked again when the current rules no longer match. Deleting or hiding the original record during analysis discards the result and suppresses its notification.
 - The results page and export endpoints now query SQLite instead of directly scanning `jsonl` files.
 - The logs page is the first place to inspect login-state expiry, anti-bot issues, or AI call failures.
 

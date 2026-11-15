@@ -24,8 +24,10 @@ class JsonTaskRepository(TaskRepository):
 
                 tasks_data = json.loads(content)
                 tasks = []
-                for i, task_data in enumerate(tasks_data):
+                for i, raw_task_data in enumerate(tasks_data):
+                    task_data = dict(raw_task_data)
                     task_data['id'] = i
+                    task_data.setdefault('exclude_keywords', [])
                     tasks.append(Task(**task_data))
                 return tasks
         except FileNotFoundError:

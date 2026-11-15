@@ -60,6 +60,9 @@ const zhCNExtra = {
       keywordRules: '关键词规则',
       keywordRulesHint: '单组 OR 逻辑：命中任一关键词即推荐。每行一个关键词，或使用逗号分隔；纯英数字关键词按完整词匹配。',
       keywordRulesPlaceholder: '示例：a7m4\n验货宝\n全画幅',
+      excludeKeywords: '前置排除词（可选）',
+      excludeKeywordsHint: 'AI 模式与关键词模式均生效：列表卡片命中直接跳过详情采集，详情正文命中跳过卖家采集、图片下载与 AI 分析。每行一个或逗号分隔；纯英数字按完整词匹配。',
+      excludeKeywordsPlaceholder: '示例：瑕疵\n拆修\nsata',
       priceRange: '价格范围',
       minPrice: '最低价',
       maxPrice: '最高价',
@@ -266,6 +269,9 @@ const zhCNExtra = {
       bodyPlaceholder: '例如：',
       variablesHelp: '可用模板变量：',
     },
+  },
+  resultCardExtra: {
+    ruleExcluded: '排除词拦截',
   },
 }
 

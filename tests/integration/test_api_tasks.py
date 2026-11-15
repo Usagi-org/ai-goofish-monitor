@@ -193,3 +193,106 @@ def test_delete_task_stops_runtime_and_reindexes_process_state(
     process_service = api_context["process_service"]
     assert process_service.stopped == [0]
     assert process_service.reindexed == []
+
+
+def test_create_and_update_task_exclude_keywords(api_client, sample_task_payload):
+    payload = dict(sample_task_payload)
+    payload["exclude_keywords"] = ["瑕疵", "SATA", "sata"]
+
+    create_resp = api_client.post("/api/tasks/", json=payload)
+    assert create_resp.status_code == 200
+    created = create_resp.json()["task"]
+    assert created["exclude_keywords"] == ["瑕疵", "SATA"]
+
+    get_resp = api_client.get("/api/tasks/0")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["exclude_keywords"] == ["瑕疵", "SATA"]
+
+    patch_resp = api_client.patch(
+        "/api/tasks/0",
+        json={"exclude_keywords": "拆修, 进水\n拆修"},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["task"]["exclude_keywords"] == ["拆修", "进水"]
+
+    omitted_resp = api_client.patch("/api/tasks/0", json={"max_pages": 5})
+    assert omitted_resp.status_code == 200
+    assert omitted_resp.json()["task"]["exclude_keywords"] == ["拆修", "进水"]
+
+    null_clear_resp = api_client.patch("/api/tasks/0", json={"exclude_keywords": None})
+    assert null_clear_resp.status_code == 200
+    assert null_clear_resp.json()["task"]["exclude_keywords"] == []
+    assert api_client.get("/api/tasks/0").json()["exclude_keywords"] == []
+
+    reset_resp = api_client.patch("/api/tasks/0", json={"exclude_keywords": ["暗病"]})
+    assert reset_resp.status_code == 200
+    assert reset_resp.json()["task"]["exclude_keywords"] == ["暗病"]
+
+    clear_resp = api_client.patch("/api/tasks/0", json={"exclude_keywords": []})
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["task"]["exclude_keywords"] == []
+
+
+def test_generate_task_preserves_exclude_keywords_in_keyword_and_ai_modes(
+    api_client, monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+
+    kw_resp = api_client.post(
+        "/api/tasks/generate",
+        json={
+            "task_name": "SSD 关键词筛选",
+            "keyword": "固态硬盘 1t",
+            "description": "",
+            "decision_mode": "keyword",
+            "keyword_rules": ["980 pro"],
+            "exclude_keywords": ["sata", "扩容"],
+            "max_pages": 2,
+            "personal_only": True,
+        },
+    )
+    assert kw_resp.status_code == 200
+    assert kw_resp.json()["task"]["exclude_keywords"] == ["sata", "扩容"]
+
+    async def fake_generate_criteria(*_args, **_kwargs):
+        await asyncio.sleep(0.01)
+        return "[V6.3 核心升级]\nSSD criteria"
+
+    monkeypatch.setattr(
+        "src.services.task_generation_runner.generate_criteria",
+        fake_generate_criteria,
+    )
+
+    ai_resp = api_client.post(
+        "/api/tasks/generate",
+        json={
+            "task_name": "SSD AI 筛选",
+            "keyword": "nvme 1t",
+            "description": "只看国行盒装，健康度 99% 以上。",
+            "decision_mode": "ai",
+            "exclude_keywords": ["sata", "坏盘"],
+            "max_pages": 2,
+            "personal_only": True,
+        },
+    )
+    assert ai_resp.status_code == 202
+    job_id = ai_resp.json()["job"]["job_id"]
+
+    for _ in range(50):
+        status_resp = api_client.get(f"/api/tasks/generate-jobs/{job_id}")
+        latest_job = status_resp.json()["job"]
+        if latest_job["status"] == "completed":
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("AI 任务生成未在预期时间内完成")
+
+    assert latest_job["task"]["exclude_keywords"] == ["sata", "坏盘"]
+
+
+def test_editing_exclusions_preserves_fixed_and_rotating_accounts(api_client, sample_task_payload):
+    for strategy, binding in [("fixed", "bound.json"), ("rotate", None)]:
+        payload = {**sample_task_payload, "task_name": strategy, "account_strategy": strategy, "account_state_file": binding}
+        task = api_client.post("/api/tasks/", json=payload).json()["task"]
+        updated = api_client.patch(f"/api/tasks/{task['id']}", json={"exclude_keywords": ["进水"]}).json()["task"]
+        assert (updated["exclude_keywords"], updated["account_strategy"], updated["account_state_file"]) == (["进水"], strategy, binding)

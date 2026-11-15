@@ -9,6 +9,7 @@ import re
 
 from src.config import STATE_FILE
 from src.infrastructure.persistence.sqlite_task_repository import SqliteTaskRepository
+from src.keyword_rule_engine import normalize_keyword_values
 from src.scraper import scrape_xianyu
 
 
@@ -47,27 +48,7 @@ async def main():
         tasks_config = [task.dict() for task in tasks]
 
     def normalize_keywords(value):
-        if value is None:
-            return []
-        if isinstance(value, str):
-            raw_values = re.split(r"[\n,]+", value)
-        elif isinstance(value, (list, tuple, set)):
-            raw_values = list(value)
-        else:
-            raw_values = [value]
-
-        normalized = []
-        seen = set()
-        for item in raw_values:
-            text = str(item).strip()
-            if not text:
-                continue
-            key = text.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            normalized.append(text)
-        return normalized
+        return normalize_keyword_values(value)
 
     def flatten_legacy_groups(groups):
         merged = []
@@ -107,6 +88,7 @@ async def main():
             task["keyword_rules"] = flatten_legacy_groups(task.get("keyword_rule_groups") or [])
         else:
             task["keyword_rules"] = normalize_keywords(keyword_rules)
+        task["exclude_keywords"] = normalize_keywords(task.get("exclude_keywords"))
 
         if decision_mode == "keyword":
             task["ai_prompt_text"] = ""

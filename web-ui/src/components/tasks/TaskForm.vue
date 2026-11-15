@@ -33,6 +33,7 @@ const form = ref<any>({})
 const accountStrategy = ref<'auto' | 'fixed' | 'rotate'>('auto')
 const selectedAccountStateFile = ref(AUTO_ACCOUNT_VALUE)
 const keywordRulesInput = ref('')
+const excludeKeywordsInput = ref('')
 const cronMode = ref<'preset' | 'custom'>('preset')
 
 // 常用 cron 预设选项
@@ -115,6 +116,7 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
       decision_mode: defaultValues.decision_mode || props.initialData.decision_mode || 'ai',
     }
     keywordRulesInput.value = (defaultValues.keyword_rules || props.initialData.keyword_rules || []).join('\n')
+    excludeKeywordsInput.value = (defaultValues.exclude_keywords ?? props.initialData.exclude_keywords ?? []).join('\n')
     // 编辑模式下，根据 cron 值判断模式
     const cronVal = defaultValues.cron ?? props.initialData.cron ?? ''
     cronMode.value = isPresetCronValue(cronVal) ? 'preset' : 'custom'
@@ -149,6 +151,10 @@ watch(() => [props.mode, props.initialData, props.defaultValues, props.defaultAc
     keywordRulesInput.value = ''
     if (defaultValues.keyword_rules && defaultValues.keyword_rules.length > 0) {
       keywordRulesInput.value = defaultValues.keyword_rules.join('\n')
+    }
+    excludeKeywordsInput.value = ''
+    if (defaultValues.exclude_keywords && defaultValues.exclude_keywords.length > 0) {
+      excludeKeywordsInput.value = defaultValues.exclude_keywords.join('\n')
     }
     // 创建模式下，根据默认值判断模式
     const cronVal = defaultValues.cron ?? ''
@@ -204,6 +210,7 @@ function handleSubmit() {
   }
 
   const keywordRules = parseKeywordText(keywordRulesInput.value)
+  const excludeKeywords = parseKeywordText(excludeKeywordsInput.value)
   if (decisionMode === 'keyword' && keywordRules.length === 0) {
     toast({
       title: t('tasks.form.validation.keywordRuleIncomplete'),
@@ -249,6 +256,7 @@ function handleSubmit() {
   submitData.account_strategy = currentAccountStrategy
   submitData.analyze_images = submitData.analyze_images !== false
   submitData.keyword_rules = decisionMode === 'keyword' ? keywordRules : []
+  submitData.exclude_keywords = excludeKeywords
   if (decisionMode === 'keyword' && !submitData.description) {
     submitData.description = ''
   }
@@ -315,6 +323,21 @@ function handleSubmit() {
             v-model="keywordRulesInput"
             class="min-h-[120px]"
             :placeholder="t('tasks.form.keywordRulesPlaceholder')"
+          />
+        </div>
+      </div>
+
+      <div class="grid gap-2 sm:grid-cols-4 sm:gap-4">
+        <Label for="exclude-keywords" class="pt-1 sm:pt-2 sm:text-right">{{ t('tasks.form.excludeKeywords') }}</Label>
+        <div class="space-y-2 sm:col-span-3">
+          <p class="text-xs text-gray-500">
+            {{ t('tasks.form.excludeKeywordsHint') }}
+          </p>
+          <Textarea
+            id="exclude-keywords"
+            v-model="excludeKeywordsInput"
+            class="min-h-[96px]"
+            :placeholder="t('tasks.form.excludeKeywordsPlaceholder')"
           />
         </div>
       </div>

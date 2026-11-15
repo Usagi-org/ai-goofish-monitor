@@ -2,13 +2,13 @@
 任务领域模型
 定义任务实体及其业务逻辑
 """
-import re
 from enum import Enum
 from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.core.cron_utils import validate_cron_expression
+from src.keyword_rule_engine import normalize_keyword_values
 from src.services.account_strategy_service import (
     clean_account_state_file,
     normalize_account_strategy,
@@ -23,30 +23,7 @@ class TaskStatus(str, Enum):
     SCHEDULED = "scheduled"
 
 
-def _normalize_keyword_values(value) -> List[str]:
-    if value is None:
-        return []
-
-    raw_values = []
-    if isinstance(value, (list, tuple, set)):
-        raw_values = list(value)
-    elif isinstance(value, str):
-        raw_values = re.split(r"[\n,]+", value)
-    else:
-        raw_values = [value]
-
-    normalized: List[str] = []
-    seen = set()
-    for item in raw_values:
-        text = str(item).strip()
-        if not text:
-            continue
-        dedup_key = text.lower()
-        if dedup_key in seen:
-            continue
-        seen.add(dedup_key)
-        normalized.append(text)
-    return normalized
+_normalize_keyword_values = normalize_keyword_values
 
 
 def _extract_keywords_from_legacy_groups(groups) -> List[str]:
@@ -60,25 +37,28 @@ def _extract_keywords_from_legacy_groups(groups) -> List[str]:
             include_keywords = group.get("include_keywords") or []
         else:
             include_keywords = getattr(group, "include_keywords", []) or []
-        merged.extend(_normalize_keyword_values(include_keywords))
-    return _normalize_keyword_values(merged)
+        merged.extend(normalize_keyword_values(include_keywords))
+    return normalize_keyword_values(merged)
 
 
-def _normalize_payload_keywords(payload: Any) -> Any:
+def _normalize_payload_keywords(payload: Any, *, partial: bool = False) -> Any:
     if payload is None or not isinstance(payload, dict):
         return payload
     values = dict(payload)
-    values["account_state_file"] = clean_account_state_file(values.get("account_state_file"))
-    values["account_strategy"] = normalize_account_strategy(
-        values.get("account_strategy"),
-        values.get("account_state_file"),
-    )
+    if not partial or "account_state_file" in values:
+        values["account_state_file"] = clean_account_state_file(values.get("account_state_file"))
+    if not partial or "account_strategy" in values or "account_state_file" in values:
+        values["account_strategy"] = normalize_account_strategy(
+            values.get("account_strategy"), values.get("account_state_file"),
+        )
     if "keyword_rules" in values:
-        values["keyword_rules"] = _normalize_keyword_values(values.get("keyword_rules"))
+        values["keyword_rules"] = normalize_keyword_values(values.get("keyword_rules"))
     elif "keyword_rule_groups" in values:
         values["keyword_rules"] = _extract_keywords_from_legacy_groups(
             values.get("keyword_rule_groups")
         )
+    if "exclude_keywords" in values:
+        values["exclude_keywords"] = normalize_keyword_values(values.get("exclude_keywords"))
     return values
 
 
@@ -129,6 +109,7 @@ class Task(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    exclude_keywords: List[str] = Field(default_factory=list)
     is_running: bool = False
 
     @model_validator(mode="before")
@@ -136,7 +117,7 @@ class Task(BaseModel):
     def normalize_legacy_keyword_payload(cls, values):
         return _normalize_payload_keywords(values)
 
-    @field_validator("keyword_rules", mode="before")
+    @field_validator("keyword_rules", "exclude_keywords", mode="before")
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
@@ -179,6 +160,7 @@ class TaskCreate(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    exclude_keywords: List[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -205,7 +187,7 @@ class TaskCreate(BaseModel):
     def validate_cron(cls, value):
         return _validate_cron_expression(value)
 
-    @field_validator("keyword_rules", mode="before")
+    @field_validator("keyword_rules", "exclude_keywords", mode="before")
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)
@@ -246,12 +228,13 @@ class TaskUpdate(BaseModel):
     region: Optional[str] = None
     decision_mode: Optional[Literal["ai", "keyword"]] = None
     keyword_rules: Optional[List[str]] = None
+    exclude_keywords: Optional[List[str]] = None
     is_running: Optional[bool] = None
 
     @model_validator(mode="before")
     @classmethod
     def normalize_legacy_keyword_payload(cls, values):
-        return _normalize_payload_keywords(values)
+        return _normalize_payload_keywords(values, partial=True)
 
     @field_validator("min_price", "max_price", mode="before")
     @classmethod
@@ -273,10 +256,10 @@ class TaskUpdate(BaseModel):
     def validate_cron(cls, value):
         return _validate_cron_expression(value)
 
-    @field_validator("keyword_rules", mode="before")
+    @field_validator("keyword_rules", "exclude_keywords", mode="before")
     @classmethod
     def normalize_keyword_rules(cls, value):
-        return _normalize_keyword_values(value)
+        return normalize_keyword_values(value)
 
     @model_validator(mode="after")
     def validate_partial_keyword_payload(self):
@@ -310,6 +293,7 @@ class TaskGenerateRequest(BaseModel):
     region: Optional[str] = None
     decision_mode: Literal["ai", "keyword"] = "ai"
     keyword_rules: List[str] = Field(default_factory=list)
+    exclude_keywords: List[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -341,7 +325,7 @@ class TaskGenerateRequest(BaseModel):
     def empty_str_to_none_for_strings(cls, value):
         return _normalize_optional_string(value)
 
-    @field_validator("keyword_rules", mode="before")
+    @field_validator("keyword_rules", "exclude_keywords", mode="before")
     @classmethod
     def normalize_keyword_rules(cls, value):
         return _normalize_keyword_values(value)

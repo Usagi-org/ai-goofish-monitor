@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 from datetime import datetime
@@ -11,7 +12,7 @@ from datetime import datetime
 from src.infrastructure.persistence.sqlite_bootstrap import bootstrap_sqlite_storage
 from src.infrastructure.persistence.sqlite_connection import sqlite_connection
 from src.infrastructure.persistence.storage_names import build_result_filename
-from src.services.price_history_service import parse_price_value
+from src.domain.price import parse_price_value
 from src.services.result_blacklist_service import (
     match_blacklist_keywords,
     normalize_blacklist_keywords,
@@ -147,16 +148,59 @@ def _load_filtered_records_from_conn(
     return records
 
 
-async def save_result_record(record: dict, keyword: str) -> bool:
-    return await asyncio.to_thread(_save_result_record_sync, record, keyword)
+AI_ERROR_REASON_PREFIXES = (
+    "AI analysis returned None",
+    "AI分析异常:",
+    "任务未配置AI prompt",
+    "AI分析未完成:",
+)
 
 
-def _save_result_record_sync(record: dict, keyword: str) -> bool:
+def _exclusion_price_key(value: object) -> str:
+    price = parse_price_value(value)
+    if price is not None and price > 0:
+        return f"n:{price:.2f}"
+    return "text:" + (str(value).strip() if value is not None else "")
+
+
+async def save_result_record(
+    record: dict, keyword: str, *, expected_result_id: int | None = None, exclusion_rules_key: str = "",
+) -> bool:
+    row_id = await save_result_record_id(
+        record, keyword, expected_result_id=expected_result_id, exclusion_rules_key=exclusion_rules_key,
+    )
+    return row_id is not None
+
+
+async def save_result_record_id(
+    record: dict, keyword: str, *, expected_result_id: int | None = None, exclusion_rules_key: str = "",
+) -> int | None:
+    return await asyncio.to_thread(
+        _save_result_id_sync, record, keyword, expected_result_id, exclusion_rules_key,
+    )
+
+
+def _is_ai_analysis_failure(analysis: dict) -> bool:
+    if not isinstance(analysis, dict):
+        return True
+    if analysis.get("error"):
+        return True
+    reason = str(analysis.get("reason") or "").strip()
+    return any(reason.startswith(prefix) for prefix in AI_ERROR_REASON_PREFIXES)
+
+
+def _save_result_id_sync(
+    record: dict, keyword: str, expected_result_id: int | None = None, exclusion_rules_key: str = "",
+) -> int | None:
     bootstrap_sqlite_storage()
-    item = record.get("商品信息", {}) or {}
-    analysis = record.get("ai_analysis", {}) or {}
+    record_to_save = copy.deepcopy(record)
+    raw_item = record_to_save.get("商品信息")
+    item = raw_item if isinstance(raw_item, dict) else {}
+    record_to_save["商品信息"] = item
+    analysis = record_to_save.get("ai_analysis", {}) or {}
     link = str(item.get("商品链接") or "")
-    link_unique_key = _get_link_unique_key(link) if link else _fallback_unique_key(record, item)
+    link_unique_key = _get_link_unique_key(link) if link else _fallback_unique_key(record_to_save, item)
+    result_filename = build_result_filename(keyword)
     keyword_hit_count = analysis.get("keyword_hit_count", 0)
     try:
         keyword_hit_count = int(keyword_hit_count)
@@ -164,46 +208,211 @@ def _save_result_record_sync(record: dict, keyword: str) -> bool:
         keyword_hit_count = 0
 
     with sqlite_connection() as conn:
-        conn.execute(
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing_row = conn.execute(
+                """
+                SELECT id, task_name, status, publish_time, item_id, seller_nickname, analysis_source, raw_json
+                FROM result_items
+                WHERE result_filename = ? AND link_unique_key = ?
+                """,
+                (result_filename, link_unique_key),
+            ).fetchone()
+
+            if expected_result_id is not None and (existing_row is None or existing_row["id"] != expected_result_id):
+                conn.execute("ROLLBACK")
+                return None
+
+            if existing_row is None:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO result_items (
+                        result_filename, keyword, task_name, crawl_time, publish_time, price,
+                        price_display, item_id, title, link, link_unique_key, seller_nickname,
+                        is_recommended, analysis_source, keyword_hit_count, raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        result_filename,
+                        record_to_save.get("搜索关键字", keyword),
+                        record_to_save.get("任务名称", ""),
+                        record_to_save.get("爬取时间", ""),
+                        item.get("发布时间"),
+                        parse_price_value(item.get("当前售价")),
+                        item.get("当前售价"),
+                        item.get("商品ID"),
+                        item.get("商品标题"),
+                        link,
+                        link_unique_key,
+                        (record_to_save.get("卖家信息", {}) or {}).get("卖家昵称") or item.get("卖家昵称"),
+                        1 if analysis.get("is_recommended") else 0,
+                        analysis.get("analysis_source"),
+                        keyword_hit_count,
+                        json.dumps(record_to_save, ensure_ascii=False),
+                    ),
+                )
+                conn.execute("COMMIT")
+                return cursor.lastrowid
+
+            if (existing_row["analysis_source"] or "") != "exclude_rule" or (
+                existing_row["status"] or "active"
+            ) != "active":
+                conn.execute("ROLLBACK")
+                return None
+
+            incoming_source = (analysis.get("analysis_source") or "").strip().lower()
+            incoming_task_name = str(record_to_save.get("任务名称") or "").strip()
+            is_same_task = incoming_task_name == str(existing_row["task_name"] or "").strip()
+            if incoming_source == "exclude_rule" and not is_same_task:
+                if exclusion_rules_key and expected_result_id == existing_row["id"]:
+                    conn.execute(
+                        """
+                        INSERT INTO result_task_exclusions(result_id, task_name, observed_price_key, rules_key)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(result_id, task_name) DO UPDATE SET
+                            observed_price_key = excluded.observed_price_key, rules_key = excluded.rules_key
+                        """,
+                        (existing_row["id"], incoming_task_name, _exclusion_price_key(item.get("当前售价")), exclusion_rules_key),
+                    )
+                    conn.execute("COMMIT")
+                else:
+                    conn.execute("ROLLBACK")
+                return None
+
+            if (analysis.get("analysis_source") or "") != "exclude_rule" and _is_ai_analysis_failure(analysis):
+                conn.execute("ROLLBACK")
+                return None
+
+            existing_item: dict = {}
+            try:
+                parsed_existing = json.loads(str(existing_row["raw_json"] or "{}"))
+                if isinstance(parsed_existing, dict) and isinstance(parsed_existing.get("商品信息"), dict):
+                    existing_item = parsed_existing["商品信息"]
+            except json.JSONDecodeError:
+                existing_item = {}
+
+            publish_time = item.get("发布时间")
+            if publish_time in (None, "", "未知时间"):
+                preserved_publish_time = existing_row["publish_time"] or existing_item.get("发布时间")
+                if preserved_publish_time:
+                    publish_time = preserved_publish_time
+                    item["发布时间"] = preserved_publish_time
+
+            item_id = item.get("商品ID")
+            if item_id in (None, "", "未知ID"):
+                preserved_item_id = existing_row["item_id"] or existing_item.get("商品ID")
+                if preserved_item_id:
+                    item_id = preserved_item_id
+                    item["商品ID"] = preserved_item_id
+
+            seller_nickname = (
+                (record_to_save.get("卖家信息", {}) or {}).get("卖家昵称")
+                or item.get("卖家昵称")
+                or existing_row["seller_nickname"]
+            )
+
+            cursor = conn.execute(
+                """
+                UPDATE result_items
+                SET crawl_time = ?,
+                    task_name = ?,
+                    publish_time = ?,
+                    price = ?,
+                    price_display = ?,
+                    item_id = ?,
+                    title = ?,
+                    link = ?,
+                    seller_nickname = ?,
+                    is_recommended = ?,
+                    analysis_source = ?,
+                    keyword_hit_count = ?,
+                    raw_json = ?
+                WHERE id = ?
+                  AND COALESCE(status, 'active') = 'active'
+                  AND COALESCE(analysis_source, '') = 'exclude_rule'
+                """,
+                (
+                    record_to_save.get("爬取时间", ""),
+                    record_to_save.get("任务名称", ""),
+                    publish_time,
+                    parse_price_value(item.get("当前售价")),
+                    item.get("当前售价"),
+                    item_id,
+                    item.get("商品标题"),
+                    link,
+                    seller_nickname,
+                    1 if analysis.get("is_recommended") else 0,
+                    analysis.get("analysis_source"),
+                    keyword_hit_count,
+                    json.dumps(record_to_save, ensure_ascii=False),
+                    existing_row["id"],
+                ),
+            )
+            if int(cursor.rowcount or 0) <= 0:
+                conn.execute("ROLLBACK")
+                return None
+            conn.execute("COMMIT")
+            return existing_row["id"]
+        except Exception:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
+
+
+def has_task_exclusion(result_id: int, task_name: str, price: object, rules_key: str) -> bool:
+    bootstrap_sqlite_storage()
+    with sqlite_connection() as conn:
+        return conn.execute(
             """
-            INSERT OR IGNORE INTO result_items (
-                result_filename, keyword, task_name, crawl_time, publish_time, price,
-                price_display, item_id, title, link, link_unique_key, seller_nickname,
-                is_recommended, analysis_source, keyword_hit_count, raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            SELECT 1 FROM result_task_exclusions
+            WHERE result_id = ? AND task_name = ? AND observed_price_key = ? AND rules_key = ?
             """,
-            (
-                build_result_filename(keyword),
-                record.get("搜索关键字", keyword),
-                record.get("任务名称", ""),
-                record.get("爬取时间", ""),
-                item.get("发布时间"),
-                parse_price_value(item.get("当前售价")),
-                item.get("当前售价"),
-                item.get("商品ID"),
-                item.get("商品标题"),
-                link,
-                link_unique_key,
-                (record.get("卖家信息", {}) or {}).get("卖家昵称") or item.get("卖家昵称"),
-                1 if analysis.get("is_recommended") else 0,
-                analysis.get("analysis_source"),
-                keyword_hit_count,
-                json.dumps(record, ensure_ascii=False),
-            ),
-        )
-        conn.commit()
-    return True
+            (result_id, str(task_name or "").strip(), _exclusion_price_key(price), rules_key),
+        ).fetchone() is not None
 
 
 def load_processed_link_keys(keyword: str) -> set[str]:
+    return set(load_processed_link_ids(keyword))
+
+
+def load_processed_link_ids(keyword: str) -> dict[str, int]:
     bootstrap_sqlite_storage()
     filename = build_result_filename(keyword)
     with sqlite_connection() as conn:
         rows = conn.execute(
-            "SELECT link_unique_key FROM result_items WHERE result_filename = ?",
+            "SELECT link_unique_key, id FROM result_items WHERE result_filename = ?",
             (filename,),
         ).fetchall()
-    return {str(row["link_unique_key"]) for row in rows if row["link_unique_key"]}
+    return {row["link_unique_key"]: row["id"] for row in rows if row["link_unique_key"]}
+
+
+def load_excluded_item_records(keyword: str) -> dict[str, dict]:
+    bootstrap_sqlite_storage()
+    filename = build_result_filename(keyword)
+    with sqlite_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT link_unique_key, raw_json
+            FROM result_items
+            WHERE result_filename = ?
+              AND analysis_source = 'exclude_rule'
+              AND COALESCE(status, 'active') = 'active'
+            """,
+            (filename,),
+        ).fetchall()
+    excluded_map: dict[str, dict] = {}
+    for row in rows:
+        unique_key = str(row["link_unique_key"] or "")
+        if not unique_key:
+            continue
+        try:
+            parsed = json.loads(str(row["raw_json"] or "{}"))
+        except json.JSONDecodeError:
+            parsed = {}
+        product_info = parsed.get("商品信息") if isinstance(parsed, dict) else {}
+        excluded_map[unique_key] = dict(product_info) if isinstance(product_info, dict) else {}
+    return excluded_map
 
 
 async def list_result_filenames() -> list[str]:
