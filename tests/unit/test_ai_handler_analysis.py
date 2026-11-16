@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -278,3 +279,50 @@ def test_analysis_does_not_repeat_a_truncated_response_with_same_budget(monkeypa
     with pytest.raises(ValueError, match="未完成"):
         asyncio.run(ai_handler.get_ai_analysis({"商品信息":{"商品ID":"cutoff"}}, prompt_text="JSON"))
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("rejected_formats", [1, 2])
+@pytest.mark.parametrize("valid_result", [True, False])
+def test_analysis_falls_back_on_bare_response_format_error_and_keeps_validation(
+    monkeypatch, tmp_path, rejected_formats, valid_result
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_schema")
+    monkeypatch.setattr(ai_handler, "ENABLE_RESPONSE_FORMAT", True)
+    history = []
+    criterion = {"status": "PASS", "comment": "ok", "evidence": "description"}
+    payload = {
+        "prompt_version": "v1", "is_recommended": True, "reason": "ok",
+        "risk_tags": [], "value_score": None, "value_summary": None,
+        "criteria_analysis": {
+            "product_fit": criterion, "condition": criterion,
+            "seller_type": {**criterion, "persona": "personal"},
+            "price_value": criterion,
+        },
+    }
+    if not valid_result:
+        del payload["criteria_analysis"]["price_value"]
+
+    async def create(**params):
+        history.append(params)
+        if len(history) <= rejected_formats:
+            raise Exception(
+                "Error code: 400 - This model does not support the requested "
+                "response_format or output format."
+            )
+        return SimpleNamespace(output_text=json.dumps(payload))
+
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    analysis = ai_handler.get_ai_analysis(
+        {"商品信息": {"商品ID": "format-fallback"}}, prompt_text="JSON"
+    )
+    if valid_result:
+        assert asyncio.run(analysis) == payload
+        assert len(history) == rejected_formats + 1
+    else:
+        with pytest.raises(ValueError, match="price_value"):
+            asyncio.run(analysis)
+        assert len(history) == 4
+
+    formats = [params.get("response_format", {}).get("type", "none") for params in history]
+    assert formats[:rejected_formats + 1] == ["json_schema", "json_object", "none"][:rejected_formats + 1]

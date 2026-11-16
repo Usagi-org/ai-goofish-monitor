@@ -84,6 +84,28 @@ def test_json_output_error_not_triggered_without_body():
     assert is_json_output_unsupported_error(err) is False
 
 
+def test_json_output_error_detected_with_empty_param_and_bare_response_format():
+    import httpx
+    from openai import BadRequestError
+
+    body = {"error": {
+        "message": "This model does not support the requested response_format or output format. Please check the supported parameter range in the console or product documentation.",
+        "type": "invalid_request_error", "param": "", "code": "400006",
+    }}
+    error = BadRequestError(
+        body["error"]["message"],
+        response=httpx.Response(400, request=httpx.Request("POST", "https://example.com/v1/chat/completions")),
+        body=body,
+    )
+
+    assert is_json_output_unsupported_error(error) is True
+
+
+def test_json_output_error_does_not_match_unrelated_response_format_error():
+    error = Exception("Invalid response_format schema: required must include all properties")
+    assert is_json_output_unsupported_error(error) is False
+
+
 import pytest
 from src.services.ai_request_compat import build_ai_request_params
 

@@ -15,7 +15,7 @@ UNSUPPORTED_JSON_OUTPUT_MARKERS = (
     "json_object",
     "json_schema",
     "text.format",
-    "response_format.type",
+    "response_format",
 )
 RESPONSES_API_UNSUPPORTED_MARKERS = (
     "404 page not found",
