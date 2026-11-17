@@ -9,6 +9,10 @@ class EmptyAIResponseError(ValueError):
     """AI 返回了空内容。"""
 
 
+class IncompleteAIResponseError(ValueError):
+    """模型未完成正式回答；不得把部分内容当作成功结果。"""
+
+
 def extract_ai_response_content(response: Any) -> str:
     """从不同形态的 AI 响应中提取文本内容。"""
     if response is None:
@@ -21,25 +25,26 @@ def extract_ai_response_content(response: Any) -> str:
     if isinstance(response, str):
         return _normalize_text_content(response)
 
+    status = getattr(response, "status", None)
+    if status is not None and status != "completed":
+        raise IncompleteAIResponseError(f"AI回答未完成（status={status}），请提高输出上限或减少模型思考预算。")
+
     output_text = getattr(response, "output_text", None)
     if isinstance(output_text, str):
         return _normalize_text_content(output_text)
 
     choices = getattr(response, "choices", None)
     if choices:
+        reason = getattr(choices[0], "finish_reason", None)
+        if reason is not None and reason != "stop":
+            raise IncompleteAIResponseError(f"AI回答未完成或被拒绝（finish_reason={reason}），请提高输出上限或减少模型思考预算。")
         message = getattr(choices[0], "message", None)
         if message is None:
             raise EmptyAIResponseError("AI响应缺少 message。")
         content = getattr(message, "content", None)
-        
-        # 智谱等 OpenAI 兼容网关在某些模式下会把输出放在 reasoning_content 而非 content
-        try:
-            return _normalize_text_content(_coerce_content_parts(content))
-        except EmptyAIResponseError:
-            reasoning_content = getattr(message, "reasoning_content", None)
-            if reasoning_content:
-                return _normalize_text_content(_coerce_content_parts(reasoning_content))
-            raise
+
+        # reasoning_content 是推理过程，不能替代正式答案。
+        return _normalize_text_content(_coerce_content_parts(content))
 
     raise ValueError(f"无法识别的AI响应类型: {type(response).__name__}")
 
@@ -48,9 +53,16 @@ def parse_ai_response_json(content: str) -> dict:
     """解析 AI 文本响应中的 JSON。"""
     cleaned = _strip_code_fences(content)
     try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        return _extract_first_json_value(cleaned, exc)
+        value = json.loads(cleaned)
+    except json.JSONDecodeError:
+        # 只从第一个对象起点解析，避免将编号 [1] 或截断对象内的子对象当成结果。
+        start = cleaned.find("{")
+        if start < 0:
+            raise
+        value, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+    if not isinstance(value, dict):
+        raise ValueError("AI分析结果必须是 JSON 对象。")
+    return value
 
 
 def _coerce_content_parts(content: Any) -> str:
@@ -95,24 +107,3 @@ def _strip_code_fences(content: str) -> str:
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
     return cleaned.strip()
-
-
-def _extract_first_json_value(
-    content: str,
-    fallback_error: json.JSONDecodeError,
-):
-    decoder = json.JSONDecoder()
-    last_error: json.JSONDecodeError | None = None
-
-    for start_index, char in enumerate(content):
-        if char not in "{[":
-            continue
-        try:
-            parsed, _ = decoder.raw_decode(content[start_index:])
-            return parsed
-        except json.JSONDecodeError as exc:
-            last_error = exc
-
-    if last_error is not None:
-        raise last_error
-    raise fallback_error

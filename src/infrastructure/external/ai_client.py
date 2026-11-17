@@ -26,7 +26,9 @@ from src.services.ai_request_compat import (
     is_responses_api_unsupported_error,
     is_temperature_unsupported_error,
     remove_temperature_param,
+    next_output_format,
 )
+from src.services.ai_output_schema import ANALYSIS_SCHEMA, AnalysisResult
 from src.services.ai_response_parser import (
     EmptyAIResponseError,
     extract_ai_response_content,
@@ -172,7 +174,10 @@ class AIClient:
         try:
             messages = self._build_messages(product_data, image_paths, prompt_text)
             response = await self._call_ai(messages)
-            return self._parse_response(response)
+            result = self._parse_response(response)
+            if self.settings.output_format == "json_schema":
+                AnalysisResult.model_validate(result)
+            return result
         except Exception as e:
             print(f"AI 分析失败: {e}")
             return None
@@ -199,7 +204,9 @@ class AIClient:
         messages: List[Dict],
         *,
         temperature: float = 0.1,
-        max_output_tokens: int = 4000,
+        max_output_tokens: int | None = None,
+        json_schema: dict | None = None,
+        schema_name: str = "analysis_result",
         enable_json_output: Optional[bool] = None,
     ) -> str:
         """调用 AI API"""
@@ -209,6 +216,8 @@ class AIClient:
             if enable_json_output is None
             else enable_json_output
         )
+        output_format = getattr(self.settings, "output_format", "json_object") if use_response_format else "none"
+        budget = max_output_tokens or getattr(self.settings, "max_output_tokens", 16384)
         use_temperature = True
         max_attempts = 4
 
@@ -218,8 +227,11 @@ class AIClient:
                 model=self.settings.model_name,
                 messages=messages,
                 temperature=temperature,
-                max_output_tokens=max_output_tokens,
-                enable_json_output=use_response_format,
+                max_output_tokens=budget,
+                enable_json_output=output_format != "none",
+                output_format=output_format,
+                json_schema=json_schema if json_schema is not None else ANALYSIS_SCHEMA,
+                schema_name=schema_name,
             )
             if not use_temperature:
                 request_params = remove_temperature_param(request_params)
@@ -257,10 +269,11 @@ class AIClient:
                     api_mode = CHAT_COMPLETIONS_API_MODE
                     changed = True
                     print("当前服务未实现 Responses API，正在自动回退到 Chat Completions API")
-                if use_response_format and is_json_output_unsupported_error(exc):
-                    use_response_format = False
+                if output_format != "none" and is_json_output_unsupported_error(exc):
+                    previous_format = output_format
+                    output_format = next_output_format(output_format)
                     changed = True
-                    print("当前模型不支持结构化 JSON 输出，正在自动重试并移除该参数")
+                    print(f"当前接口不支持 {previous_format}，回退为 {output_format}，仍执行本地结果校验。")
                 if use_temperature and is_temperature_unsupported_error(exc):
                     use_temperature = False
                     changed = True
@@ -275,6 +288,6 @@ class AIClient:
         """解析 AI 响应"""
         try:
             return parse_ai_response_json(response_text)
-        except json.JSONDecodeError:
+        except ValueError:
             print(f"无法解析 AI 响应: {response_text[:100]}")
             return None

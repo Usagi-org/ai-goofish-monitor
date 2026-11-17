@@ -32,6 +32,7 @@ from src.ai_message_builder import (
 )
 from src.services.ai_response_parser import (
     EmptyAIResponseError,
+    IncompleteAIResponseError,
     extract_ai_response_content,
     parse_ai_response_json,
 )
@@ -45,7 +46,9 @@ from src.services.ai_request_compat import (
     is_responses_api_unsupported_error,
     is_temperature_unsupported_error,
     remove_temperature_param,
+    next_output_format,
 )
+from src.services.ai_output_schema import ANALYSIS_SCHEMA, AnalysisResult
 from src.services.notification_service import build_notification_service
 from src.utils import convert_goofish_link, retry_on_failure
 
@@ -247,6 +250,9 @@ def validate_ai_response_format(parsed_response):
         "criteria_analysis"
     ]
 
+    if not isinstance(parsed_response, dict):
+        return False
+
     # 检查顶层字段
     for field in required_fields:
         if field not in parsed_response:
@@ -372,6 +378,9 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
     max_retries = 4
     api_mode = CHAT_COMPLETIONS_API_MODE
     use_response_format = ENABLE_RESPONSE_FORMAT
+    output_format = os.getenv("AI_OUTPUT_FORMAT", "json_object") if use_response_format else "none"
+    require_schema = output_format == "json_schema"
+    budget = _positive_int(os.getenv("AI_MAX_OUTPUT_TOKENS", "16384"), 16384)
     use_temperature = True
     for attempt in range(max_retries):
         try:
@@ -385,8 +394,10 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 model=MODEL_NAME,
                 messages=messages,
                 temperature=current_temperature,
-                max_output_tokens=4000,
-                enable_json_output=use_response_format,
+                max_output_tokens=budget,
+                enable_json_output=output_format != "none",
+                output_format=output_format,
+                json_schema=ANALYSIS_SCHEMA,
             )
             if not use_temperature:
                 request_params = remove_temperature_param(request_params)
@@ -420,6 +431,9 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
             try:
                 parsed_response = parse_ai_response_json(ai_response_content)
 
+                if require_schema:
+                    AnalysisResult.model_validate(parsed_response)
+
                 # 验证响应格式
                 if validate_ai_response_format(parsed_response):
                     safe_print(f"   [AI分析] 第{attempt + 1}次尝试成功，响应格式验证通过")
@@ -442,6 +456,9 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                     continue
                 raise e
 
+        except IncompleteAIResponseError:
+            # 同一上限下重复请求只会继续截断，直接给出可操作的错误。
+            raise
         except Exception as e:
             if (
                 api_mode == CHAT_COMPLETIONS_API_MODE
@@ -456,11 +473,10 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 safe_print(
                     "   [AI分析] 当前服务未实现 Responses API，后续重试将自动回退到 Chat Completions API。"
                 )
-            if use_response_format and is_json_output_unsupported_error(e):
-                use_response_format = False
-                safe_print(
-                    "   [AI分析] 当前模型不支持结构化 JSON 输出，后续重试将自动禁用该参数。"
-                )
+            if output_format != "none" and is_json_output_unsupported_error(e):
+                previous_format = output_format
+                output_format = next_output_format(output_format)
+                safe_print(f"   [AI分析] 接口不支持 {previous_format}，回退为 {output_format}；仍校验结果。")
             if use_temperature and is_temperature_unsupported_error(e):
                 use_temperature = False
                 safe_print(

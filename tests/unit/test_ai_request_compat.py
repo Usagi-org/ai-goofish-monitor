@@ -82,3 +82,47 @@ def test_json_output_error_not_triggered_by_unrelated_400():
 def test_json_output_error_not_triggered_without_body():
     err = Exception("some random 400 error")
     assert is_json_output_unsupported_error(err) is False
+
+
+def test_json_output_error_detected_with_empty_param_and_bare_response_format():
+    import httpx
+    from openai import BadRequestError
+
+    body = {"error": {
+        "message": "This model does not support the requested response_format or output format. Please check the supported parameter range in the console or product documentation.",
+        "type": "invalid_request_error", "param": "", "code": "400006",
+    }}
+    error = BadRequestError(
+        body["error"]["message"],
+        response=httpx.Response(400, request=httpx.Request("POST", "https://example.com/v1/chat/completions")),
+        body=body,
+    )
+
+    assert is_json_output_unsupported_error(error) is True
+
+
+def test_json_output_error_does_not_match_unrelated_response_format_error():
+    error = Exception("Invalid response_format schema: required must include all properties")
+    assert is_json_output_unsupported_error(error) is False
+
+
+import pytest
+from src.services.ai_request_compat import build_ai_request_params
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+@pytest.mark.parametrize("output_format", ["json_object", "json_schema", "none"])
+def test_output_formats_use_correct_api_envelope(api_mode, output_format):
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}},
+              "required": ["ok"], "additionalProperties": False}
+    result = build_ai_request_params(api_mode, model="test", messages=[],
+        enable_json_output=True, output_format=output_format, json_schema=schema,
+        schema_name="test_result")
+    actual = result.get("response_format") if api_mode == "chat_completions" else result.get("text", {}).get("format")
+    if output_format == "none":
+        assert actual is None
+    else:
+        assert actual["type"] == output_format
+        if output_format == "json_schema":
+            envelope = actual["json_schema"] if api_mode == "chat_completions" else actual
+            assert envelope["strict"] is True and envelope["schema"] == schema
+            assert envelope["name"] == "test_result"

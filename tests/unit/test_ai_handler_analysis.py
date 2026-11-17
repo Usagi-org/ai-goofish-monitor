@@ -1,10 +1,18 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
 
 import src.ai_handler as ai_handler
 import src.config as app_config
+
+
+@pytest.fixture(autouse=True)
+def default_output_mode(monkeypatch):
+    # Keep legacy-mode tests independent of the deployment's .env settings.
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_object")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "16384")
 
 
 def _build_fake_client(responses_create_impl, chat_create_impl=None):
@@ -241,3 +249,80 @@ def test_get_ai_analysis_uses_first_json_object_when_model_returns_multiple_obje
 
     assert result["is_recommended"] is True
     assert result["reason"] == "first"
+
+
+
+def test_analysis_schema_requests_configured_budget_and_rejects_missing_fields(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_schema")
+    monkeypatch.setenv("AI_MAX_OUTPUT_TOKENS", "16384")
+    history = []
+    async def create(**kw):
+        history.append(kw)
+        return SimpleNamespace(output_text='{"prompt_version":"v1","is_recommended":true,"reason":"ok","risk_tags":[],"criteria_analysis":{"seller_type":"个人"}}')
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    monkeypatch.setattr(ai_handler, "ENABLE_RESPONSE_FORMAT", True)
+    with pytest.raises(ValueError):
+        asyncio.run(ai_handler.get_ai_analysis({"商品信息":{"商品ID":"schema-test"}}, prompt_text="JSON"))
+    assert history[0]["max_tokens"] == 16384
+    assert history[0]["response_format"]["type"] == "json_schema"
+
+
+
+def test_analysis_does_not_repeat_a_truncated_response_with_same_budget(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    async def create(**kw):
+        calls.append(kw)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="length", message=SimpleNamespace(content='{"reason":"partial"}'))])
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    with pytest.raises(ValueError, match="未完成"):
+        asyncio.run(ai_handler.get_ai_analysis({"商品信息":{"商品ID":"cutoff"}}, prompt_text="JSON"))
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("rejected_formats", [1, 2])
+@pytest.mark.parametrize("valid_result", [True, False])
+def test_analysis_falls_back_on_bare_response_format_error_and_keeps_validation(
+    monkeypatch, tmp_path, rejected_formats, valid_result
+):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AI_OUTPUT_FORMAT", "json_schema")
+    monkeypatch.setattr(ai_handler, "ENABLE_RESPONSE_FORMAT", True)
+    history = []
+    criterion = {"status": "PASS", "comment": "ok", "evidence": "description"}
+    payload = {
+        "prompt_version": "v1", "is_recommended": True, "reason": "ok",
+        "risk_tags": [], "value_score": None, "value_summary": None,
+        "criteria_analysis": {
+            "product_fit": criterion, "condition": criterion,
+            "seller_type": {**criterion, "persona": "personal"},
+            "price_value": criterion,
+        },
+    }
+    if not valid_result:
+        del payload["criteria_analysis"]["price_value"]
+
+    async def create(**params):
+        history.append(params)
+        if len(history) <= rejected_formats:
+            raise Exception(
+                "Error code: 400 - This model does not support the requested "
+                "response_format or output format."
+            )
+        return SimpleNamespace(output_text=json.dumps(payload))
+
+    monkeypatch.setattr(ai_handler, "client", _build_fake_client(create))
+    analysis = ai_handler.get_ai_analysis(
+        {"商品信息": {"商品ID": "format-fallback"}}, prompt_text="JSON"
+    )
+    if valid_result:
+        assert asyncio.run(analysis) == payload
+        assert len(history) == rejected_formats + 1
+    else:
+        with pytest.raises(ValueError, match="price_value"):
+            asyncio.run(analysis)
+        assert len(history) == 4
+
+    formats = [params.get("response_format", {}).get("type", "none") for params in history]
+    assert formats[:rejected_formats + 1] == ["json_schema", "json_object", "none"][:rejected_formats + 1]

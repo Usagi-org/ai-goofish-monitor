@@ -20,6 +20,9 @@ _SETTINGS_ENV_KEYS = [
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
     "OPENAI_MODEL_NAME",
+    "AI_OUTPUT_FORMAT",
+    "AI_MAX_OUTPUT_TOKENS",
+    "ENABLE_RESPONSE_FORMAT",
     "SKIP_AI_ANALYSIS",
     "PROXY_URL",
     "NTFY_TOPIC_URL",
@@ -54,6 +57,8 @@ def _build_settings_client() -> TestClient:
 
 def _clear_settings_env(monkeypatch) -> None:
     for key in _SETTINGS_ENV_KEYS:
+        # Track absent keys too: the settings endpoint can add them via dotenv.
+        monkeypatch.setenv(key, "")
         monkeypatch.delenv(key, raising=False)
 
 
@@ -336,6 +341,8 @@ def test_ai_settings_fall_back_to_runtime_environment_when_env_file_missing(tmp_
     assert ai_response.json() == {
         "OPENAI_BASE_URL": "https://runtime.example.com/v1",
         "OPENAI_MODEL_NAME": "runtime-model",
+        "AI_OUTPUT_FORMAT": "json_object",
+        "AI_MAX_OUTPUT_TOKENS": 16384,
         "SKIP_AI_ANALYSIS": False,
         "PROXY_URL": "http://127.0.0.1:7890",
     }
@@ -409,7 +416,7 @@ def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
             return type(
                 "_Response",
                 (),
-                {"output_text": "OK"},
+                {"output_text": '{"ok":true}'},
             )()
 
         def _chat_create(self, **kwargs):
@@ -432,8 +439,85 @@ def test_ai_test_endpoint_falls_back_to_responses_when_chat_completions_api_404(
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
-    assert payload["response"] == "OK"
+    assert payload["response"] == '{"ok":true}'
     assert request_history[0][0] == "chat"
     assert request_history[0][1]["messages"][0]["content"] == settings.AI_TEST_PROMPT
     assert request_history[1][0] == "responses"
     assert request_history[1][1]["input"][0]["content"][0]["text"] == settings.AI_TEST_PROMPT
+
+
+
+def test_ai_output_settings_roundtrip_and_validation(tmp_path, monkeypatch):
+    _clear_settings_env(monkeypatch)
+    monkeypatch.setattr(env_manager, "env_file", tmp_path / ".env")
+    (tmp_path / ".env").write_text("")
+    client = _build_settings_client()
+    payload = {"AI_OUTPUT_FORMAT": "json_schema", "AI_MAX_OUTPUT_TOKENS": 16384}
+    assert client.put("/api/settings/ai", json=payload).status_code == 200
+    data = client.get("/api/settings/ai").json()
+    for k, v in payload.items():
+        assert data[k] == v
+    assert client.put("/api/settings/ai", json={"AI_OUTPUT_FORMAT": "bad"}).status_code == 422
+    assert client.put("/api/settings/ai", json={"AI_MAX_OUTPUT_TOKENS": 10}).status_code == 422
+
+
+def test_ai_test_endpoint_blocks_saved_key_reuse_across_different_host(tmp_path, monkeypatch):
+    _clear_settings_env(monkeypatch)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "OPENAI_BASE_URL=https://saved.example.com/v1\nOPENAI_API_KEY=saved-secret\nOPENAI_MODEL_NAME=demo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(env_manager, "env_file", env_file)
+    client = _build_settings_client()
+    init_calls = []
+
+    class _FakeOpenAI:
+        def __init__(self, **kwargs):
+            init_calls.append(kwargs)
+            self.chat = type(
+                "_Chat",
+                (),
+                {
+                    "completions": type(
+                        "_Completions",
+                        (),
+                        {
+                            "create": self._create,
+                        },
+                    )()
+                },
+            )()
+
+        def _create(self, **_kwargs):
+            return type(
+                "_Resp",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "_Choice",
+                            (),
+                            {
+                                "finish_reason": "stop",
+                                "message": type("_Msg", (), {"content": '{"ok":true}'})(),
+                            },
+                        )()
+                    ]
+                },
+            )()
+
+    import openai
+    monkeypatch.setattr(openai, "OpenAI", _FakeOpenAI)
+
+    blocked = client.post("/api/settings/ai/test", json={"OPENAI_BASE_URL": "https://attacker.example.com/v1"})
+    assert blocked.status_code == 200
+    assert blocked.json()["success"] is False
+    assert "API Key" in blocked.json()["message"]
+    assert "saved-secret" not in blocked.text
+    assert init_calls == []
+
+    allowed = client.post("/api/settings/ai/test", json={"OPENAI_BASE_URL": "https://saved.example.com/v2"})
+    assert allowed.status_code == 200
+    assert allowed.json()["success"] is True
+    assert init_calls[0]["api_key"] == "saved-secret"

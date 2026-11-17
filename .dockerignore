@@ -22,3 +22,6 @@ data/
 price_history/
 *.md
 !README.md
+
+backups/
+state/

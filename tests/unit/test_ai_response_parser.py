@@ -37,8 +37,8 @@ def test_parse_ai_response_json_raises_when_no_json_exists():
         parse_ai_response_json("没有任何 JSON 内容")
 
 
-def test_extract_ai_response_content_with_none_content_but_valid_reasoning_content():
-    """当 content 为 None 但 reasoning_content 有值时，应该成功提取 reasoning_content 的内容"""
+def test_extract_ai_response_content_rejects_reasoning_only_reply():
+    """推理过程不能代替空的正式回答。"""
     # 创建 mock 对象模拟 OpenAI 风格的响应
     message = type('Message', (), {
         'content': None,
@@ -47,9 +47,8 @@ def test_extract_ai_response_content_with_none_content_but_valid_reasoning_conte
     choice = type('Choice', (), {'message': message})()
     response = type('Response', (), {'choices': [choice]})()
 
-    result = extract_ai_response_content(response)
-
-    assert result == '这是推理内容'
+    with pytest.raises(EmptyAIResponseError):
+        extract_ai_response_content(response)
 
 
 def test_extract_ai_response_content_raises_when_content_and_reasoning_content_are_empty():
@@ -64,3 +63,27 @@ def test_extract_ai_response_content_raises_when_content_and_reasoning_content_a
 
     with pytest.raises(EmptyAIResponseError):
         extract_ai_response_content(response)
+
+
+@pytest.mark.parametrize("reason", ["length", "content_filter", "tool_calls"])
+def test_rejects_unfinished_chat_even_if_text_is_valid_json(reason):
+    from types import SimpleNamespace as NS
+    response = NS(choices=[NS(finish_reason=reason, message=NS(content='{"ok":true}'))])
+    with pytest.raises(ValueError, match="未完成|拒绝"):
+        extract_ai_response_content(response)
+
+
+def test_rejects_incomplete_responses_before_reading_output_text():
+    from types import SimpleNamespace as NS
+    with pytest.raises(ValueError, match="未完成"):
+        extract_ai_response_content(NS(status="incomplete", output_text='{"ok":true}'))
+
+
+def test_json_parser_ignores_numbered_reference_before_object():
+    assert parse_ai_response_json('参考[1]，结果：{"ok":true}') == {"ok": True}
+
+
+@pytest.mark.parametrize("content", ['[1,2]', 'null', 'true', '{"outer": {"ok": true}'])
+def test_json_parser_rejects_nonobject_or_truncated_outer_object(content):
+    with pytest.raises(ValueError):
+        parse_ai_response_json(content)

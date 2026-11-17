@@ -10,8 +10,9 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import Badge from '@/components/ui/badge/Badge.vue'
+import ItemPriceHistory from './ItemPriceHistory.vue'
 import { ExternalLink, TrendingUp, TrendingDown, Info, User, Clock, CheckCircle2, XCircle, AlertCircle, EyeOff, Eye } from 'lucide-vue-next'
-import { formatDateTime } from '@/i18n'
+import { formatDateTime, formatNumber } from '@/i18n'
 
 interface Props {
   item: ResultItem
@@ -26,7 +27,18 @@ const { t } = useI18n()
 const info = props.item.商品信息
 const seller = props.item.卖家信息
 const ai = props.item.ai_analysis
-const priceInsight = props.item.price_insight
+const priceInsight = computed(() => props.item.price_insight)
+const currentPrice = computed(() => priceInsight.value?.current_price != null
+  ? `¥${formatNumber(priceInsight.value.current_price, { maximumFractionDigits: 2 })}`
+  : props.item.商品信息.当前售价)
+const originalPrice = computed(() => {
+  const value = props.item.商品信息.商品原价?.trim()
+  return value && /\d/.test(value) ? value : null
+})
+const publishTime = computed(() => {
+  const value = props.item.商品信息.发布时间
+  return value && !Number.isNaN(new Date(value).getTime()) ? value : null
+})
 
 const isRecommended = ai?.is_recommended === true
 const recommendationStatus = computed(() => {
@@ -108,9 +120,14 @@ const expanded = ref(false)
           </a>
         </CardTitle>
       </div>
-      <div class="flex items-baseline gap-1 mt-2">
-        <span class="text-2xl font-bold text-rose-600 tracking-tight">{{ info.当前售价 }}</span>
-        <span v-if="info['商品原价']" class="text-xs text-slate-400 line-through mb-1">{{ info['商品原价'] }}</span>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <span class="text-2xl font-bold text-rose-600 tracking-tight">{{ currentPrice }}</span>
+        <span v-if="originalPrice" class="text-xs text-slate-400 line-through">{{ originalPrice }}</span>
+        <ItemPriceHistory v-if="priceInsight?.price_history?.length" :insight="priceInsight" />
+      </div>
+      <div class="mt-2 space-y-1 text-[11px] text-slate-400">
+        <p>{{ t('results.card.publishedAt') }}：{{ publishTime || t('results.card.publishTimeUnknown') }}</p>
+        <p v-if="priceInsight?.last_seen_at">{{ t('results.card.lastPriceObservation') }}：{{ formatDateTime(priceInsight.last_seen_at, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) }}</p>
       </div>
     </CardHeader>
 

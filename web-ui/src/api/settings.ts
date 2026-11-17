@@ -61,6 +61,8 @@ export interface AiSettings {
   OPENAI_API_KEY?: string
   OPENAI_BASE_URL?: string
   OPENAI_MODEL_NAME?: string
+  AI_OUTPUT_FORMAT?: 'none' | 'json_object' | 'json_schema'
+  AI_MAX_OUTPUT_TOKENS?: number
   PROXY_URL?: string
 }
 
@@ -131,6 +133,18 @@ export async function testNotificationSettings(
 
 export async function getAiSettings(): Promise<AiSettings> {
   return await http('/api/settings/ai')
+}
+
+export async function getAiModels(settings: Pick<AiSettings, 'OPENAI_BASE_URL' | 'OPENAI_API_KEY' | 'PROXY_URL'>): Promise<{
+  success: boolean
+  models: string[]
+  message?: string
+}> {
+  return await http('/api/settings/ai/models', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
 }
 
 export async function updateAiSettings(settings: AiSettings): Promise<void> {

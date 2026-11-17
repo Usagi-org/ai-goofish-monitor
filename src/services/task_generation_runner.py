@@ -2,8 +2,9 @@
 任务生成作业执行器
 """
 import os
+import tempfile
+from pathlib import Path
 
-import aiofiles
 
 from src.domain.models.task import TaskCreate, TaskGenerateRequest
 from src.prompt_utils import generate_criteria
@@ -47,9 +48,17 @@ async def save_generated_criteria(output_filename: str, generated_criteria: str)
     if not generated_criteria or not generated_criteria.strip():
         raise RuntimeError("AI 未能生成分析标准，返回内容为空。")
 
-    os.makedirs("prompts", exist_ok=True)
-    async with aiofiles.open(output_filename, "w", encoding="utf-8") as file:
-        await file.write(generated_criteria)
+    target = Path(output_filename)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=target.parent, prefix=".criteria-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(generated_criteria)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
 
 
 async def reload_scheduler(
@@ -78,6 +87,8 @@ async def run_ai_generation_job(
     generation_service: TaskGenerationService,
 ) -> None:
     output_filename = build_criteria_filename(req.keyword)
+    previous = Path(output_filename).read_bytes() if os.path.exists(output_filename) else None
+    saved = False
     try:
         await advance_job(
             generation_service,
@@ -102,6 +113,7 @@ async def run_ai_generation_job(
             f"正在保存分析标准到 {output_filename}。",
         )
         await save_generated_criteria(output_filename, generated_criteria)
+        saved = True
 
         await advance_job(
             generation_service,
@@ -113,6 +125,9 @@ async def run_ai_generation_job(
         await reload_scheduler(task_service, scheduler_service)
         await generation_service.complete(job_id, task, f"任务“{req.task_name}”创建完成。")
     except Exception as exc:
-        if os.path.exists(output_filename):
-            os.remove(output_filename)
+        if saved:
+            if previous is not None:
+                await save_generated_criteria(output_filename, previous.decode("utf-8"))
+            elif os.path.exists(output_filename):
+                os.remove(output_filename)
         await generation_service.fail(job_id, f"AI 任务生成失败: {exc}")

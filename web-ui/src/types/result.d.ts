@@ -49,6 +49,9 @@ export interface AiAnalysis {
 }
 
 export interface PriceInsight {
+  price_history?: Array<{ observed_at: string; price: number }>;
+  price_drop_count?: number;
+  latest_price_drop?: { observed_at: string; from_price: number; to_price: number } | null;
   observation_count: number;
   current_price?: number | null;
   avg_price?: number | null;

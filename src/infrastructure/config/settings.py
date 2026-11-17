@@ -9,7 +9,7 @@ except ImportError:
     from pydantic import BaseSettings
     _USING_PYDANTIC_SETTINGS = False
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Literal
 import os
 
 DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org"
@@ -47,6 +47,8 @@ class AISettings(_EnvSettings):
     debug_mode: bool = _env_field(False, "AI_DEBUG_MODE")
     enable_response_format: bool = _env_field(True, "ENABLE_RESPONSE_FORMAT")
     enable_thinking: bool = _env_field(False, "ENABLE_THINKING")
+    output_format: Literal["none", "json_object", "json_schema"] = _env_field("json_object", "AI_OUTPUT_FORMAT")
+    max_output_tokens: int = _env_field(16384, "AI_MAX_OUTPUT_TOKENS", ge=512, le=65536)
     skip_analysis: bool = _env_field(False, "SKIP_AI_ANALYSIS")
 
     def is_configured(self) -> bool:
