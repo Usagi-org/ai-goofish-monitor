@@ -1,3 +1,5 @@
+import pytest
+
 from src.services.price_history_service import (
     build_item_price_context,
     build_price_history_insights,
@@ -97,3 +99,31 @@ def test_record_market_snapshots_and_build_price_history_insights(tmp_path, monk
     assert item_context["max_price"] == 10000.0
     assert item_context["price_change_amount"] == -500.0
     assert item_context["deal_label"] == "高性价比"
+
+
+@pytest.mark.parametrize("prices,drop_count", [
+    ([1000], 0), ([1000, 1000], 0), ([1000, 1100], 0),
+    ([1000, 900, 900], 1), ([1000, 900, 1100], 1), ([1000, 900, 800], 2),
+])
+def test_item_price_history_tracks_drops_even_after_flat_or_rising_prices(prices, drop_count):
+    snapshots = [
+        {"item_id": "target", "price": price, "snapshot_time": f"2026-01-0{index + 1}T12:00:00", "run_id": str(index)}
+        for index, price in enumerate(prices)
+    ]
+    snapshots.append({"item_id": "other", "price": 1, "snapshot_time": "2026-01-04T12:00:00", "run_id": "other"})
+    context = build_item_price_context(list(reversed(snapshots)), item_id="target", current_price=None, include_history=True)
+
+    assert context["price_history"] == [
+        {"observed_at": f"2026-01-0{index + 1}T12:00:00", "price": price}
+        for index, price in enumerate(prices)
+    ]
+    assert context["current_price"] == prices[-1]
+    assert context["price_drop_count"] == drop_count
+    if drop_count:
+        last_drop_index = max(index for index in range(1, len(prices)) if prices[index] < prices[index - 1])
+        assert context["latest_price_drop"] == {
+            "observed_at": f"2026-01-0{last_drop_index + 1}T12:00:00",
+            "from_price": prices[last_drop_index - 1], "to_price": prices[last_drop_index],
+        }
+    else:
+        assert context["latest_price_drop"] is None

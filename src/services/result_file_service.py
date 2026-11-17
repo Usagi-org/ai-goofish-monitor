@@ -6,7 +6,6 @@ from src.infrastructure.persistence.storage_names import normalize_keyword_from_
 from src.services.price_history_service import (
     build_item_price_context,
     load_price_snapshots,
-    parse_price_value,
 )
 from src.services.result_storage_service import load_visible_result_item_ids
 
@@ -34,8 +33,9 @@ def enrich_records_with_price_insight(records: list[dict], filename: str) -> lis
         clone["price_insight"] = build_item_price_context(
             snapshots,
             item_id=str(info.get("商品ID") or ""),
-            current_price=parse_price_value(info.get("当前售价")),
+            current_price=None,
             market_snapshots=visible_snapshots,
+            include_history=True,
         )
         enriched.append(clone)
     return enriched

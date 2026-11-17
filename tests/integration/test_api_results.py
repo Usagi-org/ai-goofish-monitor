@@ -13,6 +13,30 @@ def _write_jsonl(path, records):
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def test_results_include_item_price_history_and_latest_observed_price(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    from src.services.result_storage_service import _save_result_record_sync
+
+    item = {"商品ID": "price-history", "当前售价": "¥1000", "发布时间": "2026-01-01 09:00"}
+    _save_result_record_sync({"商品信息": item, "搜索关键字": "demo"}, "demo")
+    for index, price in enumerate([1000, 900, 900]):
+        record_market_snapshots(
+            keyword="demo", task_name="demo", items=[{**item, "当前售价": f"¥{price}"}],
+            run_id=str(index), snapshot_time=f"2026-01-0{index + 1}T12:00:00",
+        )
+    app = FastAPI()
+    app.include_router(results.router)
+    response = TestClient(app).get("/api/results/demo_full_data.jsonl")
+    assert response.status_code == 200
+    result = response.json()["items"][0]
+    assert result["商品信息"]["发布时间"] == "2026-01-01 09:00"
+    assert result["商品信息"]["当前售价"] == "¥1000"
+    assert result["price_insight"]["current_price"] == 900
+    assert result["price_insight"]["price_change_amount"] == 0
+    assert result["price_insight"]["price_drop_count"] == 1
+    assert len(result["price_insight"]["price_history"]) == 3
+
+
 def test_results_filter_and_sort_for_keyword_recommendations(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     jsonl_dir = tmp_path / "jsonl"

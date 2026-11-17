@@ -276,11 +276,15 @@ def build_item_price_context(
     item_id: str,
     current_price: Optional[float],
     market_snapshots: Optional[list[dict]] = None,
+    include_history: bool = False,
 ) -> dict:
     if not item_id:
         return {"observation_count": 0, "deal_score": None, "deal_label": "暂无数据"}
 
-    item_snapshots = [record for record in snapshots if str(record.get("item_id")) == str(item_id)]
+    item_snapshots = sorted(
+        (record for record in snapshots if str(record.get("item_id")) == str(item_id)),
+        key=lambda record: str(record.get("snapshot_time") or ""),
+    )
     if not item_snapshots:
         return {"observation_count": 0, "deal_score": None, "deal_label": "暂无数据"}
 
@@ -314,7 +318,7 @@ def build_item_price_context(
     if change_amount is not None and previous_price:
         change_percent = round(change_amount / previous_price * 100, 2)
 
-    return {
+    context = {
         "observation_count": len(historical_prices),
         "current_price": price_now,
         "avg_price": round(sum(historical_prices) / len(historical_prices), 2),
@@ -330,6 +334,23 @@ def build_item_price_context(
         "deal_score": score,
         "deal_label": _resolve_deal_label(score),
     }
+    if include_history:
+        history = [
+            {"observed_at": record["snapshot_time"], "price": parse_price_value(record["price"])}
+            for record in item_snapshots
+            if parse_price_value(record.get("price")) is not None
+        ]
+        drops = [
+            {"observed_at": current["observed_at"], "from_price": previous["price"], "to_price": current["price"]}
+            for previous, current in zip(history, history[1:])
+            if current["price"] < previous["price"]
+        ]
+        context.update({
+            "price_history": history,
+            "price_drop_count": len(drops),
+            "latest_price_drop": drops[-1] if drops else None,
+        })
+    return context
 
 
 def build_market_reference(
