@@ -11,6 +11,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { Loader2, ShieldCheck } from 'lucide-vue-next'
 
 interface FileOption {
   value: string
@@ -25,9 +26,11 @@ interface Props {
   aiRecommendedOnly: boolean
   keywordRecommendedOnly: boolean
   includeHidden: boolean
+  hideSold: boolean
   sortBy: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'
   sortOrder: 'asc' | 'desc'
   isLoading: boolean
+  isCheckingStatus: boolean
   isReady: boolean
 }
 
@@ -68,9 +71,11 @@ const emit = defineEmits<{
   (e: 'update:aiRecommendedOnly', value: boolean): void
   (e: 'update:keywordRecommendedOnly', value: boolean): void
   (e: 'update:includeHidden', value: boolean): void
+  (e: 'update:hideSold', value: boolean): void
   (e: 'update:sortBy', value: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'): void
   (e: 'update:sortOrder', value: 'asc' | 'desc'): void
   (e: 'refresh'): void
+  (e: 'check-status'): void
   (e: 'export'): void
   (e: 'delete'): void
   (e: 'manage-blacklist'): void
@@ -176,11 +181,30 @@ function handleToggleKeywordRecommended(value: boolean) {
           />
           <Label for="include-hidden" class="cursor-pointer">{{ t('results.filters.includeHidden') }}</Label>
         </div>
+
+        <div class="flex items-center space-x-2">
+          <Checkbox
+            id="hide-sold"
+            :model-value="props.hideSold"
+            @update:modelValue="(value) => emit('update:hideSold', value === true)"
+          />
+          <Label for="hide-sold" class="cursor-pointer">{{ t('results.filters.hideSold') }}</Label>
+        </div>
       </div>
 
       <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
         <Button @click="emit('refresh')" :disabled="props.isLoading">
           {{ t('common.refresh') }}
+        </Button>
+
+        <Button
+          variant="outline"
+          @click="emit('check-status')"
+          :disabled="props.isLoading || props.isCheckingStatus || !props.selectedFile"
+        >
+          <Loader2 v-if="props.isCheckingStatus" class="h-4 w-4 animate-spin" aria-hidden="true" />
+          <ShieldCheck v-else class="h-4 w-4" aria-hidden="true" />
+          <span>{{ props.isCheckingStatus ? t('results.filters.checkingStatus') : t('results.filters.checkStatus') }}</span>
         </Button>
 
         <Button
