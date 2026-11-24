@@ -52,6 +52,10 @@ from src.services.item_analysis_dispatcher import (
     ItemAnalysisDispatcher,
     ItemAnalysisJob,
 )
+from src.services.item_detail_parser import (
+    apply_detail_to_item_data,
+    extract_item_detail_fields,
+)
 from src.services.price_history_service import (
     build_market_reference,
     load_price_snapshots,
@@ -1042,16 +1046,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             detail_response = await detail_info.value
                             if detail_response.ok:
                                 detail_json = await detail_response.json()
-
-                                ret_string = str(
-                                    await safe_get(detail_json, "ret", default=[])
-                                )
-                                if "FAIL_SYS_USER_VALIDATE" in ret_string:
+                                snapshot = extract_item_detail_fields(detail_json)
+                                if snapshot.risk_control:
                                     print(
                                         "\n==================== CRITICAL BLOCK DETECTED ===================="
                                     )
                                     print(
-                                        "检测到闲鱼反爬虫验证 (FAIL_SYS_USER_VALIDATE)，程序将终止。"
+                                        f"检测到闲鱼反爬虫验证 ({snapshot.error_reason or 'FAIL_SYS_USER_VALIDATE'})，程序将终止。"
                                     )
                                     long_sleep_duration = random.randint(3, 60)
                                     print(
@@ -1062,59 +1063,24 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     print(
                                         "==================================================================="
                                     )
-                                    raise RiskControlError("FAIL_SYS_USER_VALIDATE")
+                                    raise RiskControlError(
+                                        snapshot.error_reason or "FAIL_SYS_USER_VALIDATE"
+                                    )
+                                if snapshot.login_required:
+                                    raise LoginRequiredError(
+                                        f"Login required: detail API returned {snapshot.error_reason or 'FAIL_SYS_SESSION_EXPIRED'}"
+                                    )
 
-                                # 解析商品详情数据并更新 item_data
-                                item_do = await safe_get(
-                                    detail_json, "data", "itemDO", default={}
-                                )
-                                seller_do = await safe_get(
-                                    detail_json, "data", "sellerDO", default={}
-                                )
-
-                                reg_days_raw = await safe_get(
-                                    seller_do, "userRegDay", default=0
-                                )
                                 registration_duration_text = format_registration_days(
-                                    reg_days_raw
+                                    snapshot.registration_days
                                 )
-
-                                # --- START: 新增代码块 ---
-
-                                # 1. 提取卖家的芝麻信用信息
-                                zhima_credit_text = await safe_get(
-                                    seller_do, "zhimaLevelInfo", "levelName"
+                                zhima_credit_text = snapshot.zhima_credit_text
+                                item_data, _ = apply_detail_to_item_data(
+                                    item_data, snapshot
                                 )
-
-                                # 2. 提取该商品的完整图片列表
-                                image_infos = await safe_get(
-                                    item_do, "imageInfos", default=[]
-                                )
-                                if image_infos:
-                                    # 使用列表推导式获取所有有效的图片URL
-                                    all_image_urls = [
-                                        img.get("url")
-                                        for img in image_infos
-                                        if img.get("url")
-                                    ]
-                                    if all_image_urls:
-                                        # 用新的字段存储图片列表，替换掉旧的单个链接
-                                        item_data["商品图片列表"] = all_image_urls
-                                        # (可选) 仍然保留主图链接，以防万一
-                                        item_data["商品主图链接"] = all_image_urls[0]
-
-                                # --- END: 新增代码块 ---
-                                item_data["“想要”人数"] = await safe_get(
-                                    item_do,
-                                    "wantCnt",
-                                    default=item_data.get("“想要”人数", "NaN"),
-                                )
-                                item_data["浏览量"] = await safe_get(
-                                    item_do, "browseCnt", default="-"
-                                )
-                                # ...[此处可添加更多从详情页解析出的商品信息]...
-
-                                user_id = await safe_get(seller_do, "sellerId")
+                                item_data.setdefault("“想要”人数", "NaN")
+                                item_data.setdefault("浏览量", "-")
+                                user_id = snapshot.seller_id
 
                                 # 构建基础记录
                                 final_record = {
@@ -1126,6 +1092,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     "商品信息": item_data,
                                     "卖家信息": {},
                                 }
+                                initial_status = (
+                                    snapshot.mapped_status
+                                    if snapshot.mapped_status
+                                    in {"active", "sold", "expired"}
+                                    else None
+                                )
                                 price_reference = build_market_reference(
                                     keyword=keyword,
                                     item=item_data,
@@ -1151,6 +1123,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                         seller_id=str(user_id) if user_id else None,
                                         zhima_credit_text=zhima_credit_text,
                                         registration_duration_text=registration_duration_text,
+                                        initial_status=initial_status,
                                     )
                                 )
 

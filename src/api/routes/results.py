@@ -1,13 +1,18 @@
 """
 结果文件管理路由
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import Response
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from urllib.parse import quote
 
+from src.services.item_status_service import (
+    NoAvailableStateFileError,
+    StatusCheckInProgressError,
+    check_result_items_status,
+)
 from src.services.price_history_service import build_price_history_insights
 from src.services.result_export_service import build_results_csv
 from src.services.result_file_service import (
@@ -88,6 +93,7 @@ async def get_result_file_content(
     ai_recommended_only: bool = Query(False),
     keyword_recommended_only: bool = Query(False),
     include_hidden: bool = Query(False),
+    include_sold: bool = Query(True),
     sort_by: str = Query("crawl_time"),
     sort_order: str = Query("desc"),
 ):
@@ -109,6 +115,7 @@ async def get_result_file_content(
             page=page,
             limit=limit,
             include_hidden=include_hidden,
+            include_sold=include_sold,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -144,6 +151,7 @@ async def export_result_file_content(
     ai_recommended_only: bool = Query(False),
     keyword_recommended_only: bool = Query(False),
     include_hidden: bool = Query(False),
+    include_sold: bool = Query(True),
     sort_by: str = Query("crawl_time"),
     sort_order: str = Query("desc"),
 ):
@@ -161,6 +169,7 @@ async def export_result_file_content(
             sort_by=sort_by,
             sort_order=sort_order,
             include_hidden=include_hidden,
+            include_sold=include_sold,
         )
         csv_text = build_results_csv(
             enrich_records_with_price_insight(results, filename)
@@ -179,6 +188,7 @@ async def export_result_file_content(
 
 class ItemStatus(str, Enum):
     ACTIVE = "active"
+    SOLD = "sold"
     HIDDEN = "hidden"
     EXPIRED = "expired"
 
@@ -187,13 +197,18 @@ class UpdateStatusRequest(BaseModel):
     status: ItemStatus
 
 
+class CheckStatusRequest(BaseModel):
+    item_ids: list[str] | None = None
+    limit: int = Field(default=10, ge=1, le=20)
+
+
 class BlacklistRulesRequest(BaseModel):
     keywords: list[str]
 
 
 @router.patch("/{filename}/items/{item_id}/status")
 async def patch_item_status(filename: str, item_id: str, body: UpdateStatusRequest):
-    """更新指定商品的状态（active/hidden/expired）"""
+    """更新指定商品的状态（active/sold/hidden/expired）"""
     try:
         validate_result_filename(filename)
         updated = await update_item_status(filename, item_id, body.status.value)
@@ -202,6 +217,34 @@ async def patch_item_status(filename: str, item_id: str, body: UpdateStatusReque
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"message": "状态已更新", "status": body.status.value}
+
+
+@router.post("/{filename}/check-status")
+async def check_result_file_status(
+    filename: str,
+    body: CheckStatusRequest = Body(default_factory=CheckStatusRequest),
+):
+    """检查指定结果文件中商品的实时在售状态，并补全缺失描述与图片"""
+    try:
+        validate_result_filename(filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not await result_file_exists(filename):
+        raise HTTPException(status_code=404, detail="结果文件未找到")
+
+    try:
+        return await check_result_items_status(
+            filename,
+            item_ids=body.item_ids,
+            limit=body.limit,
+        )
+    except StatusCheckInProgressError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except (NoAvailableStateFileError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/{filename}/blacklist-rules")
