@@ -30,6 +30,7 @@ class ItemAnalysisJob:
     seller_id: Optional[str]
     zhima_credit_text: Optional[str]
     registration_duration_text: str
+    initial_status: Optional[str] = None
 
 
 class ItemAnalysisDispatcher:
@@ -71,10 +72,15 @@ class ItemAnalysisDispatcher:
 
     async def _process_job(self, job: ItemAnalysisJob) -> None:
         record = copy.deepcopy(job.final_record)
+        initial_status = job.initial_status or record.pop("_initial_status", None)
+        record.pop("_initial_status", None)
         item_data = record.get("商品信息", {}) or {}
         record["卖家信息"] = await self._load_seller_info(job)
         record["ai_analysis"] = await self._build_analysis_result(job, record)
-        if await self._saver(record, job.keyword):
+        record_to_save = dict(record)
+        if initial_status is not None:
+            record_to_save["_initial_status"] = initial_status
+        if await self._saver(record_to_save, job.keyword):
             self.completed_count += 1
         await self._notify_if_recommended(item_data, record["ai_analysis"])
 

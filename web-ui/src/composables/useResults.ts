@@ -1,11 +1,26 @@
 import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import type { ResultInsights, ResultItem } from '@/types/result.d.ts'
+import type {
+  CheckItemStatusResponse,
+  ItemStatus,
+  ResultInsights,
+  ResultItem,
+} from '@/types/result.d.ts'
 import * as resultsApi from '@/api/results'
 import type { GetResultContentParams } from '@/api/results'
 import { useWebSocket } from '@/composables/useWebSocket'
 import * as tasksApi from '@/api/tasks'
+
+export interface ResultFilterState {
+  recommended_only: boolean
+  ai_recommended_only: boolean
+  keyword_recommended_only: boolean
+  include_hidden: boolean
+  hide_sold: boolean
+  sort_by: 'crawl_time' | 'publish_time' | 'price' | 'keyword_hit_count'
+  sort_order: 'asc' | 'desc'
+}
 
 export function useResults() {
   const { t } = useI18n()
@@ -24,32 +39,58 @@ export function useResults() {
   const hasFetchedFiles = ref(false)
   const hasFetchedTasks = ref(false)
   const isSavingBlacklist = ref(false)
+  const isCheckingStatus = ref(false)
+  const checkingItemIds = ref<string[]>([])
   const readyDelayMs = 200
   let readyTimer: ReturnType<typeof setTimeout> | null = null
-  
+
   const STORAGE_KEY_FILTERS = 'resultFilters'
 
-  function loadPersistedFilters(): Required<Omit<GetResultContentParams, 'page' | 'limit'>> {
-    const defaults: Required<Omit<GetResultContentParams, 'page' | 'limit'>> = {
+  function loadPersistedFilters(): ResultFilterState {
+    const defaults: ResultFilterState = {
       recommended_only: false,
       ai_recommended_only: false,
       keyword_recommended_only: false,
       include_hidden: false,
+      hide_sold: false,
       sort_by: 'crawl_time',
       sort_order: 'desc',
     }
     try {
       const saved = localStorage.getItem(STORAGE_KEY_FILTERS)
-      if (saved) return { ...defaults, ...JSON.parse(saved) }
+      if (saved) {
+        const parsed = JSON.parse(saved) as Partial<ResultFilterState>
+        return {
+          recommended_only: Boolean(parsed.recommended_only ?? defaults.recommended_only),
+          ai_recommended_only: Boolean(parsed.ai_recommended_only ?? defaults.ai_recommended_only),
+          keyword_recommended_only: Boolean(parsed.keyword_recommended_only ?? defaults.keyword_recommended_only),
+          include_hidden: Boolean(parsed.include_hidden ?? defaults.include_hidden),
+          hide_sold: Boolean(parsed.hide_sold ?? defaults.hide_sold),
+          sort_by: parsed.sort_by ?? defaults.sort_by,
+          sort_order: parsed.sort_order ?? defaults.sort_order,
+        }
+      }
     } catch { /* ignore */ }
     return defaults
   }
 
-  const filters = reactive<Required<Omit<GetResultContentParams, 'page' | 'limit'>>>(loadPersistedFilters())
+  const filters = reactive<ResultFilterState>(loadPersistedFilters())
 
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
   const { on } = useWebSocket()
+
+  function buildResultQueryParams(): Omit<GetResultContentParams, 'page' | 'limit'> {
+    return {
+      recommended_only: filters.recommended_only,
+      ai_recommended_only: filters.ai_recommended_only,
+      keyword_recommended_only: filters.keyword_recommended_only,
+      include_hidden: filters.include_hidden,
+      include_sold: !filters.hide_sold,
+      sort_by: filters.sort_by,
+      sort_order: filters.sort_order,
+    }
+  }
 
   function normalizeKeyword(value: string) {
     return value.trim().toLowerCase().replace(/\s+/g, '_')
@@ -64,8 +105,6 @@ export function useResults() {
     try {
       const fileList = await resultsApi.getResultFiles()
       files.value = fileList
-      // If a file is selected that no longer exists, reset it.
-      // Otherwise, if nothing is selected, select the first file by default.
       if (selectedFile.value && fileList.includes(selectedFile.value)) {
         return
       }
@@ -96,7 +135,7 @@ export function useResults() {
     error.value = null
     try {
       const data = await resultsApi.getResultContent(selectedFile.value, {
-        ...filters,
+        ...buildResultQueryParams(),
         page: page.value,
         limit: limit.value,
       })
@@ -171,8 +210,6 @@ export function useResults() {
   on('results_updated', async () => {
     const oldFile = selectedFile.value
     await fetchFiles()
-    // If the selected file remains the same, refresh its content (in case of append)
-    // If it changed (e.g. from null to new file), the watcher will handle it.
     if (selectedFile.value && selectedFile.value === oldFile) {
       fetchResults()
       fetchInsights()
@@ -195,7 +232,7 @@ export function useResults() {
 
   function exportSelectedResults() {
     if (!selectedFile.value) return
-    resultsApi.downloadResultExport(selectedFile.value, { ...filters })
+    resultsApi.downloadResultExport(selectedFile.value, buildResultQueryParams())
   }
 
   async function deleteSelectedFile(filename?: string) {
@@ -220,16 +257,72 @@ export function useResults() {
     }
   }
 
-  async function toggleItemBlock(item: ResultItem) {
-    if (!selectedFile.value) return
+  async function toggleItemBlock(item: ResultItem): Promise<ItemStatus | null> {
+    if (!selectedFile.value) return null
     const itemId = item.商品信息?.商品ID
-    if (!itemId) return
-    const newStatus = item._status === 'hidden' ? 'active' : 'hidden'
+    if (!itemId) return null
+    const newStatus: ItemStatus = item._status === 'hidden' ? 'active' : 'hidden'
     try {
       await resultsApi.updateItemStatus(selectedFile.value, itemId, newStatus)
-      await fetchResults()
+      await Promise.all([fetchResults(), fetchInsights()])
+      return newStatus
     } catch (e) {
       if (e instanceof Error) error.value = e
+      throw e
+    }
+  }
+
+  async function toggleItemSold(item: ResultItem): Promise<ItemStatus | null> {
+    if (!selectedFile.value) return null
+    const itemId = item.商品信息?.商品ID
+    if (!itemId) return null
+    const isSold = item._status === 'sold' || item._is_sold === true
+    const newStatus: ItemStatus = isSold ? 'active' : 'sold'
+    try {
+      await resultsApi.updateItemStatus(selectedFile.value, itemId, newStatus)
+      await Promise.all([fetchResults(), fetchInsights()])
+      return newStatus
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    }
+  }
+
+  async function checkAllActiveStatus(batchLimit?: number): Promise<CheckItemStatusResponse | null> {
+    if (!selectedFile.value || isCheckingStatus.value) return null
+    isCheckingStatus.value = true
+    error.value = null
+    try {
+      const payload = batchLimit ? { limit: batchLimit } : {}
+      const response = await resultsApi.checkResultStatus(selectedFile.value, payload)
+      await Promise.all([fetchResults(), fetchInsights()])
+      return response
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      isCheckingStatus.value = false
+    }
+  }
+
+  async function checkSingleItemStatus(item: ResultItem): Promise<CheckItemStatusResponse | null> {
+    if (!selectedFile.value) return null
+    const itemId = item.商品信息?.商品ID
+    if (!itemId || checkingItemIds.value.includes(itemId)) return null
+    checkingItemIds.value = [...checkingItemIds.value, itemId]
+    error.value = null
+    try {
+      const response = await resultsApi.checkResultStatus(selectedFile.value, {
+        item_ids: [itemId],
+        limit: 1,
+      })
+      await Promise.all([fetchResults(), fetchInsights()])
+      return response
+    } catch (e) {
+      if (e instanceof Error) error.value = e
+      throw e
+    } finally {
+      checkingItemIds.value = checkingItemIds.value.filter((id) => id !== itemId)
     }
   }
 
@@ -302,11 +395,16 @@ export function useResults() {
     filters,
     isLoading,
     error,
-    fetchFiles, // Expose to allow manual refresh
+    fetchFiles,
     refreshResults,
     exportSelectedResults,
     deleteSelectedFile,
     toggleItemBlock,
+    toggleItemSold,
+    isCheckingStatus,
+    checkingItemIds,
+    checkAllActiveStatus,
+    checkSingleItemStatus,
     blacklistKeywords,
     isSavingBlacklist,
     saveBlacklistRules,

@@ -14,6 +14,10 @@ export interface ProductInfo {
   "商品图片列表"?: string[];
   "商品主图链接"?: string;
   "浏览量"?: string | number;
+  "商品描述"?: string;
+  "商品状态"?: string;
+  "商品状态码"?: string | number;
+  "状态检查时间"?: string;
 }
 
 export interface SellerInfo {
@@ -49,6 +53,9 @@ export interface AiAnalysis {
 }
 
 export interface PriceInsight {
+  price_history?: Array<{ observed_at: string; price: number }>;
+  price_drop_count?: number;
+  latest_price_drop?: { observed_at: string; from_price: number; to_price: number } | null;
   observation_count: number;
   current_price?: number | null;
   avg_price?: number | null;
@@ -93,6 +100,34 @@ export interface ResultInsights {
   latest_snapshot_at?: string | null;
 }
 
+export type ItemStatus = 'active' | 'sold' | 'expired' | 'hidden';
+
+export interface CheckItemStatusEntry {
+  item_id: string;
+  previous_status: string;
+  status: string;
+  mapped_status?: 'active' | 'sold' | 'expired' | 'unknown';
+  status_label?: string | null;
+  description_updated: boolean;
+  title?: string | null;
+  description?: string | null;
+  image_urls?: string[] | null;
+  checked_at?: string | null;
+  error?: string | null;
+}
+
+export interface CheckItemStatusResponse {
+  checked: number;
+  updated: number;
+  sold_count: number;
+  expired_count: number;
+  active_count: number;
+  unknown_count: number;
+  failed_count: number;
+  stopped_reason?: string | null;
+  results: CheckItemStatusEntry[];
+}
+
 export interface ResultItem {
   "爬取时间": string;
   "搜索关键字": string;
@@ -101,7 +136,8 @@ export interface ResultItem {
   "卖家信息": SellerInfo;
   ai_analysis: AiAnalysis;
   price_insight?: PriceInsight;
-  _status?: 'active' | 'hidden' | 'expired';
+  _status?: ItemStatus;
+  _is_sold?: boolean;
   _effective_hidden?: boolean;
   _hidden_reason?: 'manual' | 'rule' | 'expired' | null;
   _matched_blacklist_keywords?: string[];
